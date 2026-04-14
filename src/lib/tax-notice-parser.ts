@@ -71,6 +71,9 @@ function parseFrenchNumber(str: string): number | undefined {
 /**
  * Parse the French tax notice (avis d'imposition) PDF.
  * Works with avis from impots.gouv.fr (digitally generated PDFs).
+ *
+ * Key parsing challenge: labels and values are separated by dots (".....") in
+ * the PDF layout, so we need to match through those dot-separators.
  */
 export function parseTaxNotice(text: string): TaxNoticeData {
   const result: TaxNoticeData = { raw: text };
@@ -78,18 +81,21 @@ export function parseTaxNotice(text: string): TaxNoticeData {
   // Normalize whitespace for more robust matching (collapse multiple spaces)
   const t = text.replace(/[ \t]+/g, ' ');
 
+  // Helper: a separator pattern that matches dots, spaces, colons between label and value
+  // e.g. "Revenu imposable............................................... 100481"
+  const SEP = '[.:\\s]+';
+
   // --- Fiscal year ---
-  // "IMPÔT SUR LES REVENUS DE L'ANNÉE 2024" or "REVENUS 2024" or "Revenus de l'année 2024"
-  const yearMatch = t.match(/revenus?\s+(?:de\s+l['']\s*ann[ée]e\s+)?(\d{4})/i)
-    || t.match(/REVENUS?\s+(\d{4})/i)
+  // "IMPÔT SUR LES REVENUS DE L'ANNÉE 2024" or "Impôt sur les revenus de 2024"
+  const yearMatch = t.match(/revenus?\s+(?:de\s+(?:l['']\s*ann[ée]e\s+)?)?(\d{4})/i)
     || t.match(/ann[eé]e\s+(\d{4})/i);
   if (yearMatch) {
     result.fiscalYear = parseInt(yearMatch[1], 10);
   }
 
   // --- Family status ---
-  // "Situation de famille : M" or "Marié(e)s" or "Pacsé(e)s" or "Célibataire"
-  // Also handle text split across items: "Situation de famille" on one part, value nearby
+  // Presence of "Déclarant 2" means couple; also check "Situation de famille" if present
+  const hasDec2 = /d[ée]clarant\s+2/i.test(t);
   const situationMatch = t.match(/Situation\s+de\s+famille\s*:?\s*(\w+)/i)
     || t.match(/\b(Mari[ée]|Pacs[ée]|C[ée]libataire|Divorc[ée]|Veuf|Veuve)\b/i);
   if (situationMatch) {
@@ -99,13 +105,30 @@ export function parseTaxNotice(text: string): TaxNoticeData {
     } else {
       result.familyStatus = 'single';
     }
+  } else if (hasDec2) {
+    result.familyStatus = 'couple';
   }
 
   // --- Tax shares (nombre de parts) ---
-  // "Nombre de part(s) : 2,50" or "Nombre de parts : 2.5" or "nombre de parts 2,50"
-  const partsMatch = t.match(/nombre\s+de\s+parts?\s*\(?\s*s?\s*\)?\s*:?\s*([\d\s,\.]+)/i);
+  // Pattern 1: "Nombre de part(s) : 2,50" (explicit label)
+  const partsMatch = t.match(new RegExp(`nombre\\s+de\\s+parts?${SEP}([\\d,\\.]+)`, 'i'));
   if (partsMatch) {
     result.taxShares = parseFrenchNumber(partsMatch[1]);
+  }
+  // Pattern 2: In summary header, parts appear on a line like "1   1   2,75" after family info,
+  // or as a standalone decimal like "2,75" near the top. Look for the "Détail" section header
+  // line pattern: "{O|M|C|...} {dec1} {dec2} {parts}" e.g. "O\n1   1   2,75"
+  if (!result.taxShares) {
+    // Match a small decimal (1-10 range, with comma) that stands alone on a line
+    const partsFallback = t.match(/\b(\d{1,2}[,.]\d{1,2})\s*\n.*D[ée]tail\s+des\s+revenus/i)
+      || t.match(/\n\s*(\d{1,2}[,.]\d{1,2})\s*\n/);
+    if (partsFallback) {
+      const candidate = parseFrenchNumber(partsFallback[1]);
+      // Tax shares are typically between 1 and 10
+      if (candidate && candidate >= 1 && candidate <= 10) {
+        result.taxShares = candidate;
+      }
+    }
   }
 
   // --- Persons à charge ---
@@ -114,25 +137,35 @@ export function parseTaxNotice(text: string): TaxNoticeData {
   if (chargeMatch) {
     result.numberOfChildren = parseInt(chargeMatch[1], 10);
   }
+  // Fallback: count from "Forfait scolarité : Nombre d'enfants ... N"
+  if (result.numberOfChildren === undefined) {
+    const enfantsMatch = t.match(/Nombre\s+d['']enfants${SEP}(\d+)/i)
+      || t.match(/Forfait\s+scolarit[ée].*?(\d+)\s+(\d+)/i);
+    if (enfantsMatch) {
+      // Take the last captured digit group (the "retenu" value)
+      const val = parseInt(enfantsMatch[enfantsMatch.length - 1], 10);
+      if (val >= 0 && val <= 20) result.numberOfChildren = val;
+    }
+  }
 
   // --- Revenu brut global ---
-  // "Revenu brut global  95 000" or "REVENU BRUT GLOBAL : 95000" - number may be on same or next part
-  const rbrMatch = t.match(/revenu\s+brut\s+global\s*:?\s*([\d\s]+[\d])/i);
+  // "Revenu brut global.............................................. 108261"
+  const rbrMatch = t.match(new RegExp(`revenu\\s+brut\\s+global${SEP}([\\d\\s]+[\\d])`, 'i'));
   if (rbrMatch) {
     result.revenuBrutGlobal = parseFrenchNumber(rbrMatch[1]);
   }
 
   // --- Revenu imposable ---
-  // "Revenu imposable  85 500" or "REVENU IMPOSABLE : 85500"
-  // Be careful not to match "revenu fiscal" or "revenu brut"
-  const riMatch = t.match(/revenu\s+imposable\s*:?\s*([\d\s]+[\d])/i);
+  // "Revenu imposable............................................... 100481"
+  // Avoid matching "revenu fiscal" or "revenu brut"
+  const riMatch = t.match(new RegExp(`revenu\\s+imposable${SEP}([\\d\\s]+[\\d])`, 'i'));
   if (riMatch) {
     result.revenuImposable = parseFrenchNumber(riMatch[1]);
   }
 
   // --- Revenu fiscal de référence (RFR) ---
-  // "Revenu fiscal de référence  87 200" or "revenu fiscal de reference : 87200"
-  const rfrMatch = t.match(/revenu\s+fiscal\s+de\s+r[ée]f[ée]rence\s*:?\s*([\d\s]+[\d])/i);
+  // "Revenu fiscal de référence   .............................. 108989"
+  const rfrMatch = t.match(new RegExp(`revenu\\s+fiscal\\s+de\\s+r[ée]f[ée]rence${SEP}([\\d\\s]+[\\d])`, 'i'));
   if (rfrMatch) {
     result.revenuFiscalReference = parseFrenchNumber(rfrMatch[1]);
   }
