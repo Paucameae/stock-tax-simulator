@@ -1,10 +1,10 @@
 import React, { useCallback } from 'react';
-import { Upload, FileText, RefreshCw, ShoppingCart } from 'lucide-react';
+import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { useEcbConversion } from '../hooks/useEcbConversion';
-import type { StockLot, SoldLot, ImportCurrency } from '../lib/types';
+import type { StockLot, SoldLot } from '../lib/types';
 
 type ImportMode = 'positions' | 'sales';
 
@@ -17,7 +17,6 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [fileName, setFileName] = React.useState<string | null>(null);
-  const [currency, setCurrency] = React.useState<ImportCurrency>('EUR');
   const [importMode, setImportMode] = React.useState<ImportMode>('positions');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const { convertLots, convertSoldLots, loading, error: ecbError } = useEcbConversion();
@@ -33,29 +32,21 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
           const text = e.target?.result as string;
 
           if (importMode === 'sales') {
-            const soldLots = parseSalesCsvFile(text, currency);
+            const soldLots = parseSalesCsvFile(text);
             if (soldLots.length === 0) {
               setError('Aucune vente trouvée dans le fichier. Vérifiez le format CSV.');
               return;
             }
-            if (currency === 'USD') {
-              const { converted } = await convertSoldLots(soldLots);
-              onImportSales?.(converted);
-            } else {
-              onImportSales?.(soldLots);
-            }
+            const { converted } = await convertSoldLots(soldLots);
+            onImportSales?.(converted);
           } else {
-            const lots = parseCsvFile(text, currency);
+            const lots = parseCsvFile(text);
             if (lots.length === 0) {
               setError('Aucun lot valide trouvé dans le fichier. Vérifiez le format CSV.');
               return;
             }
-            if (currency === 'USD') {
-              const { converted } = await convertLots(lots);
-              onImport(converted);
-            } else {
-              onImport(lots);
-            }
+            const { converted } = await convertLots(lots);
+            onImport(converted);
           }
         } catch (err) {
           setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
@@ -64,7 +55,7 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
       reader.onerror = () => setError('Erreur lors de la lecture du fichier.');
       reader.readAsText(file, 'utf-8');
     },
-    [onImport, onImportSales, currency, importMode, convertLots, convertSoldLots]
+    [onImport, onImportSales, importMode, convertLots, convertSoldLots]
   );
 
   const handleDrop = useCallback(
@@ -137,45 +128,21 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
           </div>
         </div>
 
-        {importMode === 'sales' && (
+        {importMode === 'sales' ? (
           <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
             Importez l'export CSV des « lots de transactions fermées » depuis votre broker.
             Les ventes seront automatiquement traitées pour le calcul d'impôt et la déclaration.
           </div>
-        )}
+        ) : null}
 
-        {/* Currency selector */}
-        <div className="flex items-center gap-3 mb-4">
-          <label className="text-sm font-medium text-gray-700">Devise du fichier CSV :</label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-                currency === 'EUR'
-                  ? 'bg-primary text-white border-primary'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-              onClick={() => setCurrency('EUR')}
-            >
-              EUR (€)
-            </button>
-            <button
-              type="button"
-              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
-                currency === 'USD'
-                  ? 'bg-primary text-white border-primary'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-              }`}
-              onClick={() => setCurrency('USD')}
-            >
-              USD ($)
-            </button>
-          </div>
-          {currency === 'USD' && (
-            <span className="text-xs text-blue-600">
-              Les taux de change BCE seront récupérés automatiquement pour chaque date d'acquisition.
-            </span>
-          )}
+        {/* USD requirement info */}
+        <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <DollarSign className="h-4 w-4 shrink-0" />
+          <span>
+            Le fichier CSV doit être en <strong>dollars (USD)</strong>.
+            Les taux de change BCE seront récupérés automatiquement pour chaque date.
+            Exportez votre fichier depuis Fidelity avec l'option «&nbsp;USD&nbsp;».
+          </span>
         </div>
 
         {loading && (

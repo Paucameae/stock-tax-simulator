@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency, SoldLot } from './types';
+import type { StockLot, StockOrigin, HoldingPeriod, PlanType, SoldLot } from './types';
 
 const MONTH_MAP: Record<string, number> = {
   Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
@@ -43,7 +43,12 @@ function getDefaultPlanType(origin: StockOrigin): PlanType {
   }
 }
 
-export function parseCsvFile(csvText: string, currency: ImportCurrency = 'EUR'): StockLot[] {
+export function parseCsvFile(csvText: string): StockLot[] {
+  // Detect non-USD files via the footer line
+  if (/Les valeurs sont affichées en(?!.*USD)/i.test(csvText)) {
+    throw new Error('Le fichier CSV doit être en dollars (USD). Veuillez exporter votre fichier depuis Fidelity avec l\'option USD.');
+  }
+
   const result = Papa.parse(csvText, {
     header: false,
     skipEmptyLines: true,
@@ -69,7 +74,6 @@ export function parseCsvFile(csvText: string, currency: ImportCurrency = 'EUR'):
     const totalCostBasis = parseFidelityAmount(row[2]);
     const costBasisPerShare = parseFidelityAmount(row[3]);
     const currentValue = parseFidelityAmount(row[4]);
-    const unrealizedGainLoss = parseFidelityAmount(row[5]);
     const availableForSaleDate = parseFidelityDate(row[6]);
     const availableForTransferDate = parseFidelityDate(row[7]);
     const grantDate = parseFidelityDate(row[8]);
@@ -78,46 +82,27 @@ export function parseCsvFile(csvText: string, currency: ImportCurrency = 'EUR'):
 
     id++;
 
-    if (currency === 'USD') {
-      lots.push({
-        id: `lot-${id}`,
-        acquisitionDate,
-        quantity,
-        // EUR values will be filled after ECB rate fetch
-        costBasisPerShare: 0,
-        totalCostBasis: 0,
-        currentValue: 0,
-        unrealizedGainLoss: 0,
-        // Store raw USD values
-        costBasisPerShareUsd: costBasisPerShare,
-        totalCostBasisUsd: totalCostBasis,
-        currentValueUsd: currentValue,
-        importCurrency: 'USD',
-        availableForSaleDate,
-        availableForTransferDate,
-        grantDate,
-        origin,
-        holdingPeriod,
-        planType: getDefaultPlanType(origin),
-      });
-    } else {
-      lots.push({
-        id: `lot-${id}`,
-        acquisitionDate,
-        quantity,
-        costBasisPerShare,
-        totalCostBasis,
-        currentValue,
-        unrealizedGainLoss,
-        importCurrency: 'EUR',
-        availableForSaleDate,
-        availableForTransferDate,
-        grantDate,
-        origin,
-        holdingPeriod,
-        planType: getDefaultPlanType(origin),
-      });
-    }
+    lots.push({
+      id: `lot-${id}`,
+      acquisitionDate,
+      quantity,
+      // EUR values will be filled after ECB rate fetch
+      costBasisPerShare: 0,
+      totalCostBasis: 0,
+      currentValue: 0,
+      unrealizedGainLoss: 0,
+      // Store raw USD values
+      costBasisPerShareUsd: costBasisPerShare,
+      totalCostBasisUsd: totalCostBasis,
+      currentValueUsd: currentValue,
+      importCurrency: 'USD',
+      availableForSaleDate,
+      availableForTransferDate,
+      grantDate,
+      origin,
+      holdingPeriod,
+      planType: getDefaultPlanType(origin),
+    });
   }
 
   return lots;
@@ -184,7 +169,12 @@ function preprocessSalesCsv(csvText: string): string {
   return cleanLines.join('\n');
 }
 
-export function parseSalesCsvFile(csvText: string, currency: ImportCurrency = 'USD'): SoldLot[] {
+export function parseSalesCsvFile(csvText: string): SoldLot[] {
+  // Detect non-USD files via the footer line
+  if (/Les valeurs sont affichées en(?!.*USD)/i.test(csvText)) {
+    throw new Error('Le fichier CSV doit être en dollars (USD). Veuillez exporter votre fichier depuis Fidelity avec l\'option USD.');
+  }
+
   const cleaned = preprocessSalesCsv(csvText);
   const result = Papa.parse(cleaned, {
     header: false,
@@ -209,42 +199,25 @@ export function parseSalesCsvFile(csvText: string, currency: ImportCurrency = 'U
 
     const proceeds = parseSalesAmount(row[3]);
     const costBasis = parseSalesAmount(row[4]);
-    const gainLoss = parseSalesAmount(row[5]);
     const holdingPeriod = (row[6]?.trim()?.toUpperCase() === 'LONG' ? 'Long' : 'Short') as HoldingPeriod;
 
     id++;
 
-    if (currency === 'USD') {
-      lots.push({
-        id: `sold-${id}`,
-        acquisitionDate,
-        saleDate,
-        quantity,
-        proceeds: 0,
-        costBasis: 0,
-        gainLoss: 0,
-        proceedsUsd: proceeds,
-        costBasisUsd: costBasis,
-        holdingPeriod,
-        origin: 'DO',
-        planType: 'qualified_macron',
-        importCurrency: 'USD',
-      });
-    } else {
-      lots.push({
-        id: `sold-${id}`,
-        acquisitionDate,
-        saleDate,
-        quantity,
-        proceeds,
-        costBasis,
-        gainLoss,
-        holdingPeriod,
-        origin: 'DO',
-        planType: 'qualified_macron',
-        importCurrency: 'EUR',
-      });
-    }
+    lots.push({
+      id: `sold-${id}`,
+      acquisitionDate,
+      saleDate,
+      quantity,
+      proceeds: 0,
+      costBasis: 0,
+      gainLoss: 0,
+      proceedsUsd: proceeds,
+      costBasisUsd: costBasis,
+      holdingPeriod,
+      origin: 'DO',
+      planType: 'qualified_macron',
+      importCurrency: 'USD',
+    });
   }
 
   return lots;

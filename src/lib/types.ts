@@ -118,7 +118,6 @@ export interface AppSettings {
   otherTaxableIncome: number;
   defaultPlanType: 'qualified_macron' | 'non_qualified';
   priorLosses: number;
-  exchangeRate?: number;
 }
 
 export interface SavedSimulation {

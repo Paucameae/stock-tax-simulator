@@ -35,7 +35,6 @@ export function validateSettings(raw: unknown, defaults: AppSettings): AppSettin
       ? obj.defaultPlanType as 'qualified_macron' | 'non_qualified'
       : defaults.defaultPlanType,
     priorLosses: isNonNegativeNumber(obj.priorLosses) ? obj.priorLosses as number : defaults.priorLosses,
-    exchangeRate: isPositiveNumber(obj.exchangeRate) ? obj.exchangeRate as number : undefined,
   };
 }
 

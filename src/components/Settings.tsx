@@ -341,22 +341,6 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
             />
           </div>
 
-          {/* Exchange rate (optional) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Taux de change EUR/USD (optionnel)
-            </label>
-            <Input
-              type="number"
-              step="0.0001"
-              min="0"
-              value={local.exchangeRate || ''}
-              onChange={(e) => update({ exchangeRate: parseFloat(e.target.value) || undefined })}
-              className="w-48"
-              placeholder="Le CSV est déjà en EUR"
-            />
-          </div>
-
           {isDirty && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex items-center gap-2 text-sm text-amber-800">
               <AlertTriangle className="h-4 w-4 shrink-0" />

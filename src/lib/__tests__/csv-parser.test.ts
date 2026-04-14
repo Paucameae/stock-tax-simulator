@@ -24,53 +24,60 @@ function makeCsvRow(overrides: Partial<{
 }
 
 describe('parseCsvFile', () => {
-  it('parses a valid CSV line (EUR)', () => {
+  it('parses a valid CSV line as USD', () => {
     const csv = [HEADER, makeCsvRow()].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
+    const lots = parseCsvFile(csv);
 
     expect(lots).toHaveLength(1);
     expect(lots[0].quantity).toBe(100);
-    expect(lots[0].costBasisPerShare).toBe(250);
-    expect(lots[0].totalCostBasis).toBe(25000);
+    expect(lots[0].costBasisPerShareUsd).toBe(250);
+    expect(lots[0].totalCostBasisUsd).toBe(25000);
+    expect(lots[0].costBasisPerShare).toBe(0);
+    expect(lots[0].totalCostBasis).toBe(0);
     expect(lots[0].origin).toBe('DO');
     expect(lots[0].holdingPeriod).toBe('Short');
-    expect(lots[0].importCurrency).toBe('EUR');
+    expect(lots[0].importCurrency).toBe('USD');
   });
 
   it('parses multiple rows', () => {
     const csv = [HEADER, makeCsvRow(), makeCsvRow({ date: 'Jun-01-2023', origin: 'SP' })].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
+    const lots = parseCsvFile(csv);
     expect(lots).toHaveLength(2);
     expect(lots[1].origin).toBe('SP');
   });
 
   it('skips header row', () => {
     const csv = [HEADER, makeCsvRow()].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
+    const lots = parseCsvFile(csv);
     expect(lots).toHaveLength(1);
   });
 
   it('skips footer lines containing "Les valeurs sont affichées en"', () => {
-    const csv = [HEADER, makeCsvRow(), 'Les valeurs sont affichées en EUR,,,,,,,,,,'].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
+    const csv = [HEADER, makeCsvRow(), 'Les valeurs sont affichées en USD,,,,,,,,,,'].join('\n');
+    const lots = parseCsvFile(csv);
     expect(lots).toHaveLength(1);
+  });
+
+  it('rejects EUR CSV files', () => {
+    const csv = [HEADER, makeCsvRow(), 'Les valeurs sont affichées en EUR,,,,,,,,,,'].join('\n');
+    expect(() => parseCsvFile(csv)).toThrow('USD');
   });
 
   it('skips rows with invalid dates', () => {
     const csv = [HEADER, makeCsvRow({ date: 'INVALID' })].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
+    const lots = parseCsvFile(csv);
     expect(lots).toHaveLength(0);
   });
 
   it('skips rows with zero quantity', () => {
     const csv = [HEADER, makeCsvRow({ qty: '0' })].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
+    const lots = parseCsvFile(csv);
     expect(lots).toHaveLength(0);
   });
 
-  it('parses USD imports with raw USD values stored', () => {
+  it('stores raw USD values', () => {
     const csv = [HEADER, makeCsvRow()].join('\n');
-    const lots = parseCsvFile(csv, 'USD');
+    const lots = parseCsvFile(csv);
 
     expect(lots).toHaveLength(1);
     expect(lots[0].importCurrency).toBe('USD');
@@ -100,7 +107,7 @@ describe('parseCsvFile', () => {
 
   it('parses date correctly (MMM-DD-YYYY)', () => {
     const csv = [HEADER, makeCsvRow({ date: 'Dec-25-2024' })].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
+    const lots = parseCsvFile(csv);
     expect(lots[0].acquisitionDate.getFullYear()).toBe(2024);
     expect(lots[0].acquisitionDate.getMonth()).toBe(11); // December = 11
     expect(lots[0].acquisitionDate.getDate()).toBe(25);
@@ -109,8 +116,8 @@ describe('parseCsvFile', () => {
   it('parses amounts with Fidelity format (integer / 100)', () => {
     // 123456 → 1234.56
     const csv = [HEADER, makeCsvRow({ costPerShare: '123456' })].join('\n');
-    const lots = parseCsvFile(csv, 'EUR');
-    expect(lots[0].costBasisPerShare).toBe(1234.56);
+    const lots = parseCsvFile(csv);
+    expect(lots[0].costBasisPerShareUsd).toBe(1234.56);
   });
 });
 
@@ -134,9 +141,9 @@ function makeSalesRow(overrides: Partial<{
 }
 
 describe('parseSalesCsvFile', () => {
-  it('parses a valid sales CSV line (USD)', () => {
+  it('parses a valid sales CSV line as USD', () => {
     const csv = [SALES_HEADER, makeSalesRow()].join('\n');
-    const lots = parseSalesCsvFile(csv, 'USD');
+    const lots = parseSalesCsvFile(csv);
     expect(lots).toHaveLength(1);
     expect(lots[0].quantity).toBeCloseTo(0.455);
     expect(lots[0].proceedsUsd).toBeCloseTo(177.79);
@@ -148,19 +155,14 @@ describe('parseSalesCsvFile', () => {
     expect(lots[0].costBasis).toBe(0);
   });
 
-  it('parses a valid sales CSV line (EUR)', () => {
-    const csv = [SALES_HEADER, makeSalesRow()].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
-    expect(lots).toHaveLength(1);
-    expect(lots[0].proceeds).toBeCloseTo(177.79);
-    expect(lots[0].costBasis).toBeCloseTo(175.98);
-    expect(lots[0].gainLoss).toBeCloseTo(1.81);
-    expect(lots[0].importCurrency).toBe('EUR');
+  it('rejects EUR CSV files', () => {
+    const csv = [SALES_HEADER, makeSalesRow(), 'Les valeurs sont affichées en EUR'].join('\n');
+    expect(() => parseSalesCsvFile(csv)).toThrow('USD');
   });
 
   it('parses dates in MMM/DD/YYYY format', () => {
     const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'JUN/17/2024', saleDate: 'MAR/17/2025' })].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
+    const lots = parseSalesCsvFile(csv);
     expect(lots[0].acquisitionDate.getFullYear()).toBe(2024);
     expect(lots[0].acquisitionDate.getMonth()).toBe(5); // June = 5
     expect(lots[0].acquisitionDate.getDate()).toBe(17);
@@ -170,7 +172,7 @@ describe('parseSalesCsvFile', () => {
 
   it('parses LONG holding period', () => {
     const csv = [SALES_HEADER, makeSalesRow({ duration: 'LONG' })].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
+    const lots = parseSalesCsvFile(csv);
     expect(lots[0].holdingPeriod).toBe('Long');
   });
 
@@ -180,27 +182,27 @@ describe('parseSalesCsvFile', () => {
       makeSalesRow(),
       makeSalesRow({ acqDate: 'FEB/28/2025', qty: '0.6350', proceeds: '248.14', costBasis: '249.40', gainLoss: '-1.26' }),
     ].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
+    const lots = parseSalesCsvFile(csv);
     expect(lots).toHaveLength(2);
-    expect(lots[1].gainLoss).toBeCloseTo(-1.26);
+    expect(lots[1].costBasisUsd).toBeCloseTo(249.40);
   });
 
   it('skips header row including HTML-styled headers', () => {
     const htmlHeader = '"Date d\'acquisition,Quantité,<span style=""color: rgb(0, 0, 51)"">Date de vente ou de transfert</span>,Produits,Prix de revient,Plus-value/Moins-value,Durée"';
     const csv = [htmlHeader, makeSalesRow()].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
+    const lots = parseSalesCsvFile(csv);
     expect(lots).toHaveLength(1);
   });
 
   it('skips footer lines', () => {
     const csv = [SALES_HEADER, makeSalesRow(), ',', 'Les valeurs sont affichées en USD'].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
+    const lots = parseSalesCsvFile(csv);
     expect(lots).toHaveLength(1);
   });
 
   it('skips empty rows', () => {
     const csv = [SALES_HEADER, makeSalesRow(), '', ',', makeSalesRow({ qty: '3.3560' })].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
+    const lots = parseSalesCsvFile(csv);
     expect(lots).toHaveLength(2);
   });
 
@@ -211,15 +213,16 @@ describe('parseSalesCsvFile', () => {
 
   it('defaults origin to DO and planType to qualified_macron', () => {
     const csv = [SALES_HEADER, makeSalesRow()].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
+    const lots = parseSalesCsvFile(csv);
     expect(lots[0].origin).toBe('DO');
     expect(lots[0].planType).toBe('qualified_macron');
   });
 
-  it('parses negative gain/loss', () => {
-    const csv = [SALES_HEADER, makeSalesRow({ gainLoss: '-208.85' })].join('\n');
-    const lots = parseSalesCsvFile(csv, 'EUR');
-    expect(lots[0].gainLoss).toBeCloseTo(-208.85);
+  it('parses negative gain/loss row', () => {
+    const csv = [SALES_HEADER, makeSalesRow({ proceeds: '100.00', costBasis: '200.00', gainLoss: '-100.00' })].join('\n');
+    const lots = parseSalesCsvFile(csv);
+    expect(lots[0].proceedsUsd).toBeCloseTo(100);
+    expect(lots[0].costBasisUsd).toBeCloseTo(200);
   });
 
   it('parses real broker export with HTML header and wrapping quotes', () => {
@@ -231,7 +234,7 @@ JUN/17/2024,4.0420,MAR/17/2025,1579.49,1788.34,-208.85,SHORT
 ,
 Les valeurs sont affichées en USD
 "`;
-    const lots = parseSalesCsvFile(realCsv, 'USD');
+    const lots = parseSalesCsvFile(realCsv);
     expect(lots).toHaveLength(4);
     expect(lots[0].quantity).toBeCloseTo(0.455);
     expect(lots[0].proceedsUsd).toBeCloseTo(177.79);
