@@ -157,6 +157,10 @@ function App() {
     } catch {
       setLots(importedLots);
     }
+    // Clear sales data — positions and sales are mutually exclusive workflows
+    setSoldLots([]);
+    setSaleEntries([]);
+    setResult(null);
   }, [settings.defaultPlanType]);
 
   const handleImportSales = React.useCallback((importedSoldLots: SoldLot[]) => {
@@ -165,6 +169,8 @@ function App() {
       planType: settings.defaultPlanType === 'non_qualified' ? 'non_qualified' as const : 'qualified_macron' as const,
     }));
     setSoldLots(withPlanType);
+    // Clear positions data — positions and sales are mutually exclusive workflows
+    setLots([]);
 
     // Auto-run simulation from sold lots
     const entries = soldLotsToSaleEntries(withPlanType);
