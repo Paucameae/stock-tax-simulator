@@ -1,22 +1,26 @@
 import React, { useCallback } from 'react';
-import { Upload, FileText, RefreshCw } from 'lucide-react';
+import { Upload, FileText, RefreshCw, ShoppingCart } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { parseCsvFile } from '../lib/csv-parser';
+import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { useEcbConversion } from '../hooks/useEcbConversion';
-import type { StockLot, ImportCurrency } from '../lib/types';
+import type { StockLot, SoldLot, ImportCurrency } from '../lib/types';
+
+type ImportMode = 'positions' | 'sales';
 
 interface CsvImporterProps {
   onImport: (lots: StockLot[]) => void;
+  onImportSales?: (soldLots: SoldLot[]) => void;
 }
 
-export const CsvImporter = React.memo(function CsvImporter({ onImport }: CsvImporterProps) {
+export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportSales }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [currency, setCurrency] = React.useState<ImportCurrency>('EUR');
+  const [importMode, setImportMode] = React.useState<ImportMode>('positions');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const { convertLots, loading, error: ecbError } = useEcbConversion();
+  const { convertLots, convertSoldLots, loading, error: ecbError } = useEcbConversion();
 
   const handleFile = useCallback(
     (file: File) => {
@@ -27,17 +31,31 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport }: CsvImpo
       reader.onload = async (e) => {
         try {
           const text = e.target?.result as string;
-          const lots = parseCsvFile(text, currency);
-          if (lots.length === 0) {
-            setError('Aucun lot valide trouvé dans le fichier. Vérifiez le format CSV.');
-            return;
-          }
 
-          if (currency === 'USD') {
-            const { converted } = await convertLots(lots);
-            onImport(converted);
+          if (importMode === 'sales') {
+            const soldLots = parseSalesCsvFile(text, currency);
+            if (soldLots.length === 0) {
+              setError('Aucune vente trouvée dans le fichier. Vérifiez le format CSV.');
+              return;
+            }
+            if (currency === 'USD') {
+              const { converted } = await convertSoldLots(soldLots);
+              onImportSales?.(converted);
+            } else {
+              onImportSales?.(soldLots);
+            }
           } else {
-            onImport(lots);
+            const lots = parseCsvFile(text, currency);
+            if (lots.length === 0) {
+              setError('Aucun lot valide trouvé dans le fichier. Vérifiez le format CSV.');
+              return;
+            }
+            if (currency === 'USD') {
+              const { converted } = await convertLots(lots);
+              onImport(converted);
+            } else {
+              onImport(lots);
+            }
           }
         } catch (err) {
           setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
@@ -46,7 +64,7 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport }: CsvImpo
       reader.onerror = () => setError('Erreur lors de la lecture du fichier.');
       reader.readAsText(file, 'utf-8');
     },
-    [onImport, currency, convertLots]
+    [onImport, onImportSales, currency, importMode, convertLots, convertSoldLots]
   );
 
   const handleDrop = useCallback(
@@ -88,6 +106,44 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport }: CsvImpo
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Import mode selector */}
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-sm font-medium text-gray-700">Type d'import :</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                importMode === 'positions'
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => { setImportMode('positions'); setFileName(null); setError(null); }}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Positions ouvertes
+            </button>
+            <button
+              type="button"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                importMode === 'sales'
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => { setImportMode('sales'); setFileName(null); setError(null); }}
+            >
+              <ShoppingCart className="h-3.5 w-3.5" />
+              Ventes effectuées
+            </button>
+          </div>
+        </div>
+
+        {importMode === 'sales' && (
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            Importez l'export CSV des « lots de transactions fermées » depuis votre broker.
+            Les ventes seront automatiquement traitées pour le calcul d'impôt et la déclaration.
+          </div>
+        )}
+
         {/* Currency selector */}
         <div className="flex items-center gap-3 mb-4">
           <label className="text-sm font-medium text-gray-700">Devise du fichier CSV :</label>

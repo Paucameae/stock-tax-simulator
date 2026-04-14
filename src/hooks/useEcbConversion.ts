@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react';
 import { fetchECBRates, convertUsdToEur, formatDateKey } from '../lib/ecb-rates';
-import type { StockLot } from '../lib/types';
+import type { StockLot, SoldLot } from '../lib/types';
 
 interface EcbConversionResult {
   convertLots: (lots: StockLot[]) => Promise<{ converted: StockLot[]; missingCount: number }>;
+  convertSoldLots: (lots: SoldLot[]) => Promise<{ converted: SoldLot[]; missingCount: number }>;
   loading: boolean;
   error: string | null;
 }
@@ -61,5 +62,46 @@ export function useEcbConversion(): EcbConversionResult {
     }
   }, []);
 
-  return { convertLots, loading, error };
+  const convertSoldLots = useCallback(async (lots: SoldLot[]) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // For sold lots, we need rates for the sale date (conversion of proceeds at sale date)
+      const saleDates = lots.map((l) => l.saleDate);
+      const acqDates = lots.map((l) => l.acquisitionDate);
+      const allDates = [...saleDates, ...acqDates];
+      const rates = await fetchECBRates(allDates);
+
+      const converted = lots.map((lot) => {
+        const saleDateKey = formatDateKey(lot.saleDate);
+        const saleRate = rates[saleDateKey];
+        if (!saleRate) {
+          return { ...lot, eurUsdRate: undefined };
+        }
+        const proceeds = convertUsdToEur(lot.proceedsUsd || 0, saleRate);
+        const costBasis = convertUsdToEur(lot.costBasisUsd || 0, saleRate);
+        const gainLoss = proceeds - costBasis;
+        return {
+          ...lot,
+          eurUsdRate: saleRate,
+          proceeds,
+          costBasis,
+          gainLoss,
+        };
+      });
+
+      const missingCount = converted.filter((l) => !l.eurUsdRate).length;
+      if (missingCount > 0) {
+        setError(`Taux BCE introuvable pour ${missingCount} lot(s). Vérifiez les dates ou renseignez manuellement.`);
+      }
+      return { converted, missingCount };
+    } catch {
+      setError('Erreur lors de la récupération des taux BCE. Vérifiez votre connexion.');
+      return { converted: lots, missingCount: lots.length };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { convertLots, convertSoldLots, loading, error };
 }

@@ -2,13 +2,14 @@ import React from 'react';
 import { Briefcase, Calculator, FileText, Settings as SettingsIcon, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen } from 'lucide-react';
 import { TaxRulesPanel } from './components/TaxRulesPanel';
 import { CsvImporter } from './components/CsvImporter';
+import { SoldLotsTable } from './components/SoldLotsTable';
 import { SaleSimulator } from './components/SaleSimulator';
 import { TaxCalculator } from './components/TaxCalculator';
 import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
 import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem } from './lib/storage';
-import type { StockLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation } from './lib/types';
+import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation } from './lib/types';
 import { generateId } from './lib/utils';
 
 // Lazy-load heavy components (pdfjs-dist via Settings, recharts via Portfolio)
@@ -46,6 +47,31 @@ function isSettingsConfigured(s: AppSettings, defaults: AppSettings): boolean {
     || s.taxShares !== defaults.taxShares
     || s.familyStatus !== defaults.familyStatus
     || s.numberOfChildren !== defaults.numberOfChildren;
+}
+
+function soldLotsToSaleEntries(soldLots: SoldLot[]): SaleLotEntry[] {
+  return soldLots.map((sl) => {
+    const costBasisPerShare = sl.quantity > 0 ? sl.costBasis / sl.quantity : 0;
+    const salePricePerShare = sl.quantity > 0 ? sl.proceeds / sl.quantity : 0;
+    const syntheticLot: StockLot = {
+      id: sl.id,
+      acquisitionDate: sl.acquisitionDate,
+      quantity: sl.quantity,
+      costBasisPerShare,
+      totalCostBasis: sl.costBasis,
+      currentValue: sl.proceeds,
+      unrealizedGainLoss: sl.gainLoss,
+      origin: sl.origin,
+      holdingPeriod: sl.holdingPeriod,
+      planType: sl.planType,
+      importCurrency: sl.importCurrency,
+    };
+    return {
+      lot: syntheticLot,
+      quantitySold: sl.quantity,
+      salePricePerShare,
+    };
+  });
 }
 
 class ErrorBoundary extends React.Component<
@@ -98,6 +124,7 @@ function App() {
     return isSettingsConfigured(saved, DEFAULT_SETTINGS) ? 'portfolio' : 'settings';
   });
   const [lots, setLots] = React.useState<StockLot[]>([]);
+  const [soldLots, setSoldLots] = React.useState<SoldLot[]>([]);
   const [saleEntries, setSaleEntries] = React.useState<SaleLotEntry[]>([]);
   const [taxMode, setTaxMode] = React.useState<TaxMode>('pfu');
   const [result, setResult] = React.useState<TaxSimulationResult | null>(null);
@@ -131,6 +158,47 @@ function App() {
       setLots(importedLots);
     }
   }, [settings.defaultPlanType]);
+
+  const handleImportSales = React.useCallback((importedSoldLots: SoldLot[]) => {
+    const withPlanType = importedSoldLots.map((sl) => ({
+      ...sl,
+      planType: settings.defaultPlanType === 'non_qualified' ? 'non_qualified' as const : 'qualified_macron' as const,
+    }));
+    setSoldLots(withPlanType);
+
+    // Auto-run simulation from sold lots
+    const entries = soldLotsToSaleEntries(withPlanType);
+    setSaleEntries(entries);
+    const simulation = {
+      lots: entries,
+      taxMode,
+      otherTaxableIncome: settings.otherTaxableIncome,
+      taxShares: settings.taxShares,
+      familyStatus: settings.familyStatus,
+      priorLosses: settings.priorLosses,
+      fiscalYear: settings.fiscalYear,
+    };
+    const res = runSimulation(simulation);
+    setResult(res);
+    setActiveTab('simulator');
+  }, [settings, taxMode]);
+
+  const handleSoldLotsChange = React.useCallback((updatedSoldLots: SoldLot[]) => {
+    setSoldLots(updatedSoldLots);
+    // Re-run simulation with updated origin/planType
+    const entries = soldLotsToSaleEntries(updatedSoldLots);
+    setSaleEntries(entries);
+    const simulation = {
+      lots: entries,
+      taxMode,
+      otherTaxableIncome: settings.otherTaxableIncome,
+      taxShares: settings.taxShares,
+      familyStatus: settings.familyStatus,
+      priorLosses: settings.priorLosses,
+      fiscalYear: settings.fiscalYear,
+    };
+    setResult(runSimulation(simulation));
+  }, [settings, taxMode]);
 
   const handleSimulate = React.useCallback((entries: SaleLotEntry[]) => {
     setSaleEntries(entries);
@@ -178,7 +246,7 @@ function App() {
   }, [saleEntries, settings]);
 
   const settingsDone = isSettingsConfigured(settings, DEFAULT_SETTINGS);
-  const portfolioDone = lots.length > 0;
+  const portfolioDone = lots.length > 0 || soldLots.length > 0;
   const simulationDone = result !== null;
 
   const tabs = [
@@ -286,7 +354,10 @@ function App() {
                 </div>
               </div>
             )}
-            <CsvImporter onImport={handleImport} />
+            <CsvImporter onImport={handleImport} onImportSales={handleImportSales} />
+            {soldLots.length > 0 && (
+              <SoldLotsTable soldLots={soldLots} onSoldLotsChange={handleSoldLotsChange} defaultPlanType={settings.defaultPlanType} />
+            )}
             {lots.length > 0 && (
               <React.Suspense fallback={<LazyFallback />}>
                 <Portfolio lots={lots} onLotsChange={setLots} />
@@ -297,12 +368,12 @@ function App() {
 
         <div hidden={activeTab !== 'simulator'}>
           <div className="space-y-6">
-            {lots.length === 0 ? (
+            {lots.length === 0 && soldLots.length === 0 ? (
               <div className="text-center py-16">
                 <Briefcase className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                 <p className="text-gray-600 font-medium">Aucun portefeuille importé</p>
                 <p className="text-sm text-gray-500 mt-1 mb-4">
-                  Importez votre fichier CSV Morgan Stanley pour commencer une simulation de vente.
+                  Importez votre fichier CSV pour commencer une simulation de vente ou déclarer des ventes effectuées.
                 </p>
                 <button
                   onClick={() => setActiveTab('portfolio')}
@@ -314,7 +385,9 @@ function App() {
               </div>
             ) : (
               <>
-                <SaleSimulator lots={lots} settings={settings} onSimulate={handleSimulate} />
+                {lots.length > 0 && (
+                  <SaleSimulator lots={lots} settings={settings} onSimulate={handleSimulate} />
+                )}
                 <TaxCalculator result={result} taxMode={taxMode} onTaxModeChange={handleTaxModeChange} fiscalYear={settings.fiscalYear} />
                 {saleEntries.length > 0 && (
                   <>

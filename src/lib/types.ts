@@ -27,6 +27,24 @@ export interface StockLot {
   importCurrency?: ImportCurrency;
 }
 
+export interface SoldLot {
+  id: string;
+  acquisitionDate: Date;
+  saleDate: Date;
+  quantity: number;
+  proceeds: number;
+  costBasis: number;
+  gainLoss: number;
+  holdingPeriod: HoldingPeriod;
+  origin: StockOrigin;
+  planType: PlanType;
+  // USD import fields
+  proceedsUsd?: number;
+  costBasisUsd?: number;
+  eurUsdRate?: number;
+  importCurrency?: ImportCurrency;
+}
+
 export interface SaleLotEntry {
   lot: StockLot;
   quantitySold: number;

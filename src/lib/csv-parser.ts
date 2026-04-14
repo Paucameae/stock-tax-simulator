@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from './types';
+import type { StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency, SoldLot } from './types';
 
 const MONTH_MAP: Record<string, number> = {
   Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
@@ -116,6 +116,110 @@ export function parseCsvFile(csvText: string, currency: ImportCurrency = 'EUR'):
         origin,
         holdingPeriod,
         planType: getDefaultPlanType(origin),
+      });
+    }
+  }
+
+  return lots;
+}
+
+// --- Sales CSV parsing (closed/sold lots) ---
+
+const SALES_MONTH_MAP: Record<string, number> = {
+  JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+  JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+};
+
+function parseSalesDate(dateStr: string): Date | undefined {
+  if (!dateStr || !dateStr.trim()) return undefined;
+  const trimmed = dateStr.trim();
+  // Format: MMM/DD/YYYY e.g. MAR/17/2025
+  const parts = trimmed.split('/');
+  if (parts.length !== 3) return undefined;
+  const month = SALES_MONTH_MAP[parts[0].toUpperCase()];
+  if (month === undefined) return undefined;
+  const day = parseInt(parts[1], 10);
+  const year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(year)) return undefined;
+  return new Date(year, month, day);
+}
+
+function parseSalesAmount(amountStr: string): number {
+  if (!amountStr || !amountStr.trim()) return 0;
+  const cleaned = amountStr.trim().replace(/,/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+const SALES_HEADER_MARKERS = ["Date d'acquisition", 'Date d\'acquisition', 'Date de vente'];
+
+function isSalesHeaderRow(row: string[]): boolean {
+  const joined = row.join(',');
+  return SALES_HEADER_MARKERS.some((marker) => joined.includes(marker)) && joined.includes('Produits');
+}
+
+export function parseSalesCsvFile(csvText: string, currency: ImportCurrency = 'USD'): SoldLot[] {
+  const result = Papa.parse(csvText, {
+    header: false,
+    skipEmptyLines: true,
+  });
+
+  const lots: SoldLot[] = [];
+  let id = 0;
+
+  for (const row of result.data as string[][]) {
+    // Skip header row (may contain HTML tags)
+    if (isSalesHeaderRow(row)) continue;
+    // Skip footer lines
+    if (row.join(',').includes('Les valeurs sont affichées en')) continue;
+    // Skip empty rows
+    if (!row[0] || !row[0].trim()) continue;
+
+    const acquisitionDate = parseSalesDate(row[0]);
+    if (!acquisitionDate) continue;
+
+    const quantity = parseFloat(row[1]?.trim() || '0');
+    if (!quantity || quantity <= 0) continue;
+
+    const saleDate = parseSalesDate(row[2]);
+    if (!saleDate) continue;
+
+    const proceeds = parseSalesAmount(row[3]);
+    const costBasis = parseSalesAmount(row[4]);
+    const gainLoss = parseSalesAmount(row[5]);
+    const holdingPeriod = (row[6]?.trim()?.toUpperCase() === 'LONG' ? 'Long' : 'Short') as HoldingPeriod;
+
+    id++;
+
+    if (currency === 'USD') {
+      lots.push({
+        id: `sold-${id}`,
+        acquisitionDate,
+        saleDate,
+        quantity,
+        proceeds: 0,
+        costBasis: 0,
+        gainLoss: 0,
+        proceedsUsd: proceeds,
+        costBasisUsd: costBasis,
+        holdingPeriod,
+        origin: 'DO',
+        planType: 'qualified_macron',
+        importCurrency: 'USD',
+      });
+    } else {
+      lots.push({
+        id: `sold-${id}`,
+        acquisitionDate,
+        saleDate,
+        quantity,
+        proceeds,
+        costBasis,
+        gainLoss,
+        holdingPeriod,
+        origin: 'DO',
+        planType: 'qualified_macron',
+        importCurrency: 'EUR',
       });
     }
   }
