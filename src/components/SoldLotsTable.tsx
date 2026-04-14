@@ -1,10 +1,9 @@
-import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Select } from './ui/select';
 import { ShoppingCart, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import type { SoldLot, StockOrigin, PlanType } from '../lib/types';
-import { formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
+import { formatEUR, formatUSD, formatDate } from '../lib/utils';
 
 interface SoldLotsTableProps {
   soldLots: SoldLot[];
