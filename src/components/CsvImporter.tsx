@@ -1,0 +1,168 @@
+import React, { useCallback } from 'react';
+import { Upload, FileText, RefreshCw } from 'lucide-react';
+import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
+import { parseCsvFile } from '../lib/csv-parser';
+import { useEcbConversion } from '../hooks/useEcbConversion';
+import type { StockLot, ImportCurrency } from '../lib/types';
+
+interface CsvImporterProps {
+  onImport: (lots: StockLot[]) => void;
+}
+
+export const CsvImporter = React.memo(function CsvImporter({ onImport }: CsvImporterProps) {
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [fileName, setFileName] = React.useState<string | null>(null);
+  const [currency, setCurrency] = React.useState<ImportCurrency>('EUR');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const { convertLots, loading, error: ecbError } = useEcbConversion();
+
+  const handleFile = useCallback(
+    (file: File) => {
+      setError(null);
+      setFileName(file.name);
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const text = e.target?.result as string;
+          const lots = parseCsvFile(text, currency);
+          if (lots.length === 0) {
+            setError('Aucun lot valide trouvé dans le fichier. Vérifiez le format CSV.');
+            return;
+          }
+
+          if (currency === 'USD') {
+            const { converted } = await convertLots(lots);
+            onImport(converted);
+          } else {
+            onImport(lots);
+          }
+        } catch (err) {
+          setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
+        }
+      };
+      reader.onerror = () => setError('Erreur lors de la lecture du fichier.');
+      reader.readAsText(file, 'utf-8');
+    },
+    [onImport, currency, convertLots]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Importer le fichier CSV Fidelity
+        </CardTitle>
+        <CardDescription>
+          Glissez-déposez votre fichier d'export CSV du broker Fidelity ou cliquez pour sélectionner.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {/* Currency selector */}
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-sm font-medium text-gray-700">Devise du fichier CSV :</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                currency === 'EUR'
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => setCurrency('EUR')}
+            >
+              EUR (€)
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                currency === 'USD'
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => setCurrency('USD')}
+            >
+              USD ($)
+            </button>
+          </div>
+          {currency === 'USD' && (
+            <span className="text-xs text-blue-600">
+              Les taux de change BCE seront récupérés automatiquement pour chaque date d'acquisition.
+            </span>
+          )}
+        </div>
+
+        {loading && (
+          <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            Récupération des taux de change BCE en cours…
+          </div>
+        )}
+
+        <div
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+            isDragging
+              ? 'border-primary bg-blue-50'
+              : 'border-gray-300 hover:border-gray-400'
+          }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="h-10 w-10 mx-auto mb-3 text-gray-400" />
+          <p className="text-sm text-gray-600 mb-2">
+            {fileName ? (
+              <>Fichier chargé : <strong>{fileName}</strong></>
+            ) : (
+              'Glissez votre fichier CSV ici ou cliquez pour parcourir'
+            )}
+          </p>
+          <Button variant="outline" size="sm" type="button">
+            Choisir un fichier
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={handleInputChange}
+          />
+        </div>
+        {(error || ecbError) && (
+          <p className="mt-3 text-sm text-red-600">{error || ecbError}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+});
