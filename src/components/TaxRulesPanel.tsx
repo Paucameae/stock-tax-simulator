@@ -95,14 +95,14 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
                 <Rate label="IR : barème progressif après abattement" value="0 → 45 %" />
                 <Rate label="Abattement (détention 2–8 ans depuis vesting)" value="50 %" />
                 <Rate label="Abattement (détention > 8 ans)" value="65 %" />
-                <Rate label="PS (sur montant brut, sans abattement)" value="17,2 %" />
+                <Rate label="PS (sur montant brut, sans abattement)" value="18,6 %" />
               </div>
             </div>
             <div className="rounded bg-amber-50 p-3 space-y-2 text-sm">
               <p className="font-semibold text-amber-900">Fraction &gt; 300 000 €</p>
               <div className="space-y-1">
                 <Rate label="IR : barème progressif (pas d'abattement)" value="0 → 45 %" />
-                <Rate label="Cotisations sociales (activité)" value="9,7 %" />
+                <Rate label="Cotisations sociales (activité)" value="11,1 %" />
                 <Rate label="Contribution salariale" value="10 %" />
               </div>
             </div>
@@ -118,7 +118,7 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
           <Section title="Stock Awards qualifiés — Pré-Macron (28/09/2012 → 30/11/2016)">
             <div className="rounded bg-gray-50 p-3 space-y-1">
               <Rate label="Barème progressif (traitements & salaires)" value="0 → 45 %" />
-              <Rate label="PS (activité)" value="9,7 %" />
+              <Rate label="PS (activité)" value="11,1 %" />
               <Rate label="Contribution salariale" value="10 %" />
               <Rate label="CEHR (si applicable)" value="3 % / 4 %" />
             </div>
@@ -131,12 +131,12 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
             <div className="rounded bg-gray-50 p-3 space-y-1">
               <Rate label="Option 1 : taux forfaitaire" value="30 %" />
               <Rate label="Option 2 : barème progressif" value="0 → 45 %" />
-              <Rate label="PS (patrimoine)" value="17,2 %" />
+              <Rate label="PS (patrimoine)" value="18,6 %" />
               <Rate label="Contribution salariale (si attribué après 16/10/2007)" value="10 %" />
               <Rate label="CEHR (si applicable)" value="3 % / 4 %" />
             </div>
             <p className="text-xs text-gray-500">
-              Taux maximum global : ~61,2 %. Déclaration : 2042-C — cases 3VI / 3VJ-VK / 3VN.
+              Taux maximum global : ~62,6 %. Déclaration : 2042-C — cases 3VI / 3VJ-VK / 3VN.
             </p>
           </Section>
 
@@ -149,8 +149,8 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
               <p className="font-semibold text-green-900">Option PFU (Flat Tax)</p>
               <div className="space-y-1">
                 <Rate label="IR forfaitaire" value="12,8 %" />
-                <Rate label="PS" value="17,2 %" />
-                <Rate label="Total" value="30 %" />
+                <Rate label="PS" value="18,6 %" />
+                <Rate label="Total" value="31,4 %" />
               </div>
               <p className="text-xs text-green-700">Pas d'abattement pour durée de détention. Pas de CSG déductible.</p>
             </div>
@@ -158,8 +158,8 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
               <p className="font-semibold text-indigo-900">Option barème progressif (case 2OP)</p>
               <div className="space-y-1">
                 <Rate label="IR barème progressif" value="0 → 45 %" />
-                <Rate label="PS (sur PV avant abattement)" value="17,2 %" />
-                <Rate label="CSG déductible l'année suivante" value="6,8 %" />
+                <Rate label="PS (sur PV avant abattement)" value="18,6 %" />
+                <Rate label="CSG déductible l'année suivante" value="8,2 %" />
               </div>
               <p className="text-xs text-indigo-700">
                 Abattement durée de détention (titres acquis avant 01/01/2018 uniquement) : 50 % (2–8 ans), 65 % (&gt; 8 ans).
@@ -179,8 +179,8 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
               Dividendes trimestriels imposables en France. Retenue à la source US : 15 % (crédit d'impôt via convention).
             </p>
             <div className="rounded bg-gray-50 p-3 space-y-2 text-sm">
-              <p className="font-semibold">PFU : 12,8 % IR + 17,2 % PS = 30 %</p>
-              <p className="font-semibold">Barème (option) : abattement 40 % sur IR, PS 17,2 % sans abattement, CSG déductible 6,8 %</p>
+              <p className="font-semibold">PFU : 12,8 % IR + 18,6 % PS = 31,4 %</p>
+              <p className="font-semibold">Barème (option) : abattement 40 % sur IR, PS 18,6 % sans abattement, CSG déductible 8,2 %</p>
             </div>
             <p className="text-xs text-gray-500">
               Si le broker ne prélève pas : formulaire <strong>2778-DIV</strong> + paiement au plus tard le 15 du mois suivant la perception.
@@ -233,7 +233,7 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
           </Section>
 
           {/* ---- Barème IR ---- */}
-          <Section title="Barème progressif de l'IR 2025 (revenus 2024)">
+          <Section title="Barème progressif de l'IR (revenus 2025-2026)">
             <div className="rounded bg-gray-50 p-3 space-y-1">
               <Rate label="Jusqu'à 11 497 €" value="0 %" />
               <Rate label="11 497 € → 29 315 €" value="11 %" />
