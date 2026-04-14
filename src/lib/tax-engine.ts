@@ -10,6 +10,7 @@ import type {
 } from './types';
 import {
   calculateCEHR,
+  getHoldingAbatementRate,
   getTaxConfig,
 } from './tax-rates';
 import { calculateAcquisitionGainTax } from './acquisition-tax';
@@ -133,6 +134,20 @@ export function runSimulation(simulation: SaleSimulation): TaxSimulationResult {
     ? (acquisitionGainTax.below300k - acquisitionGainTax.abatement50) + acquisitionGainTax.above300k
     : acquisitionGainTax.below300k;
 
+  // Compute holding abatement for pre-2018 lots (applies only in barème mode)
+  const saleDate = new Date();
+  let totalHoldingAbatement = 0;
+  if (safeSimulation.taxMode === 'bareme') {
+    for (let i = 0; i < safeSimulation.lots.length; i++) {
+      const entry = safeSimulation.lots[i];
+      const lotResult = lotResults[i];
+      if (lotResult.capitalGain > 0 && entry.lot.acquisitionDate.getFullYear() < 2018) {
+        const rate = getHoldingAbatementRate(entry.lot.acquisitionDate, saleDate);
+        totalHoldingAbatement += lotResult.capitalGain * rate;
+      }
+    }
+  }
+
   const capitalGainTax = calculateCapitalGainTax(
     totalCapitalGain,
     safeSimulation.priorLosses,
@@ -140,10 +155,12 @@ export function runSimulation(simulation: SaleSimulation): TaxSimulationResult {
     safeSimulation.otherTaxableIncome,
     safeSimulation.taxShares,
     acqTaxableIncome,
+    totalHoldingAbatement,
     config
   );
 
-  const rfi = safeSimulation.otherTaxableIncome + totalAcquisitionGain + Math.max(0, totalCapitalGain);
+  const netCapitalGainForRfi = Math.max(0, totalCapitalGain - safeSimulation.priorLosses);
+  const rfi = safeSimulation.otherTaxableIncome + totalAcquisitionGain + netCapitalGainForRfi;
   const cehr = calculateCEHR(rfi, safeSimulation.familyStatus, config);
 
   const totalTax = acquisitionGainTax.total + capitalGainTax.total + cehr;

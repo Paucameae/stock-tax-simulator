@@ -14,6 +14,7 @@ export function calculateCapitalGainTax(
   otherIncome: number,
   taxShares: number,
   acquisitionGainTaxableIncome: number = 0,
+  holdingAbatement: number = 0,
   config?: TaxConfig
 ): CapitalGainTaxResult {
   const pfuIrRate = config?.pfuIrRate ?? PFU_IR_RATE;
@@ -29,6 +30,7 @@ export function calculateCapitalGainTax(
       ir: 0,
       ps: 0,
       deductibleCSG: 0,
+      holdingAbatement: 0,
       total: 0,
       remainingLosses: priorLosses + netLoss,
       netLoss,
@@ -47,14 +49,17 @@ export function calculateCapitalGainTax(
       ir,
       ps,
       deductibleCSG: 0,
+      holdingAbatement: 0,
       total: ir + ps,
       remainingLosses,
       netLoss: 0,
     };
   } else {
     const baseIncome = otherIncome + acquisitionGainTaxableIncome;
+    const effectiveAbatement = Math.min(holdingAbatement, netGain);
+    const irTaxableGain = netGain - effectiveAbatement;
     const ir =
-      calculateProgressiveTax(baseIncome + netGain, taxShares, config) -
+      calculateProgressiveTax(baseIncome + irTaxableGain, taxShares, config) -
       calculateProgressiveTax(baseIncome, taxShares, config);
     const ps = netGain * psPatrimoine;
     const deductibleCSG = netGain * csgDeductible;
@@ -64,6 +69,7 @@ export function calculateCapitalGainTax(
       ir,
       ps,
       deductibleCSG,
+      holdingAbatement: effectiveAbatement,
       total: ir + ps,
       remainingLosses,
       netLoss: 0,

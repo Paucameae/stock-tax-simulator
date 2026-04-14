@@ -71,6 +71,7 @@ export interface CapitalGainTaxResult {
   ir: number;
   ps: number;
   deductibleCSG: number;
+  holdingAbatement: number;
   total: number;
   remainingLosses: number;
   netLoss: number;

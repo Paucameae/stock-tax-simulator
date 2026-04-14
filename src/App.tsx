@@ -1,5 +1,6 @@
 import React from 'react';
-import { Briefcase, Calculator, FileText, Settings as SettingsIcon, AlertTriangle, RefreshCw, Loader2, Check, Upload } from 'lucide-react';
+import { Briefcase, Calculator, FileText, Settings as SettingsIcon, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen } from 'lucide-react';
+import { TaxRulesPanel } from './components/TaxRulesPanel';
 import { CsvImporter } from './components/CsvImporter';
 import { SaleSimulator } from './components/SaleSimulator';
 import { TaxCalculator } from './components/TaxCalculator';
@@ -103,6 +104,7 @@ function App() {
   const [settings, setSettings] = React.useState<AppSettings>(() => {
     return loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
   });
+  const [showRules, setShowRules] = React.useState(false);
   const [savedSimulations, setSavedSimulations] = React.useState<SavedSimulation[]>(() => {
     try {
       const saved = localStorage.getItem('savedSimulations');
@@ -217,7 +219,7 @@ function App() {
       {/* Navigation tabs with workflow indicators */}
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4">
-          <nav className="flex gap-1 overflow-x-auto">
+          <nav className="flex items-center gap-1 overflow-x-auto">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -251,6 +253,15 @@ function App() {
                 </button>
               );
             })}
+            <div className="ml-auto">
+              <button
+                onClick={() => setShowRules(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-primary transition-colors whitespace-nowrap"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Règles fiscales</span>
+              </button>
+            </div>
           </nav>
         </div>
       </div>
@@ -354,6 +365,9 @@ function App() {
           </React.Suspense>
         </div>
       </main>
+
+      {/* Tax rules panel */}
+      {showRules && <TaxRulesPanel onClose={() => setShowRules(false)} />}
 
       {/* Footer */}
       <footer className="border-t bg-white mt-12">

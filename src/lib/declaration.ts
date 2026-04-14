@@ -20,7 +20,7 @@ export function generateDeclaration(
   const case1TT = acquisitionGainTax.above300k;
 
   const option2OP = taxMode === 'bareme';
-  const case3SG = 0; // holding abatement (computed separately if applicable)
+  const case3SG = capitalGainTax.holdingAbatement;
 
   const deductibleCSGNextYear =
     acquisitionGainTax.deductibleCSG + capitalGainTax.deductibleCSG;
