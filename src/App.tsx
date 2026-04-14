@@ -30,7 +30,6 @@ function LazyFallback() {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  fiscalYear: new Date().getFullYear() - 1,
   familyStatus: 'single',
   numberOfChildren: 0,
   taxShares: 1,
@@ -118,6 +117,12 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+/** Extract distinct sale years from sold lots. */
+function getSaleYears(soldLots: SoldLot[]): number[] {
+  const years = [...new Set(soldLots.map((sl) => sl.saleDate.getFullYear()))].sort((a, b) => b - a);
+  return years;
+}
+
 function App() {
   const [activeTab, setActiveTab] = React.useState<Tab>(() => {
     const saved = loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
@@ -125,6 +130,7 @@ function App() {
   });
   const [lots, setLots] = React.useState<StockLot[]>([]);
   const [soldLots, setSoldLots] = React.useState<SoldLot[]>([]);
+  const [saleYear, setSaleYear] = React.useState<number | null>(null);
   const [saleEntries, setSaleEntries] = React.useState<SaleLotEntry[]>([]);
   const [taxMode, setTaxMode] = React.useState<TaxMode>('pfu');
   const [result, setResult] = React.useState<TaxSimulationResult | null>(null);
@@ -140,6 +146,9 @@ function App() {
       return [];
     }
   });
+
+  // Fiscal year: from sold lots year filter, or current year for portfolio simulations
+  const fiscalYear = saleYear ?? new Date().getFullYear();
 
   const handleImport = React.useCallback((importedLots: StockLot[]) => {
     try {
@@ -172,8 +181,14 @@ function App() {
     // Clear positions data — positions and sales are mutually exclusive workflows
     setLots([]);
 
-    // Auto-run simulation from sold lots
-    const entries = soldLotsToSaleEntries(withPlanType);
+    // Default to the most recent sale year (likely N-1 for declaration)
+    const years = getSaleYears(withPlanType);
+    const defaultYear = years[0] ?? new Date().getFullYear();
+    setSaleYear(defaultYear);
+
+    // Filter to selected year and auto-run simulation
+    const yearLots = withPlanType.filter((sl) => sl.saleDate.getFullYear() === defaultYear);
+    const entries = soldLotsToSaleEntries(yearLots);
     setSaleEntries(entries);
     const simulation = {
       lots: entries,
@@ -182,7 +197,7 @@ function App() {
       taxShares: settings.taxShares,
       familyStatus: settings.familyStatus,
       priorLosses: settings.priorLosses,
-      fiscalYear: settings.fiscalYear,
+      fiscalYear: defaultYear,
     };
     const res = runSimulation(simulation);
     setResult(res);
@@ -191,8 +206,11 @@ function App() {
 
   const handleSoldLotsChange = React.useCallback((updatedSoldLots: SoldLot[]) => {
     setSoldLots(updatedSoldLots);
-    // Re-run simulation with updated origin/planType
-    const entries = soldLotsToSaleEntries(updatedSoldLots);
+    // Re-run simulation with year-filtered lots
+    const yearLots = saleYear != null
+      ? updatedSoldLots.filter((sl) => sl.saleDate.getFullYear() === saleYear)
+      : updatedSoldLots;
+    const entries = soldLotsToSaleEntries(yearLots);
     setSaleEntries(entries);
     const simulation = {
       lots: entries,
@@ -201,10 +219,27 @@ function App() {
       taxShares: settings.taxShares,
       familyStatus: settings.familyStatus,
       priorLosses: settings.priorLosses,
-      fiscalYear: settings.fiscalYear,
+      fiscalYear,
     };
     setResult(runSimulation(simulation));
-  }, [settings, taxMode]);
+  }, [settings, taxMode, fiscalYear, saleYear]);
+
+  const handleSaleYearChange = React.useCallback((year: number) => {
+    setSaleYear(year);
+    const yearLots = soldLots.filter((sl) => sl.saleDate.getFullYear() === year);
+    const entries = soldLotsToSaleEntries(yearLots);
+    setSaleEntries(entries);
+    const simulation = {
+      lots: entries,
+      taxMode,
+      otherTaxableIncome: settings.otherTaxableIncome,
+      taxShares: settings.taxShares,
+      familyStatus: settings.familyStatus,
+      priorLosses: settings.priorLosses,
+      fiscalYear: year,
+    };
+    setResult(runSimulation(simulation));
+  }, [soldLots, settings, taxMode]);
 
   const handleSimulate = React.useCallback((entries: SaleLotEntry[]) => {
     setSaleEntries(entries);
@@ -215,7 +250,7 @@ function App() {
       taxShares: settings.taxShares,
       familyStatus: settings.familyStatus,
       priorLosses: settings.priorLosses,
-      fiscalYear: settings.fiscalYear,
+      fiscalYear: new Date().getFullYear(),
     };
     const res = runSimulation(simulation);
     setResult(res);
@@ -245,11 +280,11 @@ function App() {
         taxShares: settings.taxShares,
         familyStatus: settings.familyStatus,
         priorLosses: settings.priorLosses,
-        fiscalYear: settings.fiscalYear,
+        fiscalYear,
       };
       setResult(runSimulation(simulation));
     }
-  }, [saleEntries, settings]);
+  }, [saleEntries, settings, fiscalYear]);
 
   const settingsDone = isSettingsConfigured(settings, DEFAULT_SETTINGS);
   const portfolioDone = lots.length > 0 || soldLots.length > 0;
@@ -277,7 +312,7 @@ function App() {
               </p>
             </div>
             <span className="text-xs text-gray-400">
-              Année fiscale {settings.fiscalYear}
+              Données fiscales à jour du {new Date().toLocaleDateString('fr-FR')}
             </span>
           </div>
         </div>
@@ -362,7 +397,13 @@ function App() {
             )}
             <CsvImporter onImport={handleImport} onImportSales={handleImportSales} />
             {soldLots.length > 0 && (
-              <SoldLotsTable soldLots={soldLots} onSoldLotsChange={handleSoldLotsChange} defaultPlanType={settings.defaultPlanType} />
+              <SoldLotsTable
+                soldLots={soldLots}
+                onSoldLotsChange={handleSoldLotsChange}
+                defaultPlanType={settings.defaultPlanType}
+                saleYear={saleYear}
+                onSaleYearChange={handleSaleYearChange}
+              />
             )}
             {lots.length > 0 && (
               <React.Suspense fallback={<LazyFallback />}>
@@ -394,10 +435,10 @@ function App() {
                 {lots.length > 0 && (
                   <SaleSimulator lots={lots} settings={settings} onSimulate={handleSimulate} />
                 )}
-                <TaxCalculator result={result} taxMode={taxMode} onTaxModeChange={handleTaxModeChange} fiscalYear={settings.fiscalYear} />
+                <TaxCalculator result={result} taxMode={taxMode} onTaxModeChange={handleTaxModeChange} fiscalYear={fiscalYear} />
                 {saleEntries.length > 0 && (
                   <>
-                    <PfuVsBaremeComparator lots={saleEntries} settings={settings} />
+                    <PfuVsBaremeComparator lots={saleEntries} settings={settings} fiscalYear={fiscalYear} />
                   </>
                 )}
               </>
@@ -407,7 +448,7 @@ function App() {
 
         <div hidden={activeTab !== 'declaration'}>
           {result ? (
-            <DeclarationGuide result={result} lots={saleEntries} fiscalYear={settings.fiscalYear} />
+            <DeclarationGuide result={result} lots={saleEntries} fiscalYear={fiscalYear} />
           ) : (
             <div className="text-center py-16">
               <Calculator className="h-12 w-12 mx-auto mb-4 text-gray-300" />

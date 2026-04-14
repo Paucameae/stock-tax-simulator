@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Select } from './ui/select';
-import { ShoppingCart, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
 import type { SoldLot, StockOrigin, PlanType } from '../lib/types';
 import { formatEUR, formatUSD, formatDate } from '../lib/utils';
 
@@ -9,14 +9,26 @@ interface SoldLotsTableProps {
   soldLots: SoldLot[];
   onSoldLotsChange: (lots: SoldLot[]) => void;
   defaultPlanType: string;
+  saleYear: number | null;
+  onSaleYearChange: (year: number) => void;
 }
 
-export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType }: SoldLotsTableProps) {
-  const totalProceeds = soldLots.reduce((sum, l) => sum + l.proceeds, 0);
-  const totalCostBasis = soldLots.reduce((sum, l) => sum + l.costBasis, 0);
-  const totalGainLoss = soldLots.reduce((sum, l) => sum + l.gainLoss, 0);
-  const totalQuantity = soldLots.reduce((sum, l) => sum + l.quantity, 0);
-  const hasUsd = soldLots.some((l) => l.importCurrency === 'USD');
+export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, saleYear, onSaleYearChange }: SoldLotsTableProps) {
+  // Compute available years
+  const saleYears = [...new Set(soldLots.map((l) => l.saleDate.getFullYear()))].sort((a, b) => b - a);
+  const hasMultipleYears = saleYears.length > 1;
+
+  // Filter lots by selected year
+  const filteredLots = saleYear != null
+    ? soldLots.filter((l) => l.saleDate.getFullYear() === saleYear)
+    : soldLots;
+  const hiddenCount = soldLots.length - filteredLots.length;
+
+  const totalProceeds = filteredLots.reduce((sum, l) => sum + l.proceeds, 0);
+  const totalCostBasis = filteredLots.reduce((sum, l) => sum + l.costBasis, 0);
+  const totalGainLoss = filteredLots.reduce((sum, l) => sum + l.gainLoss, 0);
+  const totalQuantity = filteredLots.reduce((sum, l) => sum + l.quantity, 0);
+  const hasUsd = filteredLots.some((l) => l.importCurrency === 'USD');
 
   const handleOriginChange = (lotId: string, origin: StockOrigin) => {
     const planMap: Record<StockOrigin, PlanType> = {
@@ -43,7 +55,23 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType }: S
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ShoppingCart className="h-5 w-5" />
-          Ventes effectuées ({soldLots.length} lot{soldLots.length > 1 ? 's' : ''})
+          Ventes effectuées ({filteredLots.length} lot{filteredLots.length > 1 ? 's' : ''})
+          {hasMultipleYears && (
+            <span className="ml-auto flex items-center gap-2 text-sm font-normal">
+              <Calendar className="h-4 w-4 text-gray-400" />
+              <Select
+                value={String(saleYear ?? '')}
+                onChange={(e) => onSaleYearChange(Number(e.target.value))}
+              >
+                {saleYears.map((y) => (
+                  <option key={y} value={y}>Cessions {y}</option>
+                ))}
+              </Select>
+            </span>
+          )}
+          {!hasMultipleYears && saleYear != null && (
+            <Badge variant="outline" className="ml-auto font-normal">Cessions {saleYear}</Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -88,7 +116,7 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType }: S
               </tr>
             </thead>
             <tbody>
-              {soldLots.map((lot) => (
+              {filteredLots.map((lot) => (
                 <tr key={lot.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2 pr-3">{formatDate(lot.acquisitionDate)}</td>
                   <td className="py-2 pr-3">{formatDate(lot.saleDate)}</td>
@@ -140,6 +168,12 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType }: S
             </tbody>
           </table>
         </div>
+
+        {hiddenCount > 0 && (
+          <p className="mt-3 text-xs text-gray-500">
+            {hiddenCount} cession{hiddenCount > 1 ? 's' : ''} d'autres années masquée{hiddenCount > 1 ? 's' : ''}
+          </p>
+        )}
 
         {hasUsd && (
           <p className="mt-3 text-xs text-gray-500">

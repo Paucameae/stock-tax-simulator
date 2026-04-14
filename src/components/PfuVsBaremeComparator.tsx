@@ -10,9 +10,10 @@ import { formatEUR, formatPercent } from '../lib/utils';
 interface PfuVsBaremeComparatorProps {
   lots: SaleLotEntry[];
   settings: AppSettings;
+  fiscalYear: number;
 }
 
-export const PfuVsBaremeComparator = React.memo(function PfuVsBaremeComparator({ lots, settings }: PfuVsBaremeComparatorProps) {
+export const PfuVsBaremeComparator = React.memo(function PfuVsBaremeComparator({ lots, settings, fiscalYear }: PfuVsBaremeComparatorProps) {
   if (lots.length === 0) {
     return (
       <Card>
@@ -31,7 +32,7 @@ export const PfuVsBaremeComparator = React.memo(function PfuVsBaremeComparator({
       taxShares: settings.taxShares,
       familyStatus: settings.familyStatus,
       priorLosses: settings.priorLosses,
-      fiscalYear: settings.fiscalYear,
+      fiscalYear,
     };
 
     const pfu = runSimulation({ ...baseSim, taxMode: 'pfu' });
@@ -45,7 +46,7 @@ export const PfuVsBaremeComparator = React.memo(function PfuVsBaremeComparator({
       savings: Math.abs(pfu.totalTax - bareme.totalTax),
       recommended: isPfuBetter ? 'PFU' : 'Barème progressif',
     };
-  }, [lots, settings]);
+  }, [lots, settings, fiscalYear]);
 
   return (
     <Card>
@@ -58,7 +59,7 @@ export const PfuVsBaremeComparator = React.memo(function PfuVsBaremeComparator({
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <ComparisonColumn
-            title={`PFU (${(getTaxConfig(settings.fiscalYear).pfuTotalRate * 100).toFixed(1).replace('.', ',')}%)`}
+            title={`PFU (${(getTaxConfig(fiscalYear).pfuTotalRate * 100).toFixed(1).replace('.', ',')}%)`}
             result={pfuResult}
             isRecommended={pfuBetter}
           />

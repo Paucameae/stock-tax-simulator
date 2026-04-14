@@ -74,7 +74,6 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
     }
     if (parsedNotice.numberOfChildren !== undefined) patch.numberOfChildren = parsedNotice.numberOfChildren;
     if (parsedNotice.revenuImposable) patch.otherTaxableIncome = parsedNotice.revenuImposable;
-    if (parsedNotice.fiscalYear) patch.fiscalYear = parsedNotice.fiscalYear;
     update(patch);
     setParsedNotice(null);
   };
@@ -153,12 +152,6 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
                   <span className="font-medium text-blue-800 text-sm">Données extraites de l'avis</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  {parsedNotice.fiscalYear && (
-                    <div>
-                      <span className="text-gray-500">Année fiscale :</span>{' '}
-                      <strong>{parsedNotice.fiscalYear}</strong>
-                    </div>
-                  )}
                   {parsedNotice.familyStatus && (
                     <div>
                       <span className="text-gray-500">Situation :</span>{' '}
@@ -225,23 +218,8 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Row 1: Fiscal year + Family status */}
+          {/* Row 1: Family status */}
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Année fiscale</label>
-              <Input
-                type="number"
-                value={local.fiscalYear}
-                min="2015"
-                max="2030"
-                onChange={(e) => {
-                  const v = parseInt(e.target.value);
-                  if (v && v >= 2015 && v <= 2030) update({ fiscalYear: v });
-                }}
-                className="w-32"
-              />
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Situation familiale</label>
               <Select

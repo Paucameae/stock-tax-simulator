@@ -4,7 +4,7 @@ import type { AppSettings, FamilyStatus } from './types';
  * Current version of the localStorage data schema.
  * Increment this when breaking changes are made to the persisted data structures.
  */
-const CURRENT_VERSION = 1;
+const CURRENT_VERSION = 2;
 
 interface VersionedData<T> {
   version: number;
@@ -23,7 +23,6 @@ export function validateSettings(raw: unknown, defaults: AppSettings): AppSettin
   const obj = raw as Record<string, unknown>;
 
   return {
-    fiscalYear: isValidYear(obj.fiscalYear) ? obj.fiscalYear as number : defaults.fiscalYear,
     familyStatus: VALID_FAMILY_STATUSES.includes(obj.familyStatus as FamilyStatus)
       ? obj.familyStatus as FamilyStatus
       : defaults.familyStatus,
@@ -77,12 +76,7 @@ export function saveVersionedSettings(key: string, settings: AppSettings): boole
  * Migrate data from any version to current.
  */
 function migrateSettings(data: unknown, fromVersion: number, defaults: AppSettings): AppSettings {
-  // Version 0 → 1: validate and wrap (no structural changes, just add validation)
-  if (fromVersion <= 0) {
-    return validateSettings(data, defaults);
-  }
-
-  // Already at current version
+  // All versions: validate, strip removed fields (e.g. fiscalYear from v1)
   return validateSettings(data, defaults);
 }
 

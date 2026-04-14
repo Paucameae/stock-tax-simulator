@@ -4,7 +4,6 @@ import { validateSettings, loadVersionedSettings, saveVersionedSettings } from '
 import type { AppSettings } from '../types';
 
 const DEFAULTS: AppSettings = {
-  fiscalYear: 2025,
   familyStatus: 'single',
   numberOfChildren: 0,
   taxShares: 1,
@@ -27,7 +26,6 @@ describe('validateSettings', () => {
   it('preserves valid settings', () => {
     const valid: AppSettings = {
       ...DEFAULTS,
-      fiscalYear: 2024,
       familyStatus: 'couple',
       numberOfChildren: 2,
       taxShares: 3,
@@ -35,12 +33,6 @@ describe('validateSettings', () => {
       priorLosses: 5000,
     };
     expect(validateSettings(valid, DEFAULTS)).toEqual(valid);
-  });
-
-  it('falls back to default for invalid fiscalYear', () => {
-    expect(validateSettings({ ...DEFAULTS, fiscalYear: 1900 }, DEFAULTS).fiscalYear).toBe(DEFAULTS.fiscalYear);
-    expect(validateSettings({ ...DEFAULTS, fiscalYear: 'abc' }, DEFAULTS).fiscalYear).toBe(DEFAULTS.fiscalYear);
-    expect(validateSettings({ ...DEFAULTS, fiscalYear: NaN }, DEFAULTS).fiscalYear).toBe(DEFAULTS.fiscalYear);
   });
 
   it('falls back for invalid familyStatus', () => {
@@ -71,15 +63,15 @@ describe('loadVersionedSettings / saveVersionedSettings', () => {
   });
 
   it('loads legacy unversioned data and validates it', () => {
-    localStorage.setItem('appSettings', JSON.stringify({ ...DEFAULTS, fiscalYear: 2024 }));
+    localStorage.setItem('appSettings', JSON.stringify({ ...DEFAULTS, familyStatus: 'couple' }));
     const result = loadVersionedSettings('appSettings', DEFAULTS);
-    expect(result.fiscalYear).toBe(2024);
+    expect(result.familyStatus).toBe('couple');
   });
 
   it('loads versioned data', () => {
-    saveVersionedSettings('appSettings', { ...DEFAULTS, fiscalYear: 2024 });
+    saveVersionedSettings('appSettings', { ...DEFAULTS, familyStatus: 'couple' });
     const result = loadVersionedSettings('appSettings', DEFAULTS);
-    expect(result.fiscalYear).toBe(2024);
+    expect(result.familyStatus).toBe('couple');
   });
 
   it('handles corrupted JSON gracefully', () => {

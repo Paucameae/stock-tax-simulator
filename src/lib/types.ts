@@ -110,7 +110,6 @@ export interface TaxSimulationResult {
 }
 
 export interface AppSettings {
-  fiscalYear: number;
   familyStatus: FamilyStatus;
   numberOfChildren: number;
   taxShares: number;

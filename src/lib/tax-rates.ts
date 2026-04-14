@@ -59,15 +59,16 @@ const TAX_CONFIG_2025: TaxConfig = {
     { limit: Infinity, rate: 0.45 },
   ],
   qfCapPerHalfShare: 1791,
-};
-
-const TAX_CONFIG_2026: TaxConfig = {
-  ...TAX_CONFIG_2025,
-  // Updated 01/01/2026: CSG +1.4 points
+  // PS patrimoine are levied at the rate in force at collection time (2026),
+  // so 2025 income is subject to the post-CSG-increase rates.
   psPatrimoine: 0.186,   // CSG 10.6% + CRDS 0.5% + prélèvement solidarité 7.5%
   psActivite: 0.111,     // CSG 10.6% + CRDS 0.5%
   csgDeductible: 0.082,  // CSG déductible 8.2%
   pfuTotalRate: 0.314,   // 12.8% IR + 18.6% PS
+};
+
+const TAX_CONFIG_2026: TaxConfig = {
+  ...TAX_CONFIG_2025,
 };
 
 const TAX_CONFIGS: Record<number, TaxConfig> = {

@@ -12,7 +12,6 @@ vi.mock('pdfjs-dist', () => ({
 const { Settings } = await import('../Settings');
 
 const DEFAULT_SETTINGS = {
-  fiscalYear: 2025,
   familyStatus: 'single' as const,
   numberOfChildren: 0,
   taxShares: 1,
@@ -23,11 +22,6 @@ const DEFAULT_SETTINGS = {
 };
 
 describe('Settings component', () => {
-  it('renders fiscal year input', () => {
-    render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
-    expect(screen.getByDisplayValue('2025')).toBeInTheDocument();
-  });
-
   it('renders family status select', () => {
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
     expect(screen.getByText('Célibataire')).toBeInTheDocument();
@@ -59,8 +53,10 @@ describe('Settings component', () => {
     expect(screen.getByText('Enregistré !')).toBeInTheDocument();
   });
 
-  it('renders PDF upload button', () => {
+  it('renders PDF upload button after expanding section', () => {
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
+    // Expand the collapsible PDF section
+    fireEvent.click(screen.getByText(/Importer un avis d'imposition/));
     expect(screen.getByText('Choisir un PDF')).toBeInTheDocument();
   });
 });
