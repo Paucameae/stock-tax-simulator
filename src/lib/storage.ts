@@ -66,12 +66,12 @@ export function loadVersionedSettings(key: string, defaults: AppSettings): AppSe
 /**
  * Save settings with version metadata.
  */
-export function saveVersionedSettings(key: string, settings: AppSettings): void {
+export function saveVersionedSettings(key: string, settings: AppSettings): boolean {
   const versioned: VersionedData<AppSettings> = {
     version: CURRENT_VERSION,
     data: settings,
   };
-  localStorage.setItem(key, JSON.stringify(versioned));
+  return safeSetItem(key, JSON.stringify(versioned));
 }
 
 /**
@@ -103,4 +103,20 @@ function isNonNegativeNumber(val: unknown): val is number {
 
 function isPositiveNumber(val: unknown): val is number {
   return typeof val === 'number' && Number.isFinite(val) && val > 0;
+}
+
+/**
+ * Safely write to localStorage, catching QuotaExceededError.
+ * Returns true on success, false on failure.
+ */
+export function safeSetItem(key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+      console.warn('localStorage quota exceeded for key:', key);
+    }
+    return false;
+  }
 }

@@ -173,10 +173,24 @@ export function parseTaxNotice(text: string): TaxNoticeData {
   return result;
 }
 
+const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10 MB
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2D]; // %PDF-
+
 /**
  * Read a PDF file and parse it as a French tax notice.
+ * Validates file size and PDF magic bytes before processing.
  */
 export async function parseTaxNoticePdf(file: File): Promise<TaxNoticeData> {
+  if (file.size > MAX_PDF_SIZE) {
+    throw new Error(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum : 10 Mo.`);
+  }
+
+  // Check PDF magic bytes (%PDF-)
+  const header = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+  if (PDF_MAGIC.some((b, i) => header[i] !== b)) {
+    throw new Error('Ce fichier ne semble pas être un PDF valide.');
+  }
+
   const text = await extractTextFromPdf(file);
   return parseTaxNotice(text);
 }

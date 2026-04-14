@@ -6,7 +6,7 @@ import { TaxCalculator } from './components/TaxCalculator';
 import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
 import { runSimulation } from './lib/tax-engine';
-import { loadVersionedSettings } from './lib/storage';
+import { loadVersionedSettings, safeSetItem } from './lib/storage';
 import type { StockLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation } from './lib/types';
 import { generateId } from './lib/utils';
 
@@ -154,7 +154,7 @@ function App() {
     };
     const updatedSimulations = [saved, ...savedSimulations].slice(0, 20);
     setSavedSimulations(updatedSimulations);
-    localStorage.setItem('savedSimulations', JSON.stringify(updatedSimulations));
+    safeSetItem('savedSimulations', JSON.stringify(updatedSimulations));
 
     setActiveTab('simulator');
   }, [taxMode, settings, savedSimulations]);

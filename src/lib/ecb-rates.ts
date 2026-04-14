@@ -1,6 +1,8 @@
 // Fetch historical EUR/USD exchange rates from the ECB Statistical Data Warehouse
 // API: https://data-api.ecb.europa.eu/
 
+import { safeSetItem } from './storage';
+
 const ECB_API_BASE = 'https://data-api.ecb.europa.eu/service/data/EXR';
 const RATE_CACHE_KEY = 'ecbRateCache';
 
@@ -15,7 +17,7 @@ function loadCache(): RateCache {
 }
 
 function saveCache(cache: RateCache): void {
-  localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(cache));
+  safeSetItem(RATE_CACHE_KEY, JSON.stringify(cache));
 }
 
 export function formatDateKey(date: Date): string {

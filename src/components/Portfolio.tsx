@@ -8,6 +8,7 @@ import { BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import type { StockLot, StockOrigin } from '../lib/types';
 import { formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
+import { safeSetItem } from '../lib/storage';
 
 interface PortfolioProps {
   lots: StockLot[];
@@ -56,7 +57,7 @@ export function Portfolio({ lots, onLotsChange }: PortfolioProps) {
         // Persist in localStorage
         const overrides = JSON.parse(localStorage.getItem('planTypeOverrides') || '{}');
         overrides[lotId] = planType;
-        localStorage.setItem('planTypeOverrides', JSON.stringify(overrides));
+        safeSetItem('planTypeOverrides', JSON.stringify(overrides));
         return newLot;
       }
       return l;

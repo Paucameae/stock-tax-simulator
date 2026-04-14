@@ -20,6 +20,8 @@ export function Alert({ className, variant = 'default', children, ...props }: Al
 
   return (
     <div
+      role="alert"
+      aria-live="polite"
       className={cn('flex gap-2 rounded-md border p-3 text-sm', variants[variant], className)}
       {...props}
     >
