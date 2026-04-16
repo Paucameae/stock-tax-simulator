@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Alert } from './ui/alert';
 import { Badge } from './ui/badge';
-import { Calculator, ShoppingCart, Filter, TrendingUp } from 'lucide-react';
+import { Calculator, ShoppingCart, Filter } from 'lucide-react';
 import type { StockLot, SaleLotEntry, AppSettings, StockOrigin } from '../lib/types';
 import { formatEUR, formatUSD, formatDate, originLabel } from '../lib/utils';
 import { useMsftPrice } from '../hooks/useMsftPrice';
@@ -24,6 +24,10 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
   const {
     usdPrice: livePriceUsd,
     eurPrice: livePriceEur,
+    change,
+    changeEur,
+    changePercent,
+    marketTimestamp,
     lastUpdated,
     error: priceError,
     loading: fetchingPrice,
@@ -153,57 +157,7 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
   });
 
   return (
-    <div className="space-y-6">
-      {/* Sale price */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5" />
-            Prix de vente
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {fetchingPrice && (
-            <p className="text-sm text-gray-500 mb-3">Chargement du cours MSFT…</p>
-          )}
-          {livePriceUsd !== null && livePriceEur !== null && (
-            <div className="flex items-center gap-3 flex-wrap mb-3 p-2.5 bg-green-50 rounded-md border border-green-200">
-              <TrendingUp className="h-4 w-4 text-green-600 shrink-0" />
-              <span className="text-sm text-green-800">
-                Cours MSFT : {formatUSD(livePriceUsd)} → <strong>{formatEUR(livePriceEur)}</strong>
-              </span>
-              {lastUpdated && (
-                <span className="text-xs text-green-600">
-                  (mis à jour à {lastUpdated.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})
-                </span>
-              )}
-            </div>
-          )}
-          {priceError && (
-            <p className="mb-3 text-xs text-amber-700 bg-amber-50 p-2 rounded">
-              {priceError}
-            </p>
-          )}
-          <div className="flex items-end gap-3 flex-wrap">
-            <div>
-              <label className="text-sm text-gray-600 block mb-1">Prix de vente unitaire (€)</label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={priceInput}
-                onChange={(e) => setPriceInput(e.target.value)}
-                placeholder="Ex: 420.00"
-                className="w-40"
-              />
-            </div>
-            <Button variant="outline" size="sm" onClick={applyDefaultPrice} disabled={defaultPrice <= 0}>
-              Appliquer à tous
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div className="space-y-6 pb-20">
       {hasNonQualifiedDO && (
         <Alert variant="warning">
           <strong>Lots non qualifiés sélectionnés :</strong> Le gain d'acquisition est déjà inclus dans votre salaire imposable (case 1AJ). Vérifiez votre bulletin de paie.
@@ -212,15 +166,18 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
 
       {hasInvalidPrice && (
         <Alert variant="destructive">
-          Renseignez un prix de vente pour tous les lots sélectionnés, ou cliquez <strong>Utiliser ce cours</strong> puis <strong>Appliquer à tous</strong>.
+          Renseignez un prix de vente pour tous les lots sélectionnés, ou cliquez <strong>Appliquer à tous</strong>.
         </Alert>
       )}
 
-      {/* Lot selection table */}
+      {/* Lot selection table (with price section merged into header) */}
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <CardTitle>Sélectionner les lots à vendre</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              Sélectionner les lots à vendre
+            </CardTitle>
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-gray-400" />
               <div className="flex gap-1">
@@ -248,6 +205,68 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Inline price bar */}
+          <div className="flex items-center justify-between gap-4 flex-wrap p-3 bg-gray-50 rounded-lg border border-gray-200">
+            {/* Live quote */}
+            <div className="min-w-0">
+              {fetchingPrice && (
+                <span className="text-sm text-gray-400">Chargement du cours…</span>
+              )}
+              {livePriceEur !== null && livePriceUsd !== null && (
+                <div className="flex items-center gap-3">
+                  {/* EUR price — hero */}
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                    </span>
+                    <span className="text-2xl font-bold text-gray-900 tabular-nums">{formatEUR(livePriceEur)}</span>
+                  </div>
+                  {/* Variation badge */}
+                  {changeEur !== null && changePercent !== null && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      changePercent >= 0
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {changePercent >= 0 ? '▲' : '▼'} {changePercent >= 0 ? '+' : ''}{formatEUR(changeEur)} ({changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)} %)
+                    </span>
+                  )}
+                  {/* Secondary line: USD + market status */}
+                  <div className="flex items-center gap-2 text-xs text-gray-400">
+                    <span className="tabular-nums">{formatUSD(livePriceUsd)}</span>
+                    {marketTimestamp && (
+                      <>
+                        <span>·</span>
+                        <span>Clôture {marketTimestamp.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} {marketTimestamp.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              {priceError && (
+                <span className="text-xs text-amber-700">{priceError}</span>
+              )}
+            </div>
+
+            {/* Price input + apply */}
+            <div className="flex items-center gap-2 shrink-0">
+              <label className="text-xs text-gray-500 whitespace-nowrap">Prix unitaire €</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+                placeholder="Ex: 420.00"
+                className="w-32 h-8 text-sm"
+              />
+              <Button variant="outline" size="sm" onClick={applyDefaultPrice} disabled={defaultPrice <= 0}>
+                Appliquer à tous
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -310,7 +329,7 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
                       <td className="p-3 text-right">{formatEUR(lot.costBasisPerShare)}</td>
                       <td className="p-3 text-right">
                         {isSelected ? (
-                          <div>
+                          <div className="ml-auto w-fit flex items-center gap-1">
                             <Input
                               type="number"
                               step="0.0001"
@@ -320,12 +339,20 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
                               onChange={(e) => updateQuantity(lot.id, parseFloat(e.target.value) || 0)}
                               className={`w-24 text-right h-8 text-sm ${sel.quantity > lot.quantity ? 'border-red-400' : ''}`}
                             />
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(lot.id, lot.quantity)}
+                              className="px-1.5 py-0.5 text-[10px] font-medium text-primary border border-primary/30 rounded hover:bg-primary/10 transition-colors shrink-0"
+                              title={`Quantité max : ${lot.quantity}`}
+                            >
+                              Max
+                            </button>
                             {sel.quantity > lot.quantity && (
-                              <span className="text-xs text-red-500 block mt-0.5">Max: {lot.quantity}</span>
+                              <span className="text-xs text-red-500 whitespace-nowrap">Max: {lot.quantity}</span>
                             )}
                           </div>
                         ) : (
-                          '—'
+                          <span className="text-gray-300">—</span>
                         )}
                       </td>
                       <td className="p-3 text-right">
@@ -336,14 +363,16 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
                             min="0"
                             value={sel.price}
                             onChange={(e) => updatePrice(lot.id, parseFloat(e.target.value) || 0)}
-                            className={`w-28 text-right h-8 text-sm ${sel.price <= 0 ? 'border-red-400' : ''}`}
+                            className={`w-28 text-right h-8 text-sm ml-auto ${sel.price <= 0 ? 'border-red-400' : ''}`}
                           />
                         ) : (
-                          '—'
+                          <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className={`p-3 text-right font-medium ${estimatedGain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {isSelected && sel.price > 0 ? (estimatedGain >= 0 ? '+' : '') + formatEUR(estimatedGain) : '—'}
+                      <td className="p-3 text-right font-medium">
+                        {isSelected && sel.price > 0
+                          ? <span className={estimatedGain >= 0 ? 'text-green-600' : 'text-red-600'}>{(estimatedGain >= 0 ? '+' : '') + formatEUR(estimatedGain)}</span>
+                          : <span className="text-gray-300">—</span>}
                       </td>
                     </tr>
                   );
@@ -354,31 +383,29 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
         </CardContent>
       </Card>
 
-      {/* Summary & simulate button */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex gap-6 text-sm">
-              <div>
-                <span className="text-gray-500">Lots sélectionnés : </span>
-                <strong>{selectedCount}</strong>
-              </div>
-              <div>
-                <span className="text-gray-500">Actions : </span>
-                <strong>{totalSelectedQuantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</strong>
-              </div>
-              <div>
-                <span className="text-gray-500">Produit brut estimé : </span>
-                <strong>{formatEUR(estimatedProceeds)}</strong>
-              </div>
+      {/* Sticky summary bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex gap-6 text-sm">
+            <div>
+              <span className="text-gray-500">Lots : </span>
+              <strong>{selectedCount}</strong>
             </div>
-            <Button onClick={handleSimulate} disabled={selectedCount === 0 || hasInvalidPrice} className="gap-2">
-              <Calculator className="h-4 w-4" />
-              Simuler la vente
-            </Button>
+            <div>
+              <span className="text-gray-500">Actions : </span>
+              <strong>{totalSelectedQuantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</strong>
+            </div>
+            <div>
+              <span className="text-gray-500">Produit brut : </span>
+              <strong>{formatEUR(estimatedProceeds)}</strong>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          <Button onClick={handleSimulate} disabled={selectedCount === 0 || hasInvalidPrice} className="gap-2">
+            <Calculator className="h-4 w-4" />
+            Simuler la vente
+          </Button>
+        </div>
+      </div>
     </div>
   );
 });

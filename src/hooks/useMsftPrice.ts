@@ -5,6 +5,10 @@ import { formatUSD } from '../lib/utils';
 interface MsftPriceResult {
   usdPrice: number | null;
   eurPrice: number | null;
+  change: number | null;
+  changeEur: number | null;
+  changePercent: number | null;
+  marketTimestamp: Date | null;
   lastUpdated: Date | null;
   error: string | null;
   loading: boolean;
@@ -17,6 +21,10 @@ interface MsftPriceResult {
 export function useMsftPrice(): MsftPriceResult {
   const [usdPrice, setUsdPrice] = useState<number | null>(null);
   const [eurPrice, setEurPrice] = useState<number | null>(null);
+  const [change, setChange] = useState<number | null>(null);
+  const [changeEur, setChangeEur] = useState<number | null>(null);
+  const [changePercent, setChangePercent] = useState<number | null>(null);
+  const [marketTimestamp, setMarketTimestamp] = useState<Date | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,6 +40,10 @@ export function useMsftPrice(): MsftPriceResult {
       const usd = data.c as number;
       setUsdPrice(usd);
 
+      if (typeof data.d === 'number') setChange(data.d);
+      if (typeof data.dp === 'number') setChangePercent(data.dp);
+      if (typeof data.t === 'number') setMarketTimestamp(new Date(data.t * 1000));
+
       if (data._cachedAt) {
         setLastUpdated(new Date(data._cachedAt));
       }
@@ -44,6 +56,9 @@ export function useMsftPrice(): MsftPriceResult {
       if (rate) {
         const eur = convertUsdToEur(usd, rate);
         setEurPrice(eur);
+        if (typeof data.d === 'number') {
+          setChangeEur(convertUsdToEur(data.d, rate));
+        }
       } else {
         setError(`Cours MSFT: ${formatUSD(usd)} — Taux BCE du jour indisponible, convertissez manuellement.`);
       }
@@ -59,5 +74,5 @@ export function useMsftPrice(): MsftPriceResult {
     fetchPrice();
   }, [fetchPrice]);
 
-  return { usdPrice, eurPrice, lastUpdated, error, loading };
+  return { usdPrice, eurPrice, change, changeEur, changePercent, marketTimestamp, lastUpdated, error, loading };
 }
