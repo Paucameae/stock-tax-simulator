@@ -24,11 +24,9 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
   const {
     usdPrice: livePriceUsd,
     eurPrice: livePriceEur,
-    change,
     changeEur,
     changePercent,
     marketTimestamp,
-    lastUpdated,
     error: priceError,
     loading: fetchingPrice,
   } = useMsftPrice();
