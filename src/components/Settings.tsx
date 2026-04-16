@@ -7,6 +7,7 @@ import { Alert } from './ui/alert';
 import { Settings as SettingsIcon, Save, Upload, FileCheck, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { AppSettings, FamilyStatus } from '../lib/types';
 import { parseTaxNoticePdf, type TaxNoticeData } from '../lib/tax-notice-parser';
+import { Tooltip } from './ui/tooltip';
 import { saveVersionedSettings } from '../lib/storage';
 import { formatEUR } from '../lib/utils';
 
@@ -87,48 +88,29 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
 
   const isDirty = JSON.stringify(local) !== JSON.stringify(settings);
 
-  const [pdfOpen, setPdfOpen] = React.useState(false);
-
   return (
-    <div className="space-y-6 max-w-2xl pb-20">
-      {/* Tax notice PDF upload — collapsible */}
+    <div className="space-y-6 max-w-2xl pb-6">
+      {/* PDF import — always visible */}
       <Card>
-        <CardHeader
-          className="cursor-pointer select-none"
-          onClick={() => setPdfOpen((o) => !o)}
-        >
-          <CardTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Importer un avis d'imposition
-            <span className="ml-auto text-gray-400 text-xs font-normal">{pdfOpen ? '▲ Replier' : '▼ Déplier'}</span>
-          </CardTitle>
-          {!pdfOpen && (
-            <CardDescription>
-              Uploadez votre avis d'imposition (PDF de impots.gouv.fr) pour pré-remplir automatiquement vos paramètres.
-            </CardDescription>
-          )}
-          {pdfOpen && (
-            <CardDescription>
-              Uploadez votre avis d'imposition (PDF de impots.gouv.fr) pour pré-remplir automatiquement vos paramètres.
-              Le fichier est traité localement dans votre navigateur et n'est jamais envoyé à un serveur.
-            </CardDescription>
-          )}
-        </CardHeader>
-        {pdfOpen && <CardContent>
+        <CardContent className="pt-5 pb-4">
           <div className="flex items-center gap-3">
+            <Upload className="h-5 w-5 text-gray-400 shrink-0" />
+            <p className="flex-1 text-sm text-gray-600">
+              Importez votre <strong>avis d'imposition</strong> (PDF de impots.gouv.fr) pour pré-remplir vos paramètres.
+            </p>
             <Button
               variant="outline"
               size="sm"
               onClick={() => pdfInputRef.current?.click()}
               disabled={pdfLoading}
-              className="gap-1.5"
+              className="gap-1.5 shrink-0"
             >
               {pdfLoading ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              {pdfLoading ? 'Analyse en cours…' : 'Choisir un PDF'}
+              {pdfLoading ? 'Analyse…' : 'Choisir un PDF'}
             </Button>
             <input
               ref={pdfInputRef}
@@ -137,7 +119,6 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
               className="hidden"
               onChange={handlePdfUpload}
             />
-            <span className="text-xs text-gray-400">Avis d'imposition .pdf uniquement</span>
           </div>
 
           {pdfError && (
@@ -204,7 +185,7 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
               </Alert>
             </div>
           )}
-        </CardContent>}
+        </CardContent>
       </Card>
 
       <Card>
@@ -217,88 +198,110 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
             Configurez vos paramètres pour une estimation plus précise.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          {/* Row 1: Family status */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Situation familiale</label>
-              <Select
-                value={local.familyStatus}
-                onChange={(e) => update({ familyStatus: e.target.value as FamilyStatus })}
-              >
-                <option value="single">Célibataire</option>
-                <option value="couple">Couple (marié / pacsé)</option>
-              </Select>
-            </div>
-          </div>
-
-          {/* Row 2: Children + Tax shares */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre d'enfants à charge</label>
-              <Input
-                type="number"
-                min="0"
-                max="20"
-                value={local.numberOfChildren}
-                onChange={(e) => update({ numberOfChildren: Math.max(0, parseInt(e.target.value) || 0) })}
-                className="w-32"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Parts fiscales
-                <span className="text-gray-400 font-normal ml-1 text-xs">
-                  {local.taxSharesManual ? '(manuel)' : '(auto)'}
-                </span>
-              </label>
-              <div className="flex items-center gap-2">
+        <CardContent className="space-y-6">
+          {/* Section: Foyer fiscal */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Foyer fiscal</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Situation familiale</label>
+                <Select
+                  value={local.familyStatus}
+                  onChange={(e) => update({ familyStatus: e.target.value as FamilyStatus })}
+                >
+                  <option value="single">Célibataire</option>
+                  <option value="couple">Couple (marié / pacsé)</option>
+                </Select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Enfants à charge</label>
                 <Input
                   type="number"
-                  step="0.5"
-                  min="1"
-                  max="30"
-                  value={local.taxShares}
-                  onChange={(e) => update({ taxShares: Math.max(1, parseFloat(e.target.value) || 1), taxSharesManual: true })}
-                  className="w-24"
+                  min="0"
+                  max="20"
+                  value={local.numberOfChildren}
+                  onChange={(e) => update({ numberOfChildren: Math.max(0, parseInt(e.target.value) || 0) })}
                 />
-                {local.taxSharesManual && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      update({
-                        taxSharesManual: false,
-                        taxShares: calculateTaxShares(local.familyStatus, local.numberOfChildren),
-                      })
-                    }
-                  >
-                    Recalculer
-                  </Button>
-                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Parts fiscales
+                  <span className="text-gray-400 font-normal ml-1 text-xs">
+                    {local.taxSharesManual ? '(manuel)' : '(auto)'}
+                  </span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    max="30"
+                    value={local.taxShares}
+                    onChange={(e) => update({ taxShares: Math.max(1, parseFloat(e.target.value) || 1), taxSharesManual: true })}
+                  />
+                  {local.taxSharesManual && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() =>
+                        update({
+                          taxSharesManual: false,
+                          taxShares: calculateTaxShares(local.familyStatus, local.numberOfChildren),
+                        })
+                      }
+                    >
+                      Recalculer
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Row 3: Income + Plan type */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Revenu imposable hors actions (€/an)
-              </label>
-              <Input
-                type="number"
-                step="100"
-                min="0"
-                value={local.otherTaxableIncome}
-                onChange={(e) => update({ otherTaxableIncome: Math.max(0, parseFloat(e.target.value) || 0) })}
-                className="w-full"
-                placeholder="Ex: 80000"
-              />
-            </div>
+          <hr className="border-gray-100" />
 
-            <div>
+          {/* Section: Revenus et reports */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Revenus et reports</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                  Revenu imposable hors actions (€/an)
+                  <Tooltip content="Salaires, pensions, revenus fonciers… hors plus-values mobilières. Correspond au revenu imposable de votre dernier avis d'imposition." />
+                </label>
+                <Input
+                  type="number"
+                  step="100"
+                  min="0"
+                  value={local.otherTaxableIncome}
+                  onChange={(e) => update({ otherTaxableIncome: Math.max(0, parseFloat(e.target.value) || 0) })}
+                  placeholder="Ex: 80 000"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                  Moins-values reportables (€)
+                  <Tooltip content="Montant total des moins-values nettes des 10 années précédentes, non encore imputées sur des plus-values." />
+                </label>
+                <Input
+                  type="number"
+                  step="100"
+                  min="0"
+                  value={local.priorLosses}
+                  onChange={(e) => update({ priorLosses: Math.max(0, parseFloat(e.target.value) || 0) })}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+
+          <hr className="border-gray-100" />
+
+          {/* Section: Préférences d'import */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Préférences d'import</h3>
+            <div className="max-w-xs">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Régime Stock Awards (DO)
               </label>
@@ -316,42 +319,26 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
               </p>
             </div>
           </div>
-
-          {/* Prior losses — single row */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Moins-values reportables des années antérieures (€)
-            </label>
-            <Input
-              type="number"
-              step="100"
-              min="0"
-              value={local.priorLosses}
-              onChange={(e) => update({ priorLosses: Math.max(0, parseFloat(e.target.value) || 0) })}
-              className="w-48"
-              placeholder="0"
-            />
-          </div>
         </CardContent>
-      </Card>
 
-      {/* Sticky save footer */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/95 backdrop-blur-sm shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
-        <div className="max-w-2xl mx-auto px-6 py-3 flex items-center gap-4">
-          {isDirty && (
-            <div className="flex items-center gap-2 text-sm text-amber-700">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              Modifications non enregistrées
+        {/* Save bar — inside the card, visible only when dirty or just saved */}
+        {(isDirty || saved) && (
+          <div className="border-t bg-amber-50/50 px-6 py-3 flex items-center gap-4 rounded-b-lg">
+            {isDirty && (
+              <div className="flex items-center gap-2 text-sm text-amber-700">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                Modifications non enregistrées
+              </div>
+            )}
+            <div className="ml-auto">
+              <Button onClick={handleSave} className="gap-2">
+                <Save className="h-4 w-4" />
+                {saved ? 'Enregistré !' : 'Enregistrer'}
+              </Button>
             </div>
-          )}
-          <div className="ml-auto">
-            <Button onClick={handleSave} className="gap-2">
-              <Save className="h-4 w-4" />
-              {saved ? 'Enregistré !' : isDirty ? 'Enregistrer *' : 'Enregistrer'}
-            </Button>
           </div>
-        </div>
-      </div>
+        )}
+      </Card>
     </div>
   );
 }

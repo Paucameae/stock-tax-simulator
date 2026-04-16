@@ -29,7 +29,7 @@ describe('Settings component', () => {
 
   it('shows dirty indicator when settings change', () => {
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
-    const incomeInput = screen.getByPlaceholderText('Ex: 80000');
+    const incomeInput = screen.getByPlaceholderText('Ex: 80 000');
     fireEvent.change(incomeInput, { target: { value: '50000' } });
     expect(screen.getByText(/modifications non enregistrées/i)).toBeInTheDocument();
   });
@@ -37,9 +37,9 @@ describe('Settings component', () => {
   it('calls onSettingsChange on save', () => {
     const onChange = vi.fn();
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={onChange} />);
-    const incomeInput = screen.getByPlaceholderText('Ex: 80000');
+    const incomeInput = screen.getByPlaceholderText('Ex: 80 000');
     fireEvent.change(incomeInput, { target: { value: '50000' } });
-    const saveButton = screen.getByText('Enregistrer *');
+    const saveButton = screen.getByText('Enregistrer');
     fireEvent.click(saveButton);
     expect(onChange).toHaveBeenCalledOnce();
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ otherTaxableIncome: 50000 }));
@@ -47,16 +47,14 @@ describe('Settings component', () => {
 
   it('shows "Enregistré !" after save', () => {
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
-    const incomeInput = screen.getByPlaceholderText('Ex: 80000');
+    const incomeInput = screen.getByPlaceholderText('Ex: 80 000');
     fireEvent.change(incomeInput, { target: { value: '50000' } });
-    fireEvent.click(screen.getByText('Enregistrer *'));
+    fireEvent.click(screen.getByText('Enregistrer'));
     expect(screen.getByText('Enregistré !')).toBeInTheDocument();
   });
 
-  it('renders PDF upload button after expanding section', () => {
+  it('renders PDF upload button directly (always visible)', () => {
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
-    // Expand the collapsible PDF section
-    fireEvent.click(screen.getByText(/Importer un avis d'imposition/));
     expect(screen.getByText('Choisir un PDF')).toBeInTheDocument();
   });
 });
