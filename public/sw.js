@@ -54,7 +54,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for static assets
+  // Network-first for navigation requests (HTML pages)
+  // This ensures a new deploy's index.html (with updated asset hashes) is always fetched
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  // Cache-first for hashed static assets (immutable by design)
   event.respondWith(cacheFirst(request));
 });
 
