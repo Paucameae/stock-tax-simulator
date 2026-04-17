@@ -85,7 +85,7 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
           </Section>
 
           {/* ---- Qualifiés Macron I ---- */}
-          <Section title="Stock Awards qualifiés — Régime Macron I (attribution ≥ 30/11/2016)" defaultOpen>
+          <Section title="Stock Awards qualifiés — Régime Macron I (attribution ≥ 01/01/2018)" defaultOpen>
             <p>
               Le gain d'acquisition est imposé <strong>à la cession</strong> (pas au vesting). Deux fractions :
             </p>
@@ -93,8 +93,7 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
               <p className="font-semibold text-blue-900">Fraction ≤ 300 000 €</p>
               <div className="space-y-1">
                 <Rate label="IR : barème progressif après abattement" value="0 → 45 %" />
-                <Rate label="Abattement (détention 2–8 ans depuis vesting)" value="50 %" />
-                <Rate label="Abattement (détention > 8 ans)" value="65 %" />
+                <Rate label="Abattement fixe (sans condition de durée)" value="50 %" />
                 <Rate label="PS (sur montant brut, sans abattement)" value="18,6 %" />
               </div>
             </div>
@@ -111,6 +110,9 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
             </p>
             <p className="text-xs text-gray-500">
               Déclaration : 2042-C — cases 1TZ (≤ 300k après abattement), 1WZ (abattement), 1TT (&gt; 300k).
+            </p>
+            <p className="text-xs text-gray-500">
+              Source : <a href="https://www.impots.gouv.fr/particulier/questions/mon-entreprise-ma-attribue-des-actions-gratuites-comment-sera-impose-le-gain" target="_blank" rel="noopener noreferrer" className="underline text-blue-600 hover:text-blue-800">impots.gouv.fr</a>
             </p>
           </Section>
 
