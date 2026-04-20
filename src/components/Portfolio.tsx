@@ -26,7 +26,7 @@ export function Portfolio({ lots, onLotsChange }: PortfolioProps) {
     if (filterHolding !== 'all') result = result.filter((l) => l.holdingPeriod === filterHolding);
 
     result.sort((a, b) => {
-      if (sortBy === 'date') return a.acquisitionDate.getTime() - b.acquisitionDate.getTime();
+      if (sortBy === 'date') return b.acquisitionDate.getTime() - a.acquisitionDate.getTime();
       if (sortBy === 'type') return a.origin.localeCompare(b.origin);
       return b.unrealizedGainLoss - a.unrealizedGainLoss;
     });
