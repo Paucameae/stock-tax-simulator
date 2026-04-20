@@ -20,22 +20,81 @@ function parseFidelityDate(dateStr: string): Date | undefined {
   return new Date(year, month, day);
 }
 
-function parseFidelityAmount(amountStr: string): number {
-  if (!amountStr || !amountStr.trim()) return 0;
-  const cleaned = amountStr.trim().replace(/\s/g, '');
-  if (!cleaned || isNaN(Number(cleaned))) return 0;
-  // If the value contains a decimal point, it's already in dollars
-  if (cleaned.includes('.')) {
-    return parseFloat(cleaned);
-  }
-  // Otherwise, assume integer centimes (legacy format)
-  const num = parseInt(cleaned, 10);
-  return num / 100;
-}
-
 function parseFidelityQuantity(qtyStr: string): number {
   if (!qtyStr || !qtyStr.trim()) return 0;
   return parseFloat(qtyStr.trim()) || 0;
+}
+
+/**
+ * Reassemble amount tokens that may have been split by thousand-separator commas.
+ * Expects exactly 4 amounts: totalCost, costPerShare, currentValue, gainLoss.
+ * When there are more than 4 tokens (thousand separators created extra fields),
+ * tries all valid partitions and picks the most coherent one.
+ */
+function reassembleAmounts(
+  tokens: string[],
+  quantity: number,
+): { totalCost: number; costPerShare: number; currentValue: number; gainLoss: number } | null {
+  const n = tokens.length;
+  if (n < 4) return null;
+
+  // Fast path: exactly 4 tokens → no thousand-separator ambiguity
+  if (n === 4) {
+    const amounts = tokens.map(t => parseFloat(t));
+    if (amounts.some(v => isNaN(v))) return null;
+    return { totalCost: amounts[0], costPerShare: amounts[1], currentValue: amounts[2], gainLoss: amounts[3] };
+  }
+
+  // More than 4 tokens: some commas were thousand separators.
+  // Try all ways to place 3 column-separator boundaries among the n−1 comma positions.
+  let best: { totalCost: number; costPerShare: number; currentValue: number; gainLoss: number; error: number } | null = null;
+
+  for (let s0 = 0; s0 < n - 3; s0++) {
+    for (let s1 = s0 + 1; s1 < n - 2; s1++) {
+      for (let s2 = s1 + 1; s2 < n - 1; s2++) {
+        const groups = [
+          tokens.slice(0, s0 + 1),
+          tokens.slice(s0 + 1, s1 + 1),
+          tokens.slice(s1 + 1, s2 + 1),
+          tokens.slice(s2 + 1),
+        ];
+
+        // Validate thousand-separator pattern: within each group, continuation
+        // tokens must have exactly 3 digits (last one may also have decimals).
+        let valid = true;
+        for (const g of groups) {
+          for (let i = 1; i < g.length; i++) {
+            const pattern = i === g.length - 1 ? /^\d{3}(\.\d+)?$/ : /^\d{3}$/;
+            if (!pattern.test(g[i])) { valid = false; break; }
+          }
+          if (!valid) break;
+        }
+        if (!valid) continue;
+
+        const amounts = groups.map(g => parseFloat(g.join('')));
+        if (amounts.some(v => isNaN(v))) continue;
+
+        const [totalCost, costPerShare, currentValue, gainLoss] = amounts;
+
+        // Coherence: totalCost ≈ quantity × costPerShare
+        const expectedCost = quantity * costPerShare;
+        const costErr = expectedCost > 0
+          ? Math.abs(totalCost - expectedCost) / expectedCost
+          : (totalCost > 0 ? 1 : 0);
+
+        // Coherence: gainLoss ≈ currentValue − totalCost
+        const expectedGL = currentValue - totalCost;
+        const glErr = Math.abs(gainLoss - expectedGL) / Math.max(Math.abs(expectedGL), 1);
+
+        const error = costErr + glErr;
+        if (!best || error < best.error) {
+          best = { totalCost, costPerShare, currentValue, gainLoss, error };
+        }
+      }
+    }
+  }
+
+  return best;
 }
 
 function getDefaultPlanType(origin: StockOrigin): PlanType {
@@ -75,14 +134,23 @@ export function parseCsvFile(csvText: string): StockLot[] {
     const quantity = parseFidelityQuantity(row[1]);
     if (quantity <= 0) continue;
 
-    const totalCostBasis = parseFidelityAmount(row[2]);
-    const costBasisPerShare = parseFidelityAmount(row[3]);
-    const currentValue = parseFidelityAmount(row[4]);
-    const availableForSaleDate = parseFidelityDate(row[6]);
-    const availableForTransferDate = parseFidelityDate(row[7]);
-    const grantDate = parseFidelityDate(row[8]);
-    const origin = (row[9]?.trim() || 'DO') as StockOrigin;
-    const holdingPeriod = (row[10]?.trim() || 'Short') as HoldingPeriod;
+    const n = row.length;
+    if (n < 11) continue; // minimum expected fields
+
+    // Parse fixed fields from the end of the row (unaffected by thousand-separator splits)
+    const holdingPeriod = (row[n - 1]?.trim() || 'Short') as HoldingPeriod;
+    const origin = (row[n - 2]?.trim() || 'DO') as StockOrigin;
+    const grantDate = parseFidelityDate(row[n - 3]);
+    const availableForTransferDate = parseFidelityDate(row[n - 4]);
+    const availableForSaleDate = parseFidelityDate(row[n - 5]);
+
+    // Middle section: 4 amount fields that may have been split by thousand-separator commas.
+    // Also strip any commas preserved by PapaParse inside quoted fields (e.g. "42,200").
+    const middleTokens = row.slice(2, n - 5).map(f => f.trim().replace(/,/g, ''));
+    const amounts = reassembleAmounts(middleTokens, quantity);
+    if (!amounts) continue;
+
+    const { totalCost: totalCostBasis, costPerShare: costBasisPerShare, currentValue } = amounts;
 
     id++;
 
