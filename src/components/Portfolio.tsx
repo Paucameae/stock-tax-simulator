@@ -87,7 +87,12 @@ export function Portfolio({ lots, onLotsChange }: PortfolioProps) {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-gray-500">PV/MV latente</p>
+            <p className="text-sm text-gray-500 flex items-center gap-1">
+              PV/MV latente
+              {hasUsdImport && (
+                <Tooltip content="La PV/MV en euros peut différer de celle affichée par Fidelity en dollars : le coût d'acquisition est converti au taux BCE historique de chaque date d'achat, tandis que la valeur actuelle est convertie au taux du jour." />
+              )}
+            </p>
             <p className={`text-2xl font-bold ${totalGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {totalGainLoss >= 0 ? '+' : ''}{formatEUR(totalGainLoss)}
             </p>
