@@ -1,9 +1,10 @@
 import React, { useCallback } from 'react';
-import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign } from 'lucide-react';
+import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { useEcbConversion } from '../hooks/useEcbConversion';
+import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import type { StockLot, SoldLot } from '../lib/types';
 
 type ImportMode = 'positions' | 'sales';
@@ -18,6 +19,7 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
   const [error, setError] = React.useState<string | null>(null);
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [importMode, setImportMode] = React.useState<ImportMode>('positions');
+  const [showGuide, setShowGuide] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const { convertLots, convertSoldLots, loading, error: ecbError } = useEcbConversion();
 
@@ -88,13 +90,25 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Importer le fichier CSV Fidelity
-        </CardTitle>
-        <CardDescription>
-          Glissez-déposez votre fichier d'export CSV du broker Fidelity ou cliquez pour sélectionner.
-        </CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Importer le fichier CSV Fidelity
+            </CardTitle>
+            <CardDescription>
+              Glissez-déposez votre fichier d'export CSV du broker Fidelity ou cliquez pour sélectionner.
+            </CardDescription>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowGuide(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-primary transition-colors whitespace-nowrap shrink-0"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            Comment exporter ?
+          </button>
+        </div>
       </CardHeader>
       <CardContent>
         {/* Import mode selector */}
@@ -189,6 +203,8 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
         {(error || ecbError) && (
           <p className="mt-3 text-sm text-red-600">{error || ecbError}</p>
         )}
+
+        <BrokerExportGuide open={showGuide} onClose={() => setShowGuide(false)} importMode={importMode} />
       </CardContent>
     </Card>
   );
