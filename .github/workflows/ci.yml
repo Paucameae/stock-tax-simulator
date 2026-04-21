@@ -20,8 +20,11 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # Use `npm install` instead of `npm ci` to work around the known npm
+      # lockfile issue with platform-specific optional deps (rollup/esbuild)
+      # when the lockfile is generated on Windows.
       - name: Install dependencies (front)
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Install dependencies (api)
         working-directory: api
