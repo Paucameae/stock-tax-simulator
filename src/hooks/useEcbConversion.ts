@@ -78,12 +78,14 @@ export function useEcbConversion(): EcbConversionResult {
 
       const converted = lots.map((lot) => {
         const saleDateKey = formatDateKey(lot.saleDate);
+        const acqDateKey = formatDateKey(lot.acquisitionDate);
         const saleRate = rates[saleDateKey];
+        const acqRate = rates[acqDateKey];
         if (!saleRate) {
           return { ...lot, eurUsdRate: undefined };
         }
         const proceeds = convertUsdToEur(lot.proceedsUsd || 0, saleRate);
-        const costBasis = convertUsdToEur(lot.costBasisUsd || 0, saleRate);
+        const costBasis = convertUsdToEur(lot.costBasisUsd || 0, acqRate || saleRate);
         const gainLoss = proceeds - costBasis;
         return {
           ...lot,
