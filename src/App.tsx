@@ -7,9 +7,11 @@ import { SaleSimulator } from './components/SaleSimulator';
 import { TaxCalculator } from './components/TaxCalculator';
 import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
+import { BackupPanel } from './components/BackupPanel';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
-import { loadVersionedSettings, safeSetItem } from './lib/storage';
+import { loadVersionedSettings, safeSetItem, saveVersionedSettings } from './lib/storage';
+import type { ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation } from './lib/types';
 import { generateId } from './lib/utils';
 
@@ -41,6 +43,17 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 type Tab = 'portfolio' | 'simulator' | 'declaration' | 'settings';
+const TAB_STORAGE_KEY = 'activeTab';
+const VALID_TABS: readonly Tab[] = ['portfolio', 'simulator', 'declaration', 'settings'] as const;
+
+function loadPersistedTab(): Tab | null {
+  try {
+    const saved = localStorage.getItem(TAB_STORAGE_KEY);
+    return saved && (VALID_TABS as readonly string[]).includes(saved) ? saved as Tab : null;
+  } catch {
+    return null;
+  }
+}
 
 function isSettingsConfigured(s: AppSettings, defaults: AppSettings): boolean {
   return s.otherTaxableIncome !== defaults.otherTaxableIncome
@@ -127,9 +140,16 @@ function getSaleYears(soldLots: SoldLot[]): number[] {
 
 function App() {
   const [activeTab, setActiveTab] = React.useState<Tab>(() => {
+    const persisted = loadPersistedTab();
+    if (persisted) return persisted;
     const saved = loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
     return isSettingsConfigured(saved, DEFAULT_SETTINGS) ? 'portfolio' : 'settings';
   });
+
+  // Persist active tab across reloads
+  React.useEffect(() => {
+    safeSetItem(TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
   const [lots, setLots] = React.useState<StockLot[]>([]);
   const [soldLots, setSoldLots] = React.useState<SoldLot[]>([]);
   const [saleYear, setSaleYear] = React.useState<number | null>(null);
@@ -288,6 +308,19 @@ function App() {
       setResult(runSimulation(simulation));
     }
   }, [saleEntries, settings, fiscalYear]);
+
+  const handleBackupImport = React.useCallback((imported: ImportResult) => {
+    setSettings(imported.settings);
+    saveVersionedSettings('appSettings', imported.settings);
+    setLots(imported.lots);
+    setSoldLots(imported.soldLots);
+    setSavedSimulations(imported.savedSimulations);
+    safeSetItem('savedSimulations', JSON.stringify(imported.savedSimulations));
+    // Reset derived/session state — results will be re-computed from imported data on demand
+    setSaleEntries([]);
+    setResult(null);
+    setSaleYear(null);
+  }, []);
 
   const settingsDone = isSettingsConfigured(settings, DEFAULT_SETTINGS);
   const portfolioDone = lots.length > 0 || soldLots.length > 0;
@@ -483,9 +516,18 @@ function App() {
         </div>
 
         <div hidden={activeTab !== 'settings'}>
-          <React.Suspense fallback={<LazyFallback />}>
-            <Settings settings={settings} onSettingsChange={setSettings} />
-          </React.Suspense>
+          <div className="space-y-6">
+            <React.Suspense fallback={<LazyFallback />}>
+              <Settings settings={settings} onSettingsChange={setSettings} />
+            </React.Suspense>
+            <div className="max-w-2xl">
+              <BackupPanel
+                current={{ settings, lots, soldLots, savedSimulations }}
+                defaults={DEFAULT_SETTINGS}
+                onImport={handleBackupImport}
+              />
+            </div>
+          </div>
         </div>
       </main>
 
