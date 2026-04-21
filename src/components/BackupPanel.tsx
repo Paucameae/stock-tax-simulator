@@ -2,6 +2,7 @@ import React from 'react';
 import { Download, Upload, RefreshCw, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
+import { Dialog, DialogHeader, DialogFooter } from './ui/dialog';
 import {
   exportToJsonString,
   buildBackupFilename,
@@ -21,6 +22,7 @@ const MAX_BACKUP_SIZE = 10 * 1024 * 1024; // 10 MB — generous; a typical backu
 
 export function BackupPanel({ current, defaults, onImport }: BackupPanelProps) {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [pendingImport, setPendingImport] = React.useState<ImportResult | null>(null);
   const [status, setStatus] = React.useState<
     | { kind: 'idle' }
     | { kind: 'success'; message: string }
@@ -60,18 +62,25 @@ export function BackupPanel({ current, defaults, onImport }: BackupPanelProps) {
     try {
       const text = await file.text();
       const result = importFromJsonString(text, defaults);
-      if (!window.confirm(
-        `Restaurer cette sauvegarde ? Cela remplacera vos données actuelles (${result.lots.length} position(s), ${result.soldLots.length} vente(s)).`
-      )) {
-        setStatus({ kind: 'idle' });
-        return;
-      }
-      onImport(result);
-      const warningSuffix = result.warnings.length > 0 ? ` — ${result.warnings.join(' ')}` : '';
-      setStatus({ kind: 'success', message: `Sauvegarde restaurée.${warningSuffix}` });
+      // Open the confirmation dialog; actual import is deferred to confirmImport().
+      setPendingImport(result);
+      setStatus({ kind: 'idle' });
     } catch (err) {
       setStatus({ kind: 'error', message: (err as Error).message });
     }
+  };
+
+  const confirmImport = () => {
+    if (!pendingImport) return;
+    onImport(pendingImport);
+    const warningSuffix = pendingImport.warnings.length > 0 ? ` — ${pendingImport.warnings.join(' ')}` : '';
+    setStatus({ kind: 'success', message: `Sauvegarde restaurée.${warningSuffix}` });
+    setPendingImport(null);
+  };
+
+  const cancelImport = () => {
+    setPendingImport(null);
+    setStatus({ kind: 'idle' });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,6 +161,27 @@ export function BackupPanel({ current, defaults, onImport }: BackupPanelProps) {
           </p>
         )}
       </CardContent>
+
+      {/* Confirmation dialog — replaces window.confirm() for a cleaner UX */}
+      <Dialog open={pendingImport !== null} onClose={cancelImport}>
+        <DialogHeader>
+          <p className="font-semibold text-gray-900 mb-1">Restaurer cette sauvegarde ?</p>
+          <p>
+            Vos données actuelles seront <strong>remplacées</strong> par :{' '}
+            {pendingImport?.lots.length ?? 0} position{(pendingImport?.lots.length ?? 0) > 1 ? 's' : ''},{' '}
+            {pendingImport?.soldLots.length ?? 0} vente{(pendingImport?.soldLots.length ?? 0) > 1 ? 's' : ''}.
+          </p>
+          <p className="mt-2 text-xs text-gray-500">Cette action ne peut pas être annulée.</p>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={cancelImport}>
+            Annuler
+          </Button>
+          <Button onClick={confirmImport}>
+            Remplacer mes données
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </Card>
   );
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BackupPanel } from '../BackupPanel';
 import type { AppSettings } from '../../lib/types';
 
@@ -95,7 +95,6 @@ describe('BackupPanel', () => {
 
   it('calls onImport and shows success on valid backup (confirmed)', async () => {
     const onImport = vi.fn();
-    vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
 
     render(<BackupPanel current={CURRENT} defaults={DEFAULTS} onImport={onImport} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -112,6 +111,10 @@ describe('BackupPanel', () => {
     const file = new File([valid], 'backup.json', { type: 'application/json' });
     fireEvent.change(input, { target: { files: [file] } });
 
+    // Confirm dialog appears — click "Remplacer mes données"
+    const confirmBtn = await screen.findByRole('button', { name: /Remplacer mes données/i });
+    fireEvent.click(confirmBtn);
+
     await waitFor(() => {
       expect(onImport).toHaveBeenCalledOnce();
       expect(screen.getByRole('status')).toHaveTextContent(/restaurée/i);
@@ -120,7 +123,6 @@ describe('BackupPanel', () => {
 
   it('does not call onImport when the user cancels confirmation', async () => {
     const onImport = vi.fn();
-    vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
 
     render(<BackupPanel current={CURRENT} defaults={DEFAULTS} onImport={onImport} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -136,10 +138,14 @@ describe('BackupPanel', () => {
     const file = new File([valid], 'backup.json', { type: 'application/json' });
     fireEvent.change(input, { target: { files: [file] } });
 
-    // Wait a tick for async handlers to settle
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 10));
-    });
+    // Confirm dialog appears — click "Annuler"
+    const cancelBtn = await screen.findByRole('button', { name: /^Annuler$/i });
+    fireEvent.click(cancelBtn);
+
     expect(onImport).not.toHaveBeenCalled();
+    // Dialog closes
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Remplacer mes données/i })).toBeNull();
+    });
   });
 });

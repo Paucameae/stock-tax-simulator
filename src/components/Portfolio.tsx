@@ -169,8 +169,8 @@ export function Portfolio({ lots, onLotsChange }: PortfolioProps) {
         </Select>
       </div>
 
-      {/* Table */}
-      <Card>
+      {/* Table — desktop */}
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm whitespace-nowrap">
@@ -273,6 +273,90 @@ export function Portfolio({ lots, onLotsChange }: PortfolioProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Cards — mobile (< md) */}
+      <div className="md:hidden space-y-2">
+        {filteredLots.length === 0 && (
+          <Card>
+            <CardContent className="p-4 text-center text-sm text-gray-500">
+              Aucun lot à afficher avec les filtres actuels.
+            </CardContent>
+          </Card>
+        )}
+        {filteredLots.map((lot) => {
+          const notYetAvailable = lot.availableForSaleDate && lot.availableForSaleDate > new Date();
+          return (
+            <Card key={lot.id}>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold">{formatDate(lot.acquisitionDate)}</div>
+                    <div className="text-xs text-gray-500">
+                      {lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions · {formatEUR(lot.costBasisPerShare)}/action
+                    </div>
+                  </div>
+                  <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
+                    {originLabel(lot.origin)}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-gray-500">Valeur</div>
+                    <div className="font-medium">{formatEUR(lot.currentValue)}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">PV/MV</div>
+                    <div className={`font-medium inline-flex items-center gap-1 ${lot.unrealizedGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {lot.unrealizedGainLoss >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                      {formatEUR(Math.abs(lot.unrealizedGainLoss))}
+                    </div>
+                  </div>
+                  {hasEsppLots && lot.origin === 'SP' && (
+                    <div className="col-span-2">
+                      <div className="text-gray-500">FMV acq.</div>
+                      <div className="font-medium">{formatEUR(lot.esppFmvPerShare ?? 0)}</div>
+                    </div>
+                  )}
+                  {hasUsdImport && lot.costBasisPerShareUsd && (
+                    <div className="col-span-2 text-gray-500">
+                      {formatUSD(lot.costBasisPerShareUsd)} · taux BCE {lot.eurUsdRate?.toFixed(4)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant={lot.holdingPeriod === 'Long' ? 'success' : 'outline'}>
+                      {lot.holdingPeriod === 'Long' ? '≥ 2 ans' : '< 2 ans'}
+                    </Badge>
+                    {notYetAvailable ? (
+                      <span className="text-amber-600 text-xs font-medium">
+                        ⚠️ dispo {formatDate(lot.availableForSaleDate)}
+                      </span>
+                    ) : (
+                      <span className="text-green-600 text-xs">Disponible</span>
+                    )}
+                  </div>
+                  {lot.origin === 'DO' ? (
+                    <Select
+                      value={lot.planType}
+                      onChange={(e) => handlePlanTypeChange(lot.id, e.target.value)}
+                      className="text-xs h-8 max-w-[8.5rem]"
+                      aria-label="Statut fiscal"
+                    >
+                      <option value="qualified_macron">Qualifié</option>
+                      <option value="non_qualified">Non qualifié</option>
+                    </Select>
+                  ) : (
+                    <span className="text-xs text-gray-600">{planTypeLabel(lot.planType)}</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }

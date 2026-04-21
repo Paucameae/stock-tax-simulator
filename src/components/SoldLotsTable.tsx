@@ -108,8 +108,8 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
           </Alert>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table — desktop */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">Liste des lots vendus avec quantité, produits, coût, plus/moins-value et régime fiscal</caption>
             <thead>
@@ -178,6 +178,78 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Cards — mobile (< md) */}
+        <div className="md:hidden space-y-2">
+          {filteredLots.length === 0 && (
+            <p className="text-sm text-gray-500 text-center py-4">
+              Aucune vente à afficher.
+            </p>
+          )}
+          {filteredLots.map((lot) => (
+            <div key={lot.id} className="border rounded-lg p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2 text-xs">
+                <div>
+                  <div className="text-gray-500">Acquis le</div>
+                  <div className="font-medium">{formatDate(lot.acquisitionDate)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-gray-500">Vendu le</div>
+                  <div className="font-medium">{formatDate(lot.saleDate)}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <div className="text-gray-500">Qté</div>
+                  <div className="font-medium tabular-nums">
+                    {lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}
+                  </div>
+                </div>
+                <div className={`font-medium tabular-nums ${lot.gainLoss >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  <div className="text-gray-500 font-normal">+/- value</div>
+                  {formatEUR(lot.gainLoss)}
+                </div>
+                <div>
+                  <div className="text-gray-500">Produits</div>
+                  <div className="font-medium tabular-nums">{formatEUR(lot.proceeds)}</div>
+                </div>
+                <div>
+                  <div className="text-gray-500">Coût</div>
+                  <div className="font-medium tabular-nums">{formatEUR(lot.costBasis)}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                <Select
+                  value={lot.origin}
+                  aria-label={`Origine du lot acquis le ${formatDate(lot.acquisitionDate)}`}
+                  onChange={(e) => handleOriginChange(lot.id, e.target.value as StockOrigin)}
+                  className="text-xs h-8"
+                >
+                  <option value="DO">Stock Award</option>
+                  <option value="FM">AGA Macron</option>
+                  <option value="FQ">AGA pré-Macron</option>
+                  <option value="SP">ESPP</option>
+                </Select>
+                {lot.origin === 'SP' ? (
+                  <Badge variant="outline" className="justify-center">ESPP</Badge>
+                ) : (
+                  <Select
+                    value={lot.planType}
+                    aria-label={`Régime fiscal du lot acquis le ${formatDate(lot.acquisitionDate)}`}
+                    onChange={(e) => handlePlanTypeChange(lot.id, e.target.value as PlanType)}
+                    className="text-xs h-8"
+                  >
+                    <option value="qualified_macron">Qualifié (Macron)</option>
+                    <option value="qualified_pre_macron">Qualifié (pré-Macron)</option>
+                    <option value="non_qualified">Non qualifié</option>
+                  </Select>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
 
         {hiddenCount > 0 && (
