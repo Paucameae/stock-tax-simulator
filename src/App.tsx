@@ -471,7 +471,7 @@ function App() {
                 {lots.length > 0 && (
                   <SaleSimulator lots={lots} settings={settings} onSimulate={handleSimulate} />
                 )}
-                <TaxCalculator result={result} taxMode={taxMode} onTaxModeChange={handleTaxModeChange} fiscalYear={fiscalYear} />
+                <TaxCalculator result={result} taxMode={taxMode} onTaxModeChange={handleTaxModeChange} fiscalYear={fiscalYear} familyStatus={settings.familyStatus} />
                 {saleEntries.length > 0 && (
                   <>
                     <PfuVsBaremeComparator lots={saleEntries} settings={settings} fiscalYear={fiscalYear} />

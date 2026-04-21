@@ -57,7 +57,7 @@ describe('rankLotsForSale', () => {
     ];
     const rankings = rankLotsForSale(lots, 1500, 50000, 1, 'single', 0, 2025);
     const anyExceedsWarning = rankings.some((r) =>
-      r.warnings.some((w) => w.includes('300 000'))
+      r.warnings.some((w) => /300[\s\u00a0\u202f]000/.test(w))
     );
     expect(anyExceedsWarning).toBe(true);
   });

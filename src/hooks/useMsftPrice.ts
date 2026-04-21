@@ -12,6 +12,8 @@ interface MsftPriceResult {
   lastUpdated: Date | null;
   error: string | null;
   loading: boolean;
+  /** Manually retry after a transient failure (network / rate limit). */
+  retry: () => void;
 }
 
 /**
@@ -74,5 +76,5 @@ export function useMsftPrice(): MsftPriceResult {
     fetchPrice();
   }, [fetchPrice]);
 
-  return { usdPrice, eurPrice, change, changeEur, changePercent, marketTimestamp, lastUpdated, error, loading };
+  return { usdPrice, eurPrice, change, changeEur, changePercent, marketTimestamp, lastUpdated, error, loading, retry: fetchPrice };
 }

@@ -8,6 +8,7 @@ import { Calculator, ShoppingCart, Filter } from 'lucide-react';
 import type { StockLot, SaleLotEntry, AppSettings, StockOrigin } from '../lib/types';
 import { formatEUR, formatUSD, formatDate, originLabel } from '../lib/utils';
 import { useMsftPrice } from '../hooks/useMsftPrice';
+import { ErrorFallback } from './ErrorFallback';
 
 interface SaleSimulatorProps {
   lots: StockLot[];
@@ -29,6 +30,7 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
     marketTimestamp,
     error: priceError,
     loading: fetchingPrice,
+    retry: retryPrice,
   } = useMsftPrice();
 
   // Sync EUR price to default price when fetched
@@ -246,7 +248,13 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
                 </div>
               )}
               {priceError && (
-                <span className="text-xs text-amber-700">{priceError}</span>
+                <ErrorFallback
+                  variant="warning"
+                  message={priceError}
+                  hint="Vous pouvez saisir un prix manuellement ci-contre."
+                  onRetry={retryPrice}
+                  className="mt-1"
+                />
               )}
             </div>
 

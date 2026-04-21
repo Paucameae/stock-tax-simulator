@@ -423,6 +423,6 @@ describe('rankLotsForSale', () => {
     const rankings = rankLotsForSale([lot], 400, 80000, 2, 'couple', 0, 2025);
     // Acquisition gain = 1000 * 350 = 350,000 > 300,000
     const warnings = rankings[0].warnings;
-    expect(warnings.some((w) => w.includes('300 000'))).toBe(true);
+    expect(warnings.some((w) => /300[\s\u00a0\u202f]000/.test(w))).toBe(true);
   });
 });

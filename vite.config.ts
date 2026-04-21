@@ -11,6 +11,25 @@ export default defineConfig({
       '/api': 'http://localhost:7071',
     },
   },
+  build: {
+    // Warn if the main entry chunk grows past ~600 kB.
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        // Keep heavy optional deps in their own chunks so the initial bundle
+        // stays small; lazy-loaded components pull these chunks on demand.
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('pdfjs-dist')) return 'pdf';
+            if (id.includes('recharts') || id.includes('/d3-')) return 'charts';
+            if (id.includes('lucide-react')) return 'icons';
+            if (id.includes('react-dom') || /\/react\//.test(id)) return 'react-vendor';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',

@@ -125,7 +125,7 @@ describe('TaxCalculator component', () => {
     );
     const alerts = screen.getAllByRole('alert');
     const bannerTexts = alerts.map((el) => el.textContent || '').join(' ');
-    expect(bannerTexts).toMatch(/300 000/);
+    expect(bannerTexts).toMatch(/300[\s\u00a0\u202f]000/);
     expect(bannerTexts).toMatch(/abattement/i);
   });
 
@@ -136,7 +136,7 @@ describe('TaxCalculator component', () => {
     );
     const alerts = screen.queryAllByRole('alert');
     const bannerTexts = alerts.map((el) => el.textContent || '').join(' ');
-    expect(bannerTexts).not.toMatch(/300 000 € dépassé/);
+    expect(bannerTexts).not.toMatch(/Seuil de 300[\s\u00a0\u202f]000.*dépassé/);
   });
 
   it('shows CEHR banner when cehr > 0', () => {

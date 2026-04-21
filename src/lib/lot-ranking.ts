@@ -1,5 +1,5 @@
 import type { StockLot, SaleLotEntry } from './types';
-import { AGA_THRESHOLD } from './tax-rates';
+import { getTaxConfig } from './tax-rates';
 import { runSimulation } from './tax-engine';
 
 export interface LotRanking {
@@ -27,6 +27,13 @@ export function rankLotsForSale(
   fiscalYear: number
 ): LotRanking[] {
   if (salePricePerShare <= 0 || lots.length === 0) return [];
+
+  const cfg = getTaxConfig(fiscalYear);
+  const agaThreshold = cfg.agaThreshold;
+  const cehrThreshold =
+    familyStatus === 'couple'
+      ? (cfg.cehrCouple[0]?.from ?? 500001) - 1
+      : (cfg.cehrSingle[0]?.from ?? 250001) - 1;
 
   let cumulativeAcqGain = 0;
 
@@ -65,13 +72,12 @@ export function rankLotsForSale(
     const lotAcqGain = simPfu.totalAcquisitionGain;
     if (lotAcqGain > 0) {
       cumulativeAcqGain += lotAcqGain;
-      if (cumulativeAcqGain > AGA_THRESHOLD) {
-        warnings.push(`Le gain d'acquisition cumulé (${Math.round(cumulativeAcqGain).toLocaleString('fr-FR')} €) dépasse le seuil de 300 000 €`);
+      if (cumulativeAcqGain > agaThreshold) {
+        warnings.push(`Le gain d'acquisition cumulé (${Math.round(cumulativeAcqGain).toLocaleString('fr-FR')} €) dépasse le seuil de ${agaThreshold.toLocaleString('fr-FR')} €`);
       }
     }
 
     const rfi = otherTaxableIncome + lotAcqGain + Math.max(0, simPfu.totalCapitalGain);
-    const cehrThreshold = familyStatus === 'couple' ? 500000 : 250000;
     if (rfi > cehrThreshold) {
       warnings.push(`Déclenche la CEHR (RFI estimé : ${Math.round(rfi).toLocaleString('fr-FR')} €)`);
     }

@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Tooltip } from './ui/tooltip';
 import { Receipt, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
-import type { TaxSimulationResult, TaxMode } from '../lib/types';
+import type { TaxSimulationResult, TaxMode, FamilyStatus } from '../lib/types';
 import { getTaxConfig } from '../lib/tax-rates';
+import { analyzeThresholds } from '../lib/thresholds';
 import { formatEUR, formatPercent } from '../lib/utils';
 
 interface TaxCalculatorProps {
@@ -12,10 +13,15 @@ interface TaxCalculatorProps {
   taxMode: TaxMode;
   onTaxModeChange: (mode: TaxMode) => void;
   fiscalYear: number;
+  familyStatus?: FamilyStatus;
 }
 
-export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode, onTaxModeChange, fiscalYear }: TaxCalculatorProps) {
+export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode, onTaxModeChange, fiscalYear, familyStatus = 'single' }: TaxCalculatorProps) {
   const cfg = React.useMemo(() => getTaxConfig(fiscalYear), [fiscalYear]);
+  const thresholds = React.useMemo(
+    () => (result ? analyzeThresholds(result, fiscalYear, familyStatus) : null),
+    [result, fiscalYear, familyStatus]
+  );
 
   if (!result) {
     return (
@@ -38,13 +44,16 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
 
   // UX: surface the 300k€ AGA threshold overrun prominently — the tax regime
   // changes drastically above this limit (no 50% abatement, +10% salary contrib).
-  const exceeds300k = r.acquisitionGainTax.above300k > 0;
-  const cehrThreshold = 250000;
-  const cehrTriggered = r.cehr > 0;
+  // Detection delegated to analyzeThresholds() for a single source of truth.
+  const { exceedsAgaThreshold, amountAboveAgaThreshold, cehrTriggered, cehrEntryThreshold, cehrCoupleEntryThreshold, agaThreshold } = thresholds!;
 
   return (
     <div className="space-y-6">
-      {exceeds300k && (
+      {/* Live region announces major threshold changes to screen readers. */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        Simulation mise à jour — montant net {formatEUR(r.netAmount)}, impôt total {formatEUR(r.totalTax)}.
+      </div>
+      {exceedsAgaThreshold && (
         <div
           className="flex items-start gap-3 p-4 rounded-lg border-2 border-amber-300 bg-amber-50 text-amber-900"
           role="alert"
@@ -52,10 +61,10 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
           <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
           <div className="text-sm">
             <p className="font-semibold">
-              Seuil de 300 000 € dépassé — fraction soumise à {formatEUR(r.acquisitionGainTax.above300k)}
+              Seuil de {formatEUR(agaThreshold)} dépassé — fraction soumise à {formatEUR(amountAboveAgaThreshold)}
             </p>
             <p className="mt-1">
-              Au-delà de 300 000 € de gain d'acquisition AGA, vous perdez l'abattement de 50 %,
+              Au-delà de {formatEUR(agaThreshold)} de gain d'acquisition AGA, vous perdez l'abattement de 50 %,
               les prélèvements sociaux passent à {psActiviteRate} (régime salarial) et une
               contribution salariale de {salaryRate} s'applique. Envisagez d'étaler les ventes sur plusieurs années.
             </p>
@@ -73,7 +82,7 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
               Contribution exceptionnelle hauts revenus (CEHR) déclenchée : {formatEUR(r.cehr)}
             </p>
             <p className="mt-1">
-              Votre revenu fiscal de référence dépasse {formatEUR(cehrThreshold)} (célibataire) ou {formatEUR(500000)} (couple).
+              Votre revenu fiscal de référence dépasse {formatEUR(cehrEntryThreshold)} (célibataire) ou {formatEUR(cehrCoupleEntryThreshold)} (couple).
               La CEHR s'ajoute à vos impôts (3 % ou 4 % selon les tranches).
             </p>
           </div>
@@ -162,12 +171,12 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
                     </td>
                   </tr>
                   <tr className="border-b">
-                    <td className="py-2 pl-6 text-gray-600">Fraction ≤ 300 000 €</td>
+                    <td className="py-2 pl-6 text-gray-600">Fraction ≤ {formatEUR(agaThreshold)}</td>
                     <td className="py-2 text-right">{formatEUR(r.acquisitionGainTax.below300k)}</td>
                   </tr>
                   {r.acquisitionGainTax.above300k > 0 && (
                     <tr className="border-b">
-                      <td className="py-2 pl-6 text-gray-600">Fraction {'>'} 300 000 €</td>
+                      <td className="py-2 pl-6 text-gray-600">Fraction {'>'} {formatEUR(agaThreshold)}</td>
                       <td className="py-2 text-right">{formatEUR(r.acquisitionGainTax.above300k)}</td>
                     </tr>
                   )}
