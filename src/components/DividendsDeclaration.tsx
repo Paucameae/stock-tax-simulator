@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Coins, Copy, Check } from 'lucide-react';
 import { Button } from './ui/button';
+import { Select } from './ui/select';
 import type { DividendEvent } from '../lib/transaction-parser';
 import {
   enrichDividendsWithEur,
@@ -36,10 +37,27 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
     [dividends, rates],
   );
 
-  const yearSummary = React.useMemo(() => {
-    const groups = groupDividendsByYear(enriched);
-    return groups.find((g) => g.year === fiscalYear) ?? null;
-  }, [enriched, fiscalYear]);
+  const groups = React.useMemo(() => groupDividendsByYear(enriched), [enriched]);
+  const availableYears = React.useMemo(() => groups.map((g) => g.year), [groups]);
+
+  // Default: fiscalYear if available, otherwise the most recent year with data,
+  // otherwise n-1 (fiscalYear is typically the current calendar year, but dividend
+  // declarations always concern the previous year).
+  const defaultYear = React.useMemo(() => {
+    if (availableYears.includes(fiscalYear)) return fiscalYear;
+    if (availableYears.length > 0) return availableYears[availableYears.length - 1];
+    return fiscalYear - 1;
+  }, [availableYears, fiscalYear]);
+
+  const [selectedYear, setSelectedYear] = React.useState<number>(defaultYear);
+  React.useEffect(() => {
+    setSelectedYear(defaultYear);
+  }, [defaultYear]);
+
+  const yearSummary = React.useMemo(
+    () => groups.find((g) => g.year === selectedYear) ?? null,
+    [groups, selectedYear],
+  );
 
   if (dividends.length === 0) return null;
 
@@ -49,18 +67,39 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
     setTimeout(() => setCopied(null), 1500);
   };
 
+  const yearPicker = availableYears.length > 1 && (
+    <Select
+      value={String(selectedYear)}
+      onChange={(e) => setSelectedYear(Number(e.target.value))}
+      className="h-8 text-sm w-auto"
+      aria-label="Année de déclaration"
+    >
+      {availableYears.map((y) => (
+        <option key={y} value={y}>
+          {y}
+        </option>
+      ))}
+    </Select>
+  );
+
   if (!yearSummary) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Coins className="h-5 w-5" />
-            Dividendes US {fiscalYear}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Coins className="h-5 w-5" />
+              Dividendes US {selectedYear}
+            </CardTitle>
+            {yearPicker}
+          </div>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-gray-600">
-            Aucun dividende perçu en {fiscalYear} d'après votre historique importé.
+            Aucun dividende perçu en {selectedYear} d'après votre historique importé.
+            {availableYears.length > 0 && (
+              <> Données disponibles pour : {availableYears.join(', ')}.</>
+            )}
           </p>
         </CardContent>
       </Card>
@@ -72,14 +111,19 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Coins className="h-5 w-5" />
-          Dividendes US {fiscalYear}
-        </CardTitle>
-        <CardDescription>
-          {yearSummary.count} versement{yearSummary.count > 1 ? 's' : ''} Microsoft · brut{' '}
-          {formatEUR(yearSummary.grossEur)} · retenue US {formatEUR(yearSummary.taxWithheldEur)}
-        </CardDescription>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Coins className="h-5 w-5" />
+              Dividendes US {selectedYear}
+            </CardTitle>
+            <CardDescription>
+              {yearSummary.count} versement{yearSummary.count > 1 ? 's' : ''} Microsoft · brut{' '}
+              {formatEUR(yearSummary.grossEur)} · retenue US {formatEUR(yearSummary.taxWithheldEur)}
+            </CardDescription>
+          </div>
+          {yearPicker}
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         <DeclarationLine
