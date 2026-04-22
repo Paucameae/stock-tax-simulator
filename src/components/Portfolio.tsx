@@ -6,16 +6,18 @@ import { Tooltip } from './ui/tooltip';
 import { Select } from './ui/select';
 import { BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
-import type { StockLot, StockOrigin } from '../lib/types';
+import type { StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import { formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
+import { UnvestedView } from './UnvestedView';
 
 interface PortfolioProps {
   lots: StockLot[];
   onLotsChange: (lots: StockLot[]) => void;
+  grants?: GrantInfo[];
 }
 
-export function Portfolio({ lots, onLotsChange }: PortfolioProps) {
+export function Portfolio({ lots, onLotsChange, grants = [] }: PortfolioProps) {
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
   const [filterHolding, setFilterHolding] = React.useState<'all' | 'Short' | 'Long'>('all');
   const [sortBy, setSortBy] = React.useState<'date' | 'type' | 'gain'>('date');
@@ -357,6 +359,8 @@ export function Portfolio({ lots, onLotsChange }: PortfolioProps) {
           );
         })}
       </div>
+
+      <UnvestedView grants={grants} />
     </div>
   );
 }
