@@ -2,52 +2,72 @@ import type { BrokerGuide } from './types';
 
 const NBSP = '\u00a0';
 
+/**
+ * Guide for exporting the Fidelity Transaction History CSV.
+ * Steps 1-2 reuse the Fidelity login screenshots (identical navigation path),
+ * steps 3-5 use transaction-history–specific screenshots.
+ */
 export const transactionHistoryGuide: BrokerGuide = {
   brokerId: 'fidelity-transactions',
   brokerName: 'Historique Fidelity',
   steps: [
     {
-      title: 'Connexion',
+      title: 'Connexion à Fidelity NetBenefits',
       description: (
         <>
-          Connectez-vous à votre compte <strong>Fidelity NetBenefits</strong> puis accédez au
-          <strong> Compte de plan d'actionnariat</strong> Microsoft (voir le guide <em>Fidelity</em> si besoin).
+          Connectez-vous à <strong>NetBenefits</strong> puis accédez à votre
+          <strong> Compte de plan d'actionnariat</strong> Microsoft — mêmes étapes que pour l'export StockExport.
         </>
       ),
       image: '/tutorial/fidelity/step-2-login.png',
-      imageAlt: "Page Plans d'actionnariat — lien Compte de plan",
+      imageAlt: "Page d'accueil NetBenefits",
     },
     {
-      title: 'Historique des transactions',
+      title: "Onglet Activité",
       description: (
         <>
-          Dans le menu, ouvrez l'onglet <strong>«{NBSP}Historique des transactions{NBSP}»</strong>.
+          Sur la page du <strong>Compte de plan d'actionnariat</strong>, cliquez sur l'onglet
+          <strong> «{NBSP}Activité{NBSP}»</strong> en haut de la page.
         </>
       ),
-      image: '/tutorial/fidelity/step-3-login.png',
-      imageAlt: "Menu latéral — Historique des transactions",
+      image: '/tutorial/transactions/step-3-activity-tab.png',
+      imageAlt: "Onglet Activité du Compte de plan d'actionnariat",
     },
     {
-      title: 'Période',
+      title: 'Choisir la période',
       description: (
         <>
-          Sélectionnez <strong>l'année civile complète</strong> que vous souhaitez déclarer
-          (par exemple <em>01/01/2025 au 31/12/2025</em> pour la déclaration faite en 2026).
-          Un export partiel produirait des totaux incomplets.
+          Dans le menu déroulant <strong>«{NBSP}Date de transaction{NBSP}»</strong>, sélectionnez
+          <strong> «{NBSP}Date choisie{NBSP}»</strong>. Les options trimestrielles ne couvrent pas
+          une année civile complète.
         </>
       ),
-      image: '/tutorial/fidelity/step-4-login.png',
-      imageAlt: "Sélecteur de période",
+      image: '/tutorial/transactions/step-4-date-dropdown.png',
+      imageAlt: 'Menu déroulant Date de transaction',
     },
     {
-      title: 'Export CSV',
+      title: 'Année civile complète',
       description: (
         <>
-          Cliquez sur <strong>«{NBSP}Exporter{NBSP}»</strong> en haut à droite et choisissez le format CSV.
-          Importez ensuite le fichier téléchargé dans le simulateur.
+          Renseignez la période <strong>du 1er janvier au 31 décembre</strong> de l'année à déclarer
+          (par exemple <em>Jan-01-2025</em> → <em>Dec-31-2025</em> pour la déclaration faite en 2026),
+          puis cliquez sur <strong>«{NBSP}Appliquer{NBSP}»</strong>. Un export partiel produirait
+          des totaux incomplets.
         </>
       ),
-      image: '/tutorial/fidelity/step-4-login.png',
+      image: '/tutorial/transactions/step-5-date-range.png',
+      imageAlt: 'Sélection de la période 1er janvier au 31 décembre',
+    },
+    {
+      title: 'Exporter en CSV',
+      description: (
+        <>
+          Cliquez sur <strong>«{NBSP}Exporter{NBSP}»</strong> en haut à droite de la liste.
+          Fidelity télécharge un fichier <code>Transaction history.csv</code> que vous pourrez
+          importer directement ici.
+        </>
+      ),
+      image: '/tutorial/transactions/step-5-date-range.png',
       imageAlt: 'Bouton Exporter',
     },
   ],
