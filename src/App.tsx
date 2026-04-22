@@ -1,5 +1,5 @@
 import React from 'react';
-import { Briefcase, Calculator, FileText, Settings as SettingsIcon, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen } from 'lucide-react';
+import { Briefcase, Calculator, FileText, Settings as SettingsIcon, Database, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen } from 'lucide-react';
 import { TaxRulesPanel } from './components/TaxRulesPanel';
 import { CsvImporter } from './components/CsvImporter';
 import { SoldLotsTable } from './components/SoldLotsTable';
@@ -7,7 +7,6 @@ import { SaleSimulator } from './components/SaleSimulator';
 import { TaxCalculator } from './components/TaxCalculator';
 import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
-import { BackupPanel } from './components/BackupPanel';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, loadDividends, saveDividends } from './lib/storage';
@@ -24,6 +23,9 @@ const Portfolio = React.lazy(() =>
 );
 const Settings = React.lazy(() =>
   import('./components/Settings').then((m) => ({ default: m.Settings }))
+);
+const DataPanel = React.lazy(() =>
+  import('./components/DataPanel').then((m) => ({ default: m.DataPanel }))
 );
 
 function LazyFallback() {
@@ -45,9 +47,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   priorLosses: 0,
 };
 
-type Tab = 'portfolio' | 'simulator' | 'declaration' | 'settings';
+type Tab = 'portfolio' | 'simulator' | 'declaration' | 'data' | 'settings';
 const TAB_STORAGE_KEY = 'activeTab';
-const VALID_TABS: readonly Tab[] = ['portfolio', 'simulator', 'declaration', 'settings'] as const;
+const VALID_TABS: readonly Tab[] = ['portfolio', 'simulator', 'declaration', 'data', 'settings'] as const;
 
 function loadPersistedTab(): Tab | null {
   try {
@@ -379,9 +381,10 @@ function App() {
 
   const tabs = [
     { id: 'settings' as const, step: 1, label: 'Paramètres', icon: SettingsIcon, done: settingsDone },
-    { id: 'portfolio' as const, step: 2, label: 'Mon portefeuille', icon: Briefcase, done: portfolioDone },
-    { id: 'simulator' as const, step: 3, label: 'Cessions', icon: Calculator, done: simulationDone },
-    { id: 'declaration' as const, step: 4, label: 'Ma déclaration', icon: FileText, done: simulationDone },
+    { id: 'data' as const, step: 2, label: 'Mes données', icon: Database, done: lots.length > 0 || grants.length > 0 || dividends.length > 0 },
+    { id: 'portfolio' as const, step: 3, label: 'Mon portefeuille', icon: Briefcase, done: portfolioDone },
+    { id: 'simulator' as const, step: 4, label: 'Cessions', icon: Calculator, done: simulationDone },
+    { id: 'declaration' as const, step: 5, label: 'Ma déclaration', icon: FileText, done: simulationDone },
   ];
 
   return (
@@ -571,26 +574,38 @@ function App() {
           </div>
         </div>
 
+        <div hidden={activeTab !== 'data'}>
+          <React.Suspense fallback={<LazyFallback />}>
+            <DataPanel
+            settings={settings}
+            onSettingsChange={setSettings}
+            defaults={DEFAULT_SETTINGS}
+            grants={grants}
+            onGrantsChange={handleGrantsChange}
+            dividends={dividends}
+            cashInterest={cashInterest}
+            onDividendsChange={handleDividendsChange}
+            lots={lots}
+            soldLots={soldLots}
+            savedSimulations={savedSimulations}
+            onBackupImport={handleBackupImport}
+            onDefaultPlanTypeChange={(value) => {
+              const next = { ...settings, defaultPlanType: value };
+              setSettings(next);
+              saveVersionedSettings('appSettings', next);
+            }}
+          />
+          </React.Suspense>
+        </div>
+
         <div hidden={activeTab !== 'settings'}>
           <div className="space-y-6">
             <React.Suspense fallback={<LazyFallback />}>
               <Settings
                 settings={settings}
                 onSettingsChange={setSettings}
-                grants={grants}
-                onGrantsChange={handleGrantsChange}
-                dividends={dividends}
-                cashInterest={cashInterest}
-                onDividendsChange={handleDividendsChange}
               />
             </React.Suspense>
-            <div className="max-w-2xl">
-              <BackupPanel
-                current={{ settings, lots, soldLots, savedSimulations }}
-                defaults={DEFAULT_SETTINGS}
-                onImport={handleBackupImport}
-              />
-            </div>
           </div>
         </div>
       </main>
