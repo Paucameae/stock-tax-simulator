@@ -3,15 +3,21 @@ import { Upload, RefreshCw, FileCheck, Trash2, AlertTriangle, Award, HelpCircle 
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Alert } from './ui/alert';
+import { Select } from './ui/select';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { stockexportGuide } from './guides/stockexport-steps';
 import { parseStockExportFile, hashGrantIds } from '../lib/stockexport-parser';
 import { saveGrants, clearGrants } from '../lib/storage';
 import type { GrantInfo } from '../lib/types';
 
+type DoPlanType = 'qualified_macron' | 'non_qualified';
+
 interface StockExportImporterProps {
   grants: GrantInfo[];
   onGrantsChange: (grants: GrantInfo[]) => void;
+  /** Fallback plan type applied to DO lots when no StockExport is imported. */
+  defaultPlanType?: DoPlanType;
+  onDefaultPlanTypeChange?: (value: DoPlanType) => void;
 }
 
 /**
@@ -22,7 +28,12 @@ interface StockExportImporterProps {
  * Fail-soft: any parsing error surfaces an inline message; existing grants and
  * lots are left untouched. Never blocks the rest of the app.
  */
-export function StockExportImporter({ grants, onGrantsChange }: StockExportImporterProps) {
+export function StockExportImporter({
+  grants,
+  onGrantsChange,
+  defaultPlanType,
+  onDefaultPlanTypeChange,
+}: StockExportImporterProps) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [warnings, setWarnings] = React.useState<string[]>([]);
@@ -185,6 +196,28 @@ export function StockExportImporter({ grants, onGrantsChange }: StockExportImpor
               </ul>
             </div>
           </Alert>
+        )}
+
+        {defaultPlanType !== undefined && onDefaultPlanTypeChange && (
+          <div className="border-t border-gray-100 pt-3 mt-1">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Régime par défaut — lots DO sans StockExport
+            </label>
+            <div className="max-w-xs">
+              <Select
+                value={defaultPlanType}
+                onChange={(e) => onDefaultPlanTypeChange(e.target.value as DoPlanType)}
+              >
+                <option value="qualified_macron">Qualifié (AGA)</option>
+                <option value="non_qualified">Non qualifié</option>
+              </Select>
+              <p className="text-xs text-gray-400 mt-1">
+                {grants.length > 0
+                  ? 'Les lots déjà réconciliés via le StockExport conservent leur type. Cette valeur ne s\u2019applique qu\u2019aux lots DO non réconciliés.'
+                  : 'Appliqué à tous les lots DO tant qu\u2019aucun StockExport n\u2019est importé.'}
+              </p>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -94,7 +94,12 @@ export function Settings({ settings, onSettingsChange, grants = [], onGrantsChan
   return (
     <div className="space-y-6 max-w-2xl pb-6">
       {/* StockExport import — enables automatic lot qualification */}
-      <StockExportImporter grants={grants} onGrantsChange={onGrantsChange ?? (() => {})} />
+      <StockExportImporter
+        grants={grants}
+        onGrantsChange={onGrantsChange ?? (() => {})}
+        defaultPlanType={local.defaultPlanType}
+        onDefaultPlanTypeChange={(value) => update({ defaultPlanType: value })}
+      />
 
       {/* PDF import — always visible */}
       <Card>
@@ -299,30 +304,6 @@ export function Settings({ settings, onSettingsChange, grants = [], onGrantsChan
                   placeholder="0"
                 />
               </div>
-            </div>
-          </div>
-
-          <hr className="border-gray-100" />
-
-          {/* Section: Préférences d'import */}
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Préférences d'import</h3>
-            <div className="max-w-xs">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Régime Stock Awards (DO)
-              </label>
-              <Select
-                value={local.defaultPlanType}
-                onChange={(e) =>
-                  update({ defaultPlanType: e.target.value as 'qualified_macron' | 'non_qualified' })
-                }
-              >
-                <option value="qualified_macron">Qualifié (AGA)</option>
-                <option value="non_qualified">Non qualifié</option>
-              </Select>
-              <p className="text-xs text-gray-400 mt-1">
-                Appliqué à l'import pour les lots DO.
-              </p>
             </div>
           </div>
         </CardContent>
