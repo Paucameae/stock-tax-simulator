@@ -1,5 +1,5 @@
 import React from 'react';
-import { Briefcase, Calculator, FileText, Settings as SettingsIcon, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen } from 'lucide-react';
+import { Briefcase, Calculator, FileText, Settings as SettingsIcon, Database, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen } from 'lucide-react';
 import { TaxRulesPanel } from './components/TaxRulesPanel';
 import { CsvImporter } from './components/CsvImporter';
 import { SoldLotsTable } from './components/SoldLotsTable';
@@ -7,13 +7,14 @@ import { SaleSimulator } from './components/SaleSimulator';
 import { TaxCalculator } from './components/TaxCalculator';
 import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
-import { BackupPanel } from './components/BackupPanel';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
-import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants } from './lib/storage';
+import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, loadDividends, saveDividends } from './lib/storage';
 import { reconcileLots } from './lib/stockexport-reconciliation';
 import type { ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo } from './lib/types';
+import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
+import { DividendsDeclaration } from './components/DividendsDeclaration';
 import { generateId } from './lib/utils';
 
 // Lazy-load heavy components (pdfjs-dist via Settings, recharts via Portfolio)
@@ -22,6 +23,9 @@ const Portfolio = React.lazy(() =>
 );
 const Settings = React.lazy(() =>
   import('./components/Settings').then((m) => ({ default: m.Settings }))
+);
+const DataPanel = React.lazy(() =>
+  import('./components/DataPanel').then((m) => ({ default: m.DataPanel }))
 );
 
 function LazyFallback() {
@@ -43,9 +47,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   priorLosses: 0,
 };
 
-type Tab = 'portfolio' | 'simulator' | 'declaration' | 'settings';
+type Tab = 'portfolio' | 'simulator' | 'declaration' | 'data' | 'settings';
 const TAB_STORAGE_KEY = 'activeTab';
-const VALID_TABS: readonly Tab[] = ['portfolio', 'simulator', 'declaration', 'settings'] as const;
+const VALID_TABS: readonly Tab[] = ['portfolio', 'simulator', 'declaration', 'data', 'settings'] as const;
 
 function loadPersistedTab(): Tab | null {
   try {
@@ -162,6 +166,8 @@ function App() {
     return loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
   });
   const [grants, setGrants] = React.useState<GrantInfo[]>(() => loadGrants());
+  const [dividends, setDividends] = React.useState<DividendEvent[]>(() => loadDividends()?.dividends ?? []);
+  const [cashInterest, setCashInterest] = React.useState<CashInterestEvent[]>(() => loadDividends()?.cashInterest ?? []);
   const [showRules, setShowRules] = React.useState(false);
   const [showSalesImportDialog, setShowSalesImportDialog] = React.useState(false);
   const [savedSimulations, setSavedSimulations] = React.useState<SavedSimulation[]>(() => {
@@ -227,6 +233,20 @@ function App() {
       }
     }
   }, [lots]);
+
+  const handleDividendsChange = React.useCallback(
+    (payload: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => {
+      setDividends(payload.dividends);
+      setCashInterest(payload.cashInterest);
+      if (payload.dividends.length === 0 && payload.cashInterest.length === 0) return;
+      saveDividends({
+        dividends: payload.dividends,
+        cashInterest: payload.cashInterest,
+        importedAt: new Date().toISOString(),
+      });
+    },
+    [],
+  );
 
   const handleImportSales = React.useCallback((importedSoldLots: SoldLot[]) => {
     const withPlanType = importedSoldLots.map((sl) => ({
@@ -361,9 +381,10 @@ function App() {
 
   const tabs = [
     { id: 'settings' as const, step: 1, label: 'Paramètres', icon: SettingsIcon, done: settingsDone },
-    { id: 'portfolio' as const, step: 2, label: 'Mon portefeuille', icon: Briefcase, done: portfolioDone },
-    { id: 'simulator' as const, step: 3, label: 'Cessions', icon: Calculator, done: simulationDone },
-    { id: 'declaration' as const, step: 4, label: 'Ma déclaration', icon: FileText, done: simulationDone },
+    { id: 'data' as const, step: 2, label: 'Mes données', icon: Database, done: lots.length > 0 || grants.length > 0 || dividends.length > 0 },
+    { id: 'portfolio' as const, step: 3, label: 'Mon portefeuille', icon: Briefcase, done: portfolioDone },
+    { id: 'simulator' as const, step: 4, label: 'Cessions', icon: Calculator, done: simulationDone },
+    { id: 'declaration' as const, step: 5, label: 'Ma déclaration', icon: FileText, done: simulationDone },
   ];
 
   return (
@@ -476,7 +497,7 @@ function App() {
             )}
             {lots.length > 0 && (
               <React.Suspense fallback={<LazyFallback />}>
-                <Portfolio lots={lots} onLotsChange={setLots} grants={grants} />
+                <Portfolio lots={lots} onLotsChange={setLots} grants={grants} dividends={dividends} cashInterest={cashInterest} />
               </React.Suspense>
             )}
           </div>
@@ -516,36 +537,59 @@ function App() {
         </div>
 
         <div hidden={activeTab !== 'declaration'}>
-          {result ? (
-            <DeclarationGuide result={result} lots={saleEntries} fiscalYear={fiscalYear} />
-          ) : (
-            <div className="text-center py-16">
-              <Calculator className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-600 font-medium">Aucune simulation effectuée</p>
-              <p className="text-sm text-gray-500 mt-1 mb-4">
-                {lots.length === 0
-                  ? 'Importez votre portefeuille puis lancez une simulation pour obtenir les instructions de déclaration.'
-                  : 'Lancez une simulation de vente pour obtenir les formulaires et montants à déclarer.'
-                }
-              </p>
-              <button
-                onClick={() => setActiveTab(lots.length === 0 ? 'portfolio' : 'simulator')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
-              >
-                {lots.length === 0 ? (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    Importer mon portefeuille
-                  </>
-                ) : (
-                  <>
-                    <Calculator className="h-4 w-4" />
-                    Aller aux cessions
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+          <div className="space-y-6">
+            {result ? (
+              <DeclarationGuide result={result} lots={saleEntries} fiscalYear={fiscalYear} />
+            ) : dividends.length === 0 ? (
+              <div className="text-center py-16">
+                <Calculator className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-gray-600 font-medium">Aucune simulation effectuée</p>
+                <p className="text-sm text-gray-500 mt-1 mb-4">
+                  {lots.length === 0
+                    ? 'Importez votre portefeuille puis lancez une simulation pour obtenir les instructions de déclaration.'
+                    : 'Lancez une simulation de vente pour obtenir les formulaires et montants à déclarer.'
+                  }
+                </p>
+                <button
+                  onClick={() => setActiveTab(lots.length === 0 ? 'portfolio' : 'simulator')}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
+                >
+                  {lots.length === 0 ? (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Importer mon portefeuille
+                    </>
+                  ) : (
+                    <>
+                      <Calculator className="h-4 w-4" />
+                      Aller aux cessions
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : null}
+            {dividends.length > 0 && (
+              <DividendsDeclaration dividends={dividends} fiscalYear={fiscalYear} />
+            )}
+          </div>
+        </div>
+
+        <div hidden={activeTab !== 'data'}>
+          <React.Suspense fallback={<LazyFallback />}>
+            <DataPanel
+            settings={settings}
+            grants={grants}
+            onGrantsChange={handleGrantsChange}
+            dividends={dividends}
+            cashInterest={cashInterest}
+            onDividendsChange={handleDividendsChange}
+            onDefaultPlanTypeChange={(value) => {
+              const next = { ...settings, defaultPlanType: value };
+              setSettings(next);
+              saveVersionedSettings('appSettings', next);
+            }}
+          />
+          </React.Suspense>
         </div>
 
         <div hidden={activeTab !== 'settings'}>
@@ -554,17 +598,13 @@ function App() {
               <Settings
                 settings={settings}
                 onSettingsChange={setSettings}
-                grants={grants}
-                onGrantsChange={handleGrantsChange}
+                defaults={DEFAULT_SETTINGS}
+                lots={lots}
+                soldLots={soldLots}
+                savedSimulations={savedSimulations}
+                onBackupImport={handleBackupImport}
               />
             </React.Suspense>
-            <div className="max-w-2xl">
-              <BackupPanel
-                current={{ settings, lots, soldLots, savedSimulations }}
-                defaults={DEFAULT_SETTINGS}
-                onImport={handleBackupImport}
-              />
-            </div>
           </div>
         </div>
       </main>

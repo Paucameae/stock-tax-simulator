@@ -7,17 +7,21 @@ import { Select } from './ui/select';
 import { BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import type { StockLot, StockOrigin, GrantInfo } from '../lib/types';
+import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 import { formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
 import { UnvestedView } from './UnvestedView';
+import { DividendsView } from './DividendsView';
 
 interface PortfolioProps {
   lots: StockLot[];
   onLotsChange: (lots: StockLot[]) => void;
   grants?: GrantInfo[];
+  dividends?: DividendEvent[];
+  cashInterest?: CashInterestEvent[];
 }
 
-export function Portfolio({ lots, onLotsChange, grants = [] }: PortfolioProps) {
+export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [] }: PortfolioProps) {
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
   const [filterHolding, setFilterHolding] = React.useState<'all' | 'Short' | 'Long'>('all');
   const [sortBy, setSortBy] = React.useState<'date' | 'type' | 'gain'>('date');
@@ -361,6 +365,7 @@ export function Portfolio({ lots, onLotsChange, grants = [] }: PortfolioProps) {
       </div>
 
       <UnvestedView grants={grants} />
+      <DividendsView dividends={dividends} cashInterest={cashInterest} />
     </div>
   );
 }

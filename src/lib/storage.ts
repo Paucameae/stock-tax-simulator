@@ -1,4 +1,5 @@
 import type { AppSettings, FamilyStatus, GrantInfo, PlanType, StockOrigin } from './types';
+import type { DividendEvent, CashInterestEvent } from './transaction-parser';
 
 /**
  * Current version of the localStorage data schema.
@@ -207,4 +208,88 @@ function validateGrant(raw: unknown): GrantInfo | null {
     totalVested: isNonNegativeNumber(obj.totalVested) ? (obj.totalVested as number) : 0,
     totalUnvested: isNonNegativeNumber(obj.totalUnvested) ? (obj.totalUnvested as number) : 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Dividends (parsed from Fidelity Transaction History)
+// ---------------------------------------------------------------------------
+
+export const DIVIDENDS_STORAGE_KEY = 'fidelityDividends';
+const DIVIDENDS_VERSION = 1;
+
+interface DividendsPayload {
+  dividends: DividendEvent[];
+  cashInterest: CashInterestEvent[];
+  importedAt: string; // ISO
+}
+
+export function saveDividends(payload: DividendsPayload): boolean {
+  const data = {
+    version: DIVIDENDS_VERSION,
+    data: {
+      dividends: payload.dividends.map((d) => ({
+        date: d.date.toISOString(),
+        grossUsd: d.grossUsd,
+        taxWithheldUsd: d.taxWithheldUsd,
+        netUsd: d.netUsd,
+      })),
+      cashInterest: payload.cashInterest.map((c) => ({
+        date: c.date.toISOString(),
+        amountUsd: c.amountUsd,
+      })),
+      importedAt: payload.importedAt,
+    },
+  };
+  return safeSetItem(DIVIDENDS_STORAGE_KEY, JSON.stringify(data));
+}
+
+export function loadDividends(): DividendsPayload | null {
+  try {
+    const raw = localStorage.getItem(DIVIDENDS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !parsed.data) return null;
+
+    const dividends: DividendEvent[] = Array.isArray(parsed.data.dividends)
+      ? parsed.data.dividends
+          .map((d: unknown) => {
+            if (!d || typeof d !== 'object') return null;
+            const o = d as Record<string, unknown>;
+            const date = typeof o.date === 'string' ? new Date(o.date) : null;
+            if (!date || isNaN(date.getTime())) return null;
+            const grossUsd = isNonNegativeNumber(o.grossUsd) ? (o.grossUsd as number) : null;
+            const taxWithheldUsd = isNonNegativeNumber(o.taxWithheldUsd) ? (o.taxWithheldUsd as number) : 0;
+            const netUsd = isNonNegativeNumber(o.netUsd) ? (o.netUsd as number) : null;
+            if (grossUsd === null || netUsd === null) return null;
+            return { date, grossUsd, taxWithheldUsd, netUsd };
+          })
+          .filter((v: unknown): v is DividendEvent => v !== null)
+      : [];
+
+    const cashInterest: CashInterestEvent[] = Array.isArray(parsed.data.cashInterest)
+      ? parsed.data.cashInterest
+          .map((c: unknown) => {
+            if (!c || typeof c !== 'object') return null;
+            const o = c as Record<string, unknown>;
+            const date = typeof o.date === 'string' ? new Date(o.date) : null;
+            const amountUsd = isNonNegativeNumber(o.amountUsd) ? (o.amountUsd as number) : null;
+            if (!date || isNaN(date.getTime()) || amountUsd === null) return null;
+            return { date, amountUsd };
+          })
+          .filter((v: unknown): v is CashInterestEvent => v !== null)
+      : [];
+
+    const importedAt = typeof parsed.data.importedAt === 'string' ? parsed.data.importedAt : new Date().toISOString();
+    return { dividends, cashInterest, importedAt };
+  } catch {
+    return null;
+  }
+}
+
+export function clearDividends(): void {
+  try {
+    localStorage.removeItem(DIVIDENDS_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }

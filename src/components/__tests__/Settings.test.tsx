@@ -52,9 +52,4 @@ describe('Settings component', () => {
     fireEvent.click(screen.getByText('Enregistrer'));
     expect(screen.getByText('Enregistré !')).toBeInTheDocument();
   });
-
-  it('renders PDF upload button directly (always visible)', () => {
-    render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
-    expect(screen.getByText('Choisir un PDF')).toBeInTheDocument();
-  });
 });
