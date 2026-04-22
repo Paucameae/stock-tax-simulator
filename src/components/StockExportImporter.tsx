@@ -1,8 +1,10 @@
 import React from 'react';
-import { Upload, RefreshCw, FileCheck, Trash2, AlertTriangle, Award, HelpCircle, ExternalLink } from 'lucide-react';
+import { Upload, RefreshCw, FileCheck, Trash2, AlertTriangle, Award, HelpCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Alert } from './ui/alert';
+import { BrokerExportGuide } from './guides/BrokerExportGuide';
+import { stockexportGuide } from './guides/stockexport-steps';
 import { parseStockExportFile, hashGrantIds } from '../lib/stockexport-parser';
 import { saveGrants, clearGrants } from '../lib/storage';
 import type { GrantInfo } from '../lib/types';
@@ -25,7 +27,7 @@ export function StockExportImporter({ grants, onGrantsChange }: StockExportImpor
   const [error, setError] = React.useState<string | null>(null);
   const [warnings, setWarnings] = React.useState<string[]>([]);
   const [fileName, setFileName] = React.useState<string | null>(null);
-  const [showHelp, setShowHelp] = React.useState(false);
+  const [showGuide, setShowGuide] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,12 +103,12 @@ export function StockExportImporter({ grants, onGrantsChange }: StockExportImpor
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowHelp((v) => !v)}
+              onClick={() => setShowGuide(true)}
               className="gap-1.5"
-              aria-expanded={showHelp}
+              aria-label="Afficher le guide de téléchargement du StockExport"
             >
               <HelpCircle className="h-4 w-4" />
-              {showHelp ? 'Masquer' : 'Où le trouver ?'}
+              Comment le télécharger ?
             </Button>
             {grants.length > 0 && (
               <Button variant="ghost" size="sm" onClick={handleClear} className="gap-1.5 text-red-600 hover:text-red-700">
@@ -124,37 +126,12 @@ export function StockExportImporter({ grants, onGrantsChange }: StockExportImpor
           />
         </div>
 
-        {showHelp && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm space-y-3">
-            <div>
-              <p className="font-medium text-gray-800 mb-1">Comment télécharger votre StockExport</p>
-              <ol className="list-decimal ml-5 text-gray-700 space-y-1">
-                <li>
-                  Rendez-vous sur le portail Microsoft Total Rewards :{' '}
-                  <a
-                    href="https://aka.ms/stock"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline inline-flex items-center gap-1"
-                  >
-                    aka.ms/stock
-                    <ExternalLink className="h-3 w-3" />
-                  </a>{' '}
-                  (authentification Microsoft requise).
-                </li>
-                <li>Ouvrez l'onglet <strong>Stock</strong>.</li>
-                <li>Dans l'encadré <strong>Personal details</strong>, cliquez sur l'icône Excel à droite de <em>Download stock details (Excel)</em>.</li>
-                <li>Importez le fichier <code>.xlsx</code> téléchargé ci-dessus.</li>
-              </ol>
-            </div>
-            <img
-              src="/tutorial/stockexport/step-1.png"
-              alt="Capture d'écran du portail Microsoft Total Rewards montrant le bouton de téléchargement du StockExport"
-              className="w-full max-w-3xl rounded border border-gray-300 shadow-sm"
-              loading="lazy"
-            />
-          </div>
-        )}
+        <BrokerExportGuide
+          open={showGuide}
+          onClose={() => setShowGuide(false)}
+          guides={[stockexportGuide]}
+          title="Comment télécharger votre StockExport"
+        />
 
         {error && (
           <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
