@@ -4,13 +4,21 @@ import { Input } from './ui/input';
 import { Select } from './ui/select';
 import { Button } from './ui/button';
 import { Settings as SettingsIcon, Save, AlertTriangle } from 'lucide-react';
-import type { AppSettings, FamilyStatus } from '../lib/types';
+import type { AppSettings, FamilyStatus, StockLot, SoldLot, SavedSimulation } from '../lib/types';
 import { Tooltip } from './ui/tooltip';
 import { saveVersionedSettings } from '../lib/storage';
+import { TaxNoticeImporter } from './TaxNoticeImporter';
+import { BackupPanel } from './BackupPanel';
+import type { ImportResult } from '../lib/backup';
 
 interface SettingsProps {
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
+  defaults?: AppSettings;
+  lots?: StockLot[];
+  soldLots?: SoldLot[];
+  savedSimulations?: SavedSimulation[];
+  onBackupImport?: (result: ImportResult) => void;
 }
 
 function calculateTaxShares(familyStatus: FamilyStatus, numberOfChildren: number): number {
@@ -24,7 +32,7 @@ function calculateTaxShares(familyStatus: FamilyStatus, numberOfChildren: number
   return shares;
 }
 
-export function Settings({ settings, onSettingsChange }: SettingsProps) {
+export function Settings({ settings, onSettingsChange, defaults, lots = [], soldLots = [], savedSimulations = [], onBackupImport }: SettingsProps) {
   const [local, setLocal] = React.useState(settings);
   const [saved, setSaved] = React.useState(false);
 
@@ -55,6 +63,8 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
 
   return (
     <div className="space-y-6 max-w-2xl pb-6">
+      <TaxNoticeImporter settings={settings} onSettingsChange={onSettingsChange} />
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -182,6 +192,14 @@ export function Settings({ settings, onSettingsChange }: SettingsProps) {
           </div>
         )}
       </Card>
+
+      {onBackupImport && defaults && (
+        <BackupPanel
+          current={{ settings, lots, soldLots, savedSimulations }}
+          defaults={defaults}
+          onImport={onBackupImport}
+        />
+      )}
     </div>
   );
 }

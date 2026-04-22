@@ -578,17 +578,11 @@ function App() {
           <React.Suspense fallback={<LazyFallback />}>
             <DataPanel
             settings={settings}
-            onSettingsChange={setSettings}
-            defaults={DEFAULT_SETTINGS}
             grants={grants}
             onGrantsChange={handleGrantsChange}
             dividends={dividends}
             cashInterest={cashInterest}
             onDividendsChange={handleDividendsChange}
-            lots={lots}
-            soldLots={soldLots}
-            savedSimulations={savedSimulations}
-            onBackupImport={handleBackupImport}
             onDefaultPlanTypeChange={(value) => {
               const next = { ...settings, defaultPlanType: value };
               setSettings(next);
@@ -604,6 +598,11 @@ function App() {
               <Settings
                 settings={settings}
                 onSettingsChange={setSettings}
+                defaults={DEFAULT_SETTINGS}
+                lots={lots}
+                soldLots={soldLots}
+                savedSimulations={savedSimulations}
+                onBackupImport={handleBackupImport}
               />
             </React.Suspense>
           </div>
