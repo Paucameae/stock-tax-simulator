@@ -79,7 +79,7 @@ export function StockExportImporter({ grants, onGrantsChange }: StockExportImpor
       <CardContent className="pt-5 pb-4 space-y-4">
         <div className="flex items-start gap-3">
           <Award className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
-          <div className="flex-1 text-sm text-gray-600">
+          <div className="flex-1 min-w-0 text-sm text-gray-600">
             <p>
               Importez votre <strong>StockExport Microsoft</strong> (.xlsx) pour qualifier automatiquement
               vos lots (AGA Macron, Stock Award, ESPP…) à partir du type réel de chaque grant.
@@ -89,42 +89,49 @@ export function StockExportImporter({ grants, onGrantsChange }: StockExportImpor
               de grant ne sont jamais stockés en clair — uniquement un hash SHA-256.
             </p>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => inputRef.current?.click()}
-              disabled={loading}
-              className="gap-1.5"
-            >
-              {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {loading ? 'Analyse…' : 'Choisir un fichier'}
-            </Button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => inputRef.current?.click()}
+            disabled={loading}
+            className="gap-1.5"
+          >
+            {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            {loading ? 'Analyse…' : 'Choisir un fichier'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowGuide(true)}
+            className="gap-1.5"
+            aria-label="Afficher le guide de téléchargement du StockExport"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Comment le télécharger ?
+          </Button>
+          {grants.length > 0 && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowGuide(true)}
-              className="gap-1.5"
-              aria-label="Afficher le guide de téléchargement du StockExport"
+              onClick={handleClear}
+              className="gap-1.5 text-red-600 hover:text-red-700 ml-auto"
             >
-              <HelpCircle className="h-4 w-4" />
-              Comment le télécharger ?
+              <Trash2 className="h-4 w-4" />
+              Supprimer
             </Button>
-            {grants.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={handleClear} className="gap-1.5 text-red-600 hover:text-red-700">
-                <Trash2 className="h-4 w-4" />
-                Supprimer
-              </Button>
-            )}
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            className="hidden"
-            onChange={handleFile}
-          />
+          )}
         </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          className="hidden"
+          onChange={handleFile}
+        />
 
         <BrokerExportGuide
           open={showGuide}
