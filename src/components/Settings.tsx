@@ -11,12 +11,17 @@ import { Tooltip } from './ui/tooltip';
 import { saveVersionedSettings } from '../lib/storage';
 import { formatEUR } from '../lib/utils';
 import { StockExportImporter } from './StockExportImporter';
+import { DividendsImporter } from './DividendsImporter';
+import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 
 interface SettingsProps {
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
   grants?: GrantInfo[];
   onGrantsChange?: (grants: GrantInfo[]) => void;
+  dividends?: DividendEvent[];
+  cashInterest?: CashInterestEvent[];
+  onDividendsChange?: (payload: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => void;
 }
 
 function calculateTaxShares(familyStatus: FamilyStatus, numberOfChildren: number): number {
@@ -30,7 +35,7 @@ function calculateTaxShares(familyStatus: FamilyStatus, numberOfChildren: number
   return shares;
 }
 
-export function Settings({ settings, onSettingsChange, grants = [], onGrantsChange }: SettingsProps) {
+export function Settings({ settings, onSettingsChange, grants = [], onGrantsChange, dividends = [], cashInterest = [], onDividendsChange }: SettingsProps) {
   const [local, setLocal] = React.useState(settings);
   const [saved, setSaved] = React.useState(false);
   const [parsedNotice, setParsedNotice] = React.useState<TaxNoticeData | null>(null);
@@ -99,6 +104,13 @@ export function Settings({ settings, onSettingsChange, grants = [], onGrantsChan
         onGrantsChange={onGrantsChange ?? (() => {})}
         defaultPlanType={local.defaultPlanType}
         onDefaultPlanTypeChange={(value) => update({ defaultPlanType: value })}
+      />
+
+      {/* Transaction history import — enables dividend tracking + declaration boxes */}
+      <DividendsImporter
+        dividends={dividends}
+        cashInterest={cashInterest}
+        onDividendsChange={onDividendsChange ?? (() => {})}
       />
 
       {/* PDF import — always visible */}
