@@ -476,7 +476,7 @@ function App() {
             )}
             {lots.length > 0 && (
               <React.Suspense fallback={<LazyFallback />}>
-                <Portfolio lots={lots} onLotsChange={setLots} />
+                <Portfolio lots={lots} onLotsChange={setLots} grants={grants} />
               </React.Suspense>
             )}
           </div>
