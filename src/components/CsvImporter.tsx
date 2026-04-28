@@ -5,16 +5,24 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { useEcbConversion } from '../hooks/useEcbConversion';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
-import type { StockLot, SoldLot } from '../lib/types';
+import { brokerLabel } from '../lib/utils';
+import type { Broker, StockLot, SoldLot } from '../lib/types';
 
 type ImportMode = 'positions' | 'sales';
 
 interface CsvImporterProps {
+  /**
+   * Broker the CSV is being imported from. Currently only Fidelity is
+   * implemented; passing another value will display the broker name in labels
+   * but parsing logic remains Fidelity's. Lot 3 (Morgan Stanley) will introduce
+   * broker-specific parsing.
+   */
+  broker?: Broker;
   onImport: (lots: StockLot[]) => void;
   onImportSales?: (soldLots: SoldLot[]) => void;
 }
 
-export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportSales }: CsvImporterProps) {
+export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [fileName, setFileName] = React.useState<string | null>(null);
@@ -39,23 +47,38 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
         return;
       }
 
+      const isXlsx = /\.xlsx$/i.test(file.name);
+      // Only Morgan Stanley sales support XLSX today.
+      if (isXlsx && (broker !== 'morgan_stanley' || importMode !== 'sales')) {
+        setError('Le format XLSX n\u2019est accepté que pour les ventes Morgan Stanley.');
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
-          const text = e.target?.result as string;
-
           if (importMode === 'sales') {
-            const soldLots = parseSalesCsvFile(text);
+            let soldLots: SoldLot[];
+            if (broker === 'morgan_stanley') {
+              soldLots = isXlsx
+                ? await parseMsSalesXlsx(e.target?.result as ArrayBuffer)
+                : parseMsSalesCsv(e.target?.result as string);
+            } else {
+              soldLots = parseSalesCsvFile(e.target?.result as string);
+            }
             if (soldLots.length === 0) {
-              setError('Aucune vente trouvée dans le fichier. Vérifiez le format CSV.');
+              setError('Aucune vente trouvée dans le fichier. Vérifiez le format.');
               return;
             }
             const { converted } = await convertSoldLots(soldLots);
             onImportSales?.(converted);
           } else {
-            const lots = parseCsvFile(text);
+            const text = e.target?.result as string;
+            const lots = broker === 'morgan_stanley'
+              ? parseMsHoldingsCsv(text)
+              : parseCsvFile(text);
             if (lots.length === 0) {
-              setError('Aucun lot valide trouvé dans le fichier. Vérifiez le format CSV.');
+              setError('Aucun lot valide trouvé dans le fichier. Vérifiez le format.');
               return;
             }
             const { converted } = await convertLots(lots);
@@ -66,9 +89,13 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
         }
       };
       reader.onerror = () => setError('Erreur lors de la lecture du fichier.');
-      reader.readAsText(file, 'utf-8');
+      if (isXlsx) {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsText(file, 'utf-8');
+      }
     },
-    [onImport, onImportSales, importMode, convertLots, convertSoldLots]
+    [onImport, onImportSales, importMode, convertLots, convertSoldLots, broker]
   );
 
   const handleDrop = useCallback(
@@ -105,10 +132,10 @@ export const CsvImporter = React.memo(function CsvImporter({ onImport, onImportS
           <div>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Importer le fichier CSV Fidelity
+              Importer le fichier CSV {brokerLabel(broker)}
             </CardTitle>
             <CardDescription>
-              Glissez-déposez votre fichier d'export CSV du broker Fidelity ou cliquez pour sélectionner.
+              Glissez-déposez votre fichier d'export CSV {brokerLabel(broker)} ou cliquez pour sélectionner.
             </CardDescription>
           </div>
           <button

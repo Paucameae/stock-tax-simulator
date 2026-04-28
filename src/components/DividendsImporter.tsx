@@ -7,20 +7,25 @@ import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { transactionHistoryGuide } from './guides/transaction-history-steps';
 import { parseTransactionHistoryCsv, type DividendEvent, type CashInterestEvent } from '../lib/transaction-parser';
 import { saveDividends, clearDividends } from '../lib/storage';
-import { formatUSD } from '../lib/utils';
+import { brokerLabel, formatUSD } from '../lib/utils';
+import type { Broker } from '../lib/types';
 
 interface DividendsImporterProps {
+  /** Broker the transactions CSV is being imported from. Defaults to Fidelity. */
+  broker?: Broker;
   dividends: DividendEvent[];
   cashInterest: CashInterestEvent[];
   onDividendsChange: (payload: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => void;
 }
 
 /**
- * Import panel for the Fidelity Transaction History CSV.
- * Extracts MSFT dividends + US withholding tax; interest from the cash sweep is surfaced separately.
- * Fail-soft: errors are displayed inline, existing data is left untouched.
+ * Import panel for the broker's Transaction History CSV. Currently only the
+ * Fidelity format is parsed; other brokers will plug in via a registry in lot 3.
+ * Extracts MSFT dividends + US withholding tax; interest from the cash sweep is
+ * surfaced separately. Fail-soft: errors are displayed inline, existing data is
+ * left untouched.
  */
-export function DividendsImporter({ dividends, cashInterest, onDividendsChange }: DividendsImporterProps) {
+export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest, onDividendsChange }: DividendsImporterProps) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [warnings, setWarnings] = React.useState<string[]>([]);
@@ -39,7 +44,7 @@ export function DividendsImporter({ dividends, cashInterest, onDividendsChange }
       const content = await file.text();
       const parsed = parseTransactionHistoryCsv(content);
       if (parsed.dividends.length === 0 && parsed.cashInterest.length === 0) {
-        setError("Aucun dividende reconnu dans ce fichier. Vérifiez qu'il s'agit bien d'un historique des transactions Fidelity.");
+        setError(`Aucun dividende reconnu dans ce fichier. Vérifiez qu'il s'agit bien d'un historique des transactions ${brokerLabel(broker)}.`);
         return;
       }
       const importedAt = new Date().toISOString();
@@ -77,7 +82,7 @@ export function DividendsImporter({ dividends, cashInterest, onDividendsChange }
           <Coins className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0 text-sm text-gray-600">
             <p>
-              Importez votre <strong>historique des transactions Fidelity</strong> (CSV) pour extraire
+              Importez votre <strong>historique des transactions {brokerLabel(broker)}</strong> (CSV) pour extraire
               vos dividendes MSFT et la retenue à la source US. Indispensable pour pré-remplir les cases
               <strong> 2DC / 2AB / 2BH</strong> de la déclaration.
             </p>

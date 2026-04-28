@@ -6,9 +6,9 @@ import { Tooltip } from './ui/tooltip';
 import { Select } from './ui/select';
 import { BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
-import type { StockLot, StockOrigin, GrantInfo } from '../lib/types';
+import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
-import { formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
+import { brokerBadgeClass, brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
 import { UnvestedView } from './UnvestedView';
 import { DividendsView } from './DividendsView';
@@ -24,12 +24,19 @@ interface PortfolioProps {
 export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [] }: PortfolioProps) {
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
   const [filterHolding, setFilterHolding] = React.useState<'all' | 'Short' | 'Long'>('all');
+  const [filterBroker, setFilterBroker] = React.useState<Broker | 'all'>('all');
   const [sortBy, setSortBy] = React.useState<'date' | 'type' | 'gain'>('date');
+
+  const presentBrokers = React.useMemo(() => {
+    return Array.from(new Set(lots.map((l) => l.broker))) as Broker[];
+  }, [lots]);
+  const hasMultipleBrokers = presentBrokers.length > 1;
 
   const filteredLots = React.useMemo(() => {
     let result = [...lots];
     if (filterOrigin !== 'all') result = result.filter((l) => l.origin === filterOrigin);
     if (filterHolding !== 'all') result = result.filter((l) => l.holdingPeriod === filterHolding);
+    if (filterBroker !== 'all') result = result.filter((l) => l.broker === filterBroker);
 
     result.sort((a, b) => {
       if (sortBy === 'date') return b.acquisitionDate.getTime() - a.acquisitionDate.getTime();
@@ -38,7 +45,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
     });
 
     return result;
-  }, [lots, filterOrigin, filterHolding, sortBy]);
+  }, [lots, filterOrigin, filterHolding, filterBroker, sortBy]);
 
   const totalQuantity = lots.reduce((sum, l) => sum + l.quantity, 0);
   const totalValue = lots.reduce((sum, l) => sum + l.currentValue, 0);
@@ -156,6 +163,14 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
+        {hasMultipleBrokers && (
+          <Select value={filterBroker} onChange={(e) => setFilterBroker(e.target.value as Broker | 'all')} className="w-44" aria-label="Filtrer par courtier">
+            <option value="all">Tous courtiers</option>
+            {presentBrokers.map((b) => (
+              <option key={b} value={b}>{brokerLabel(b)}</option>
+            ))}
+          </Select>
+        )}
         <Select value={filterOrigin} onChange={(e) => setFilterOrigin(e.target.value as StockOrigin | 'all')} className="w-40">
           <option value="all">Tous types</option>
           <option value="SP">ESPP (SP)</option>
@@ -183,6 +198,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
               <thead>
                 <tr className="border-b bg-gray-50">
                   <th className="text-left p-3 font-medium">Date acq.</th>
+                  {hasMultipleBrokers && <th className="text-center p-3 font-medium">Courtier</th>}
                   <th className="text-right p-3 font-medium">Quantité</th>
                   <th className="text-right p-3 font-medium">Prix/action</th>
                   {hasUsdImport && (
@@ -214,6 +230,13 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                   return (
                     <tr key={lot.id} className="border-b hover:bg-gray-50">
                       <td className="p-3">{formatDate(lot.acquisitionDate)}</td>
+                      {hasMultipleBrokers && (
+                        <td className="p-3 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${brokerBadgeClass(lot.broker)}`}>
+                            {brokerLabel(lot.broker)}
+                          </span>
+                        </td>
+                      )}
                       <td className="p-3 text-right">{lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
                       <td className="p-3 text-right">{formatEUR(lot.costBasisPerShare)}</td>
                       {hasUsdImport && (
@@ -301,9 +324,16 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                       {lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions · {formatEUR(lot.costBasisPerShare)}/action
                     </div>
                   </div>
-                  <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
-                    {originLabel(lot.origin)}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
+                      {originLabel(lot.origin)}
+                    </Badge>
+                    {hasMultipleBrokers && (
+                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded border ${brokerBadgeClass(lot.broker)}`}>
+                        {brokerLabel(lot.broker)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
