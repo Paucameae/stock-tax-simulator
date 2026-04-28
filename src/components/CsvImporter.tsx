@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle } from 'lucide-react';
+import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
@@ -10,102 +10,168 @@ import { brokerLabel } from '../lib/utils';
 import type { Broker, StockLot, SoldLot } from '../lib/types';
 
 type ImportMode = 'positions' | 'sales';
+type FileKind = 'positions' | 'sales';
 
 interface CsvImporterProps {
   /**
    * Broker the CSV is being imported from. Selects the broker-specific
-   * parser. Currently supports 'fidelity' (CSV only) and 'morgan_stanley'
-   * (CSV for holdings, CSV or XLSX for sales).
+   * parser. Currently supports 'fidelity' (CSV only, with positions/sales
+   * toggle since these are two distinct exports) and 'morgan_stanley' (a
+   * single MS export bundles holdings and sales for the period; auto-detected
+   * here with no toggle, accepts CSV + XLSX, multi-file).
    */
   broker?: Broker;
   onImport: (lots: StockLot[]) => void;
   onImportSales?: (soldLots: SoldLot[]) => void;
 }
 
+/**
+ * Inspect the first few lines of a CSV to decide whether it is a Morgan
+ * Stanley "Holdings by Lot" file or a "Share Sales" file. Returns null when
+ * the format is not recognised.
+ */
+function detectMsCsvKind(text: string): FileKind | null {
+  // Read the first ~10 non-empty lines so we tolerate the small title row
+  // before the column header.
+  const head = text.split(/\r?\n/).slice(0, 10).map(l => l.trim()).filter(Boolean);
+  for (const line of head) {
+    if (line.startsWith('Holdings by Lot')) return 'positions';
+    if (line.startsWith('Acquisition Date,Savings Plan Name')) return 'positions';
+    // Share Sales header: Date,Plan Name,Fund Name,Type,Order Status,Sale Price,...
+    if (line.startsWith('Date,Plan Name,Fund Name')) return 'sales';
+  }
+  return null;
+}
+
+interface ImportedFile {
+  name: string;
+  kind: FileKind;
+}
+
 export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [fileName, setFileName] = React.useState<string | null>(null);
+  const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
   const [importMode, setImportMode] = React.useState<ImportMode>('positions');
   const [showGuide, setShowGuide] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const { convertLots, convertSoldLots, loading, error: ecbError } = useEcbConversion();
 
-  const handleFile = useCallback(
-    (file: File) => {
+  // Morgan Stanley exports bundle holdings + sales in a single archive: we
+  // route each dropped file by content (no positions/sales toggle).
+  const isAutoDetect = broker === 'morgan_stanley';
+  const accept = isAutoDetect ? '.csv,.xlsx' : '.csv';
+
+  const readAsText = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = () => reject(new Error('Lecture impossible.'));
+      r.readAsText(file, 'utf-8');
+    });
+
+  const readAsArrayBuffer = (file: File) =>
+    new Promise<ArrayBuffer>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as ArrayBuffer);
+      r.onerror = () => reject(new Error('Lecture impossible.'));
+      r.readAsArrayBuffer(file);
+    });
+
+  const handleFiles = useCallback(
+    async (files: File[]) => {
       setError(null);
-      setFileName(file.name);
 
-      // Guard against oversized files (DoS / UI freeze)
-      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-      if (file.size > MAX_FILE_SIZE) {
-        setError(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Taille maximale : 5 Mo.`);
-        return;
-      }
-      if (file.size === 0) {
-        setError('Le fichier est vide.');
-        return;
-      }
-
-      const isXlsx = /\.xlsx$/i.test(file.name);
-      // Only Morgan Stanley sales support XLSX today.
-      if (isXlsx && (broker !== 'morgan_stanley' || importMode !== 'sales')) {
-        setError('Le format XLSX n\u2019est accepté que pour les ventes Morgan Stanley.');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          if (importMode === 'sales') {
-            let soldLots: SoldLot[];
-            if (broker === 'morgan_stanley') {
-              soldLots = isXlsx
-                ? await parseMsSalesXlsx(e.target?.result as ArrayBuffer)
-                : parseMsSalesCsv(e.target?.result as string);
-            } else {
-              soldLots = parseSalesCsvFile(e.target?.result as string);
-            }
-            if (soldLots.length === 0) {
-              setError('Aucune vente trouvée dans le fichier. Vérifiez le format.');
-              return;
-            }
-            const { converted } = await convertSoldLots(soldLots);
-            onImportSales?.(converted);
-          } else {
-            const text = e.target?.result as string;
-            const lots = broker === 'morgan_stanley'
-              ? parseMsHoldingsCsv(text)
-              : parseCsvFile(text);
-            if (lots.length === 0) {
-              setError('Aucun lot valide trouvé dans le fichier. Vérifiez le format.');
-              return;
-            }
-            const { converted } = await convertLots(lots);
-            onImport(converted);
-          }
-        } catch (err) {
-          setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
+      const MAX_FILE_SIZE = 5 * 1024 * 1024;
+      for (const f of files) {
+        if (f.size > MAX_FILE_SIZE) {
+          setError(`Fichier trop volumineux (${(f.size / 1024 / 1024).toFixed(1)} Mo). Taille maximale : 5 Mo.`);
+          return;
         }
-      };
-      reader.onerror = () => setError('Erreur lors de la lecture du fichier.');
-      if (isXlsx) {
-        reader.readAsArrayBuffer(file);
-      } else {
-        reader.readAsText(file, 'utf-8');
+        if (f.size === 0) {
+          setError(`Le fichier ${f.name} est vide.`);
+          return;
+        }
+      }
+
+      const collectedLots: StockLot[] = [];
+      const collectedSold: SoldLot[] = [];
+      const processed: ImportedFile[] = [];
+
+      try {
+        for (const file of files) {
+          const isXlsx = /\.xlsx$/i.test(file.name);
+
+          if (isAutoDetect) {
+            // Morgan Stanley: detect kind per file and route.
+            if (isXlsx) {
+              // Only the Participant Share Sales Report is exported as XLSX.
+              const buf = await readAsArrayBuffer(file);
+              const sold = await parseMsSalesXlsx(buf);
+              if (sold.length === 0) throw new Error(`Aucune vente trouvée dans ${file.name}.`);
+              collectedSold.push(...sold);
+              processed.push({ name: file.name, kind: 'sales' });
+            } else {
+              const text = await readAsText(file);
+              const kind = detectMsCsvKind(text);
+              if (kind === null) {
+                throw new Error(`Format Morgan Stanley non reconnu pour ${file.name}. Attendu : « Holdings by Lot » ou « Share Sales ».`);
+              }
+              if (kind === 'positions') {
+                const lots = parseMsHoldingsCsv(text);
+                if (lots.length === 0) throw new Error(`Aucun lot valide dans ${file.name}.`);
+                collectedLots.push(...lots);
+              } else {
+                const sold = parseMsSalesCsv(text);
+                if (sold.length === 0) throw new Error(`Aucune vente trouvée dans ${file.name}.`);
+                collectedSold.push(...sold);
+              }
+              processed.push({ name: file.name, kind });
+            }
+          } else {
+            // Fidelity: explicit toggle.
+            if (isXlsx) {
+              throw new Error('Le format XLSX n\u2019est pas accepté pour Fidelity. Utilisez le CSV.');
+            }
+            const text = await readAsText(file);
+            if (importMode === 'sales') {
+              const sold = parseSalesCsvFile(text);
+              if (sold.length === 0) throw new Error(`Aucune vente trouvée dans ${file.name}.`);
+              collectedSold.push(...sold);
+              processed.push({ name: file.name, kind: 'sales' });
+            } else {
+              const lots = parseCsvFile(text);
+              if (lots.length === 0) throw new Error(`Aucun lot valide dans ${file.name}.`);
+              collectedLots.push(...lots);
+              processed.push({ name: file.name, kind: 'positions' });
+            }
+          }
+        }
+
+        if (collectedLots.length > 0) {
+          const { converted } = await convertLots(collectedLots);
+          onImport(converted);
+        }
+        if (collectedSold.length > 0) {
+          const { converted } = await convertSoldLots(collectedSold);
+          onImportSales?.(converted);
+        }
+        setImportedFiles(processed);
+      } catch (err) {
+        setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
       }
     },
-    [onImport, onImportSales, importMode, convertLots, convertSoldLots, broker]
+    [onImport, onImportSales, importMode, convertLots, convertSoldLots, isAutoDetect]
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) handleFiles(files);
     },
-    [handleFile]
+    [handleFiles]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -119,10 +185,10 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
+      const files = Array.from(e.target.files ?? []);
+      if (files.length > 0) handleFiles(files);
     },
-    [handleFile]
+    [handleFiles]
   );
 
   return (
@@ -132,10 +198,12 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           <div>
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Importer le fichier CSV {brokerLabel(broker)}
+              Importer l{'\u2019'}export {brokerLabel(broker)}
             </CardTitle>
             <CardDescription>
-              Glissez-déposez votre fichier d'export CSV {brokerLabel(broker)} ou cliquez pour sélectionner.
+              {isAutoDetect
+                ? <>Déposez le ou les fichiers issus de l{'\u2019'}export Morgan Stanley (CSV ou XLSX). Positions et ventes sont détectées automatiquement.</>
+                : <>Glissez-déposez votre fichier d{'\u2019'}export CSV {brokerLabel(broker)} ou cliquez pour sélectionner.</>}
             </CardDescription>
           </div>
           <button
@@ -150,7 +218,9 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         </div>
       </CardHeader>
       <CardContent>
-        {/* Import mode selector */}
+        {/* Import mode selector — only when explicit positions/sales separation
+            makes sense. Morgan Stanley exports bundle both, so we hide it. */}
+        {!isAutoDetect && (
         <div className="flex w-full gap-3 mb-4">
           <button
             type="button"
@@ -159,7 +229,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
                 ? 'bg-primary/5 border-primary'
                 : 'bg-white border-gray-200 hover:border-gray-300'
             }`}
-            onClick={() => { setImportMode('positions'); setFileName(null); setError(null); }}
+            onClick={() => { setImportMode('positions'); setImportedFiles([]); setError(null); }}
           >
             <span className={`flex items-center gap-2 text-sm font-medium ${
               importMode === 'positions' ? 'text-primary' : 'text-gray-700'
@@ -178,7 +248,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
                 ? 'bg-primary/5 border-primary'
                 : 'bg-white border-gray-200 hover:border-gray-300'
             }`}
-            onClick={() => { setImportMode('sales'); setFileName(null); setError(null); }}
+            onClick={() => { setImportMode('sales'); setImportedFiles([]); setError(null); }}
           >
             <span className={`flex items-center gap-2 text-sm font-medium ${
               importMode === 'sales' ? 'text-primary' : 'text-gray-700'
@@ -191,6 +261,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
             </span>
           </button>
         </div>
+        )}
 
         {/* USD requirement info */}
         <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
@@ -235,10 +306,20 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         >
           <Upload className="h-10 w-10 mx-auto mb-3 text-gray-400" aria-hidden="true" />
           <p className="text-sm text-gray-600 mb-2">
-            {fileName ? (
-              <>Fichier chargé : <strong>{fileName}</strong></>
+            {importedFiles.length > 0 ? (
+              <span className="flex flex-col items-center gap-1">
+                {importedFiles.map((f, i) => (
+                  <span key={i} className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                    <strong>{f.name}</strong>
+                    <span className="text-xs text-gray-500">({f.kind === 'positions' ? 'positions' : 'ventes'})</span>
+                  </span>
+                ))}
+              </span>
             ) : (
-              'Glissez votre fichier CSV ici ou cliquez pour parcourir'
+              isAutoDetect
+                ? 'Glissez vos fichiers (CSV ou XLSX) ici ou cliquez pour parcourir'
+                : 'Glissez votre fichier CSV ici ou cliquez pour parcourir'
             )}
           </p>
           <Button variant="outline" size="sm" type="button">
@@ -247,7 +328,8 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           <input
             ref={fileInputRef}
             type="file"
-            accept={broker === 'morgan_stanley' && importMode === 'sales' ? '.csv,.xlsx' : '.csv'}
+            accept={accept}
+            multiple={isAutoDetect}
             className="hidden"
             onChange={handleInputChange}
           />
