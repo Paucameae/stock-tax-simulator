@@ -1,4 +1,4 @@
-﻿import { Database, Building2, Lock } from 'lucide-react';
+import { Database, Building2 } from 'lucide-react';
 import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
@@ -20,20 +20,13 @@ interface DataPanelProps {
 
 interface BrokerSectionHeaderProps {
   broker: Broker;
-  available: boolean;
 }
 
-function BrokerSectionHeader({ broker, available }: BrokerSectionHeaderProps) {
+function BrokerSectionHeader({ broker }: BrokerSectionHeaderProps) {
   return (
     <div className="flex items-center gap-2 mt-2 mb-1">
       <Building2 className="h-4 w-4 text-gray-500" />
       <h3 className="text-sm font-semibold text-gray-800">{brokerLabel(broker)}</h3>
-      {!available && (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium uppercase rounded-full bg-gray-100 text-gray-500 border border-gray-200">
-          <Lock className="h-3 w-3" />
-          À venir
-        </span>
-      )}
     </div>
   );
 }
@@ -41,9 +34,10 @@ function BrokerSectionHeader({ broker, available }: BrokerSectionHeaderProps) {
 /**
  * Data hub for broker / employer imports. Organised top-down:
  *   1. Microsoft StockExport (grants metadata, used to reconcile lot origins).
- *   2. Per-broker imports (positions / sales / transactions). Currently only
- *      Fidelity is wired — Morgan Stanley is shown as a disabled placeholder
- *      that lot 3 will activate.
+ *   2. Per-broker imports (positions / sales / transactions). Fidelity supports
+ *      CSV positions/sales + transactions (dividends). Morgan Stanley supports
+ *      its "Holdings by Lot" CSV (positions) and "Participant Share Sales
+ *      Report" CSV/XLSX (sales).
  *
  * Tax notice PDF and backup/restore live in Settings since they configure
  * the app itself rather than import external broker data.
@@ -81,7 +75,7 @@ export function DataPanel({
         onDefaultPlanTypeChange={onDefaultPlanTypeChange}
       />
 
-      <BrokerSectionHeader broker="fidelity" available />
+      <BrokerSectionHeader broker="fidelity" />
       <CsvImporter broker="fidelity" onImport={onImportLots} onImportSales={onImportSales} />
       <DividendsImporter
         broker="fidelity"
@@ -90,15 +84,12 @@ export function DataPanel({
         onDividendsChange={onDividendsChange}
       />
 
-      <BrokerSectionHeader broker="morgan_stanley" available={false} />
-      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 text-sm text-gray-600">
-        <p className="font-medium text-gray-800 mb-1">Import Morgan Stanley</p>
-        <p>
-          Le support de l'export Morgan Stanley (CSV ou XLSX, contenant à la fois
-          les positions détenues et les ventes effectuées sur la plage exportée)
-          est en cours d'intégration. Cette section sera activée prochainement.
-        </p>
-      </div>
+      <BrokerSectionHeader broker="morgan_stanley" />
+      <CsvImporter broker="morgan_stanley" onImport={onImportLots} onImportSales={onImportSales} />
+      <p className="text-xs text-gray-500 -mt-3 ml-1">
+        Morgan Stanley n'expose pas d'historique de dividendes exploitable&nbsp;:
+        l'éventuel cash en attente apparaît dans les positions et n'est pas importé.
+      </p>
     </div>
   );
 }

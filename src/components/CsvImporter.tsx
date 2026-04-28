@@ -3,6 +3,7 @@ import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle } fro
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
+import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsSalesXlsx } from '../lib/brokers/morgan-stanley';
 import { useEcbConversion } from '../hooks/useEcbConversion';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { brokerLabel } from '../lib/utils';
@@ -12,10 +13,9 @@ type ImportMode = 'positions' | 'sales';
 
 interface CsvImporterProps {
   /**
-   * Broker the CSV is being imported from. Currently only Fidelity is
-   * implemented; passing another value will display the broker name in labels
-   * but parsing logic remains Fidelity's. Lot 3 (Morgan Stanley) will introduce
-   * broker-specific parsing.
+   * Broker the CSV is being imported from. Selects the broker-specific
+   * parser. Currently supports 'fidelity' (CSV only) and 'morgan_stanley'
+   * (CSV for holdings, CSV or XLSX for sales).
    */
   broker?: Broker;
   onImport: (lots: StockLot[]) => void;
@@ -196,9 +196,9 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
           <DollarSign className="h-4 w-4 shrink-0" />
           <span>
-            Le fichier CSV doit être en <strong>dollars (USD)</strong>.
+            Le fichier doit être en <strong>dollars (USD)</strong>.
             Les taux de change BCE seront récupérés automatiquement pour chaque date.
-            Exportez votre fichier depuis Fidelity avec l'option «&nbsp;USD&nbsp;».
+            {broker === 'fidelity' && <> Exportez votre fichier depuis Fidelity avec l'option «&nbsp;USD&nbsp;».</>}
           </span>
         </div>
 
@@ -247,7 +247,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv"
+            accept={broker === 'morgan_stanley' && importMode === 'sales' ? '.csv,.xlsx' : '.csv'}
             className="hidden"
             onChange={handleInputChange}
           />
