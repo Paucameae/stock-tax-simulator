@@ -17,6 +17,7 @@ vi.mock('recharts', () => ({
 function makeLot(overrides: Partial<StockLot> = {}): StockLot {
   return {
     id: 'lot-1',
+    broker: 'fidelity',
     acquisitionDate: new Date(2023, 5, 10),
     quantity: 100,
     costBasisPerShare: 200,
