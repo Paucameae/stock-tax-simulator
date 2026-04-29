@@ -103,7 +103,9 @@ export function DataPanel({
   return (
     <div className="space-y-8 max-w-4xl pb-6">
       <header className="flex items-start gap-3">
-        <Database className="h-5 w-5 text-primary mt-1 shrink-0" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+          <Database className="h-5 w-5" />
+        </div>
         <div>
           <h2 className="text-lg font-semibold">Mes données</h2>
           <p className="text-sm text-gray-600">
@@ -116,7 +118,7 @@ export function DataPanel({
       </header>
 
       {/* 1. Grants & vesting (transverse) */}
-      <section className="space-y-3">
+      <section className="space-y-4">
         <SectionHeader
           step={1}
           icon={<Award className="h-5 w-5" />}
@@ -144,7 +146,7 @@ export function DataPanel({
           broker="fidelity"
           description="Trois fichiers distincts : positions (snapshot du portefeuille), ventes (réalisations de l'année), et historique des transactions (dividendes & intérêts)."
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             <SubLabel label="Positions & ventes" />
             <CsvImporter
               broker="fidelity"
@@ -153,7 +155,7 @@ export function DataPanel({
               embedded
             />
           </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <SubLabel label="Dividendes & intérêts" />
             <DividendsImporter
               broker="fidelity"
@@ -177,7 +179,7 @@ export function DataPanel({
             embedded
           />
           {dividends.some((d) => d.broker === 'morgan_stanley') ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <SubLabel label="Dividendes réinvestis (DRIP)" />
               <DividendsSummary
                 dividends={dividends.filter((d) => d.broker === 'morgan_stanley')}
