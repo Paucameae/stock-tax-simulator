@@ -175,7 +175,11 @@ function findHeaderIndex(cells: string[]): Record<keyof ShareSaleRow, number> | 
   return idx as Record<keyof ShareSaleRow, number>;
 }
 
-function rowsFromCells(rows: string[][]): SoldLot[] {
+/**
+ * Same as `rowsFromCells` but returns null when no recognizable Share Sales
+ * header is found. Used by the XLSX path which scans multiple sheets.
+ */
+function tryRowsFromCells(rows: string[][]): SoldLot[] | null {
   if (rows.length > MAX_ROWS) {
     throw new Error(`Le fichier contient trop de lignes (${rows.length}). Maximum autorisé : ${MAX_ROWS}.`);
   }
@@ -210,10 +214,15 @@ function rowsFromCells(rows: string[][]): SoldLot[] {
     if (sold) out.push(sold);
   }
 
-  if (!headerIdx) {
+  return headerIdx ? out : null;
+}
+
+function rowsFromCells(rows: string[][]): SoldLot[] {
+  const result = tryRowsFromCells(rows);
+  if (result === null) {
     throw new Error('Format Morgan Stanley non reconnu : en-tête « Share Sales » introuvable.');
   }
-  return out;
+  return result;
 }
 
 /** Parse a Morgan Stanley "Share Sales.csv" (or the equivalent personal `.csv`). */
@@ -227,25 +236,45 @@ export function parseMsSalesCsv(csvText: string): SoldLot[] {
 
 /** Parse a Morgan Stanley "Participant Share Sales Report" XLSX file. */
 export async function parseMsSalesXlsx(buffer: ArrayBuffer): Promise<SoldLot[]> {
-  // Read workbook + first sheet (the "Activity" sheet that contains Share Sales)
-  const wanted = [
-    'xl/workbook.xml',
-    'xl/sharedStrings.xml',
-    'xl/worksheets/sheet1.xml',
-  ];
+  // The Participant Share Sales Report typically ships with several sheets
+  // (Summary, Activity, Notes…). The Share Sales table is not always sheet 1,
+  // so we try every sheet and keep the first one whose first row matches our
+  // header signature.
+  const MAX_SHEETS = 20;
+  const sheetNames: string[] = [];
+  for (let i = 1; i <= MAX_SHEETS; i++) sheetNames.push(`xl/worksheets/sheet${i}.xml`);
+  const wanted = ['xl/sharedStrings.xml', ...sheetNames];
+
   const parts = await readXlsx(buffer, wanted);
-  const sheetXml = parts.get('xl/worksheets/sheet1.xml');
-  if (!sheetXml) {
-    throw new Error('Fichier XLSX Morgan Stanley invalide : feuille « Activity » introuvable.');
-  }
   const sharedStrings = parts.has('xl/sharedStrings.xml')
     ? parseSharedStrings(parts.get('xl/sharedStrings.xml')!)
     : [];
-  const sheetRows = parseWorksheet(sheetXml, sharedStrings);
 
-  // Convert SheetRow[] (column-letter keyed) to string[][]
-  const cellsRows: string[][] = sheetRows.map(r => {
-    // Determine max column used
+  const errors: string[] = [];
+  for (const name of sheetNames) {
+    const sheetXml = parts.get(name);
+    if (!sheetXml) continue;
+    const sheetRows = parseWorksheet(sheetXml, sharedStrings);
+    const cellsRows = sheetRowsToCellsArray(sheetRows);
+    try {
+      const result = tryRowsFromCells(cellsRows);
+      if (result !== null) return result;
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors[0]);
+  }
+  throw new Error(
+    'Fichier XLSX Morgan Stanley non reconnu : aucune feuille ne contient l’en-tête « Share Sales ». Vérifiez que c’est bien le « Participant Share Sales Report ».',
+  );
+}
+
+/** Convert SheetRow[] (column-letter keyed) into a dense 2D string array. */
+function sheetRowsToCellsArray(sheetRows: { cells: Record<string, string> }[]): string[][] {
+  return sheetRows.map(r => {
     const cols = Object.keys(r.cells);
     if (cols.length === 0) return [];
     let maxIdx = 0;
@@ -254,8 +283,6 @@ export async function parseMsSalesXlsx(buffer: ArrayBuffer): Promise<SoldLot[]> 
     for (const c of cols) arr[columnLetterToIndex(c)] = r.cells[c];
     return arr;
   });
-
-  return rowsFromCells(cellsRows);
 }
 
 /** Convert a column letter ("A", "B", "AA") to a 0-based index. */
