@@ -167,6 +167,11 @@ function App() {
   const [simEntries, setSimEntries] = React.useState<SaleLotEntry[]>([]);
   const [simTaxMode, setSimTaxMode] = React.useState<TaxMode>('pfu');
   const [simResult, setSimResult] = React.useState<TaxSimulationResult | null>(null);
+  // Ref + flash state used to scroll the tax-result block into view and briefly
+  // highlight it when the user clicks "Simuler la vente" — otherwise the result
+  // appears far below the fold and the click looks like a no-op.
+  const simResultRef = React.useRef<HTMLDivElement | null>(null);
+  const [simResultFlash, setSimResultFlash] = React.useState(false);
   const [settings, setSettings] = React.useState<AppSettings>(() => {
     return loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
   });
@@ -432,6 +437,15 @@ function App() {
     safeSetItem('savedSimulations', JSON.stringify(updatedSimulations));
 
     setActiveTab('simulator');
+
+    // Defer until after the TaxCalculator has rendered the new result so the
+    // scroll target's height is correct, then briefly flash it to confirm
+    // the simulation has been (re)computed.
+    requestAnimationFrame(() => {
+      simResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setSimResultFlash(true);
+      window.setTimeout(() => setSimResultFlash(false), 1200);
+    });
   }, [simTaxMode, simFiscalYear, settings, savedSimulations]);
 
   const handleSimTaxModeChange = React.useCallback((mode: TaxMode) => {
@@ -636,7 +650,12 @@ function App() {
             ) : (
               <>
                 <SaleSimulator lots={lots} settings={settings} onSimulate={handleSimulate} />
-                <TaxCalculator result={simResult} taxMode={simTaxMode} onTaxModeChange={handleSimTaxModeChange} fiscalYear={simFiscalYear} familyStatus={settings.familyStatus} />
+                <div
+                  ref={simResultRef}
+                  className={`scroll-mt-4 rounded-lg transition-shadow duration-500 ${simResultFlash ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+                >
+                  <TaxCalculator result={simResult} taxMode={simTaxMode} onTaxModeChange={handleSimTaxModeChange} fiscalYear={simFiscalYear} familyStatus={settings.familyStatus} />
+                </div>
                 {simEntries.length > 0 && (
                   <PfuVsBaremeComparator lots={simEntries} settings={settings} fiscalYear={simFiscalYear} />
                 )}
