@@ -62,7 +62,7 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
   const isDirty = JSON.stringify(local) !== JSON.stringify(settings);
 
   return (
-    <div className="space-y-6 max-w-2xl pb-6">
+    <div className="space-y-6 max-w-2xl mx-auto pb-6">
       <TaxNoticeImporter settings={settings} onSettingsChange={onSettingsChange} />
 
       <Card>
