@@ -255,6 +255,30 @@ function App() {
     [],
   );
 
+  /**
+   * Called by the Morgan Stanley CsvImporter when the activity report
+   * contains DRIP dividend rows. We merge by broker: existing MS dividends
+   * are dropped (re-importing the same period is the way to refresh them)
+   * and replaced by the freshly parsed batch; dividends from other brokers
+   * are preserved untouched. Cash interest is unaffected (MS does not
+   * expose any).
+   */
+  const handleImportMsDividends = React.useCallback(
+    (msDividends: DividendEvent[]) => {
+      setDividends((prev) => {
+        const others = prev.filter((d) => d.broker !== 'morgan_stanley');
+        const next = [...others, ...msDividends];
+        saveDividends({
+          dividends: next,
+          cashInterest,
+          importedAt: new Date().toISOString(),
+        });
+        return next;
+      });
+    },
+    [cashInterest],
+  );
+
   const handleImportSales = React.useCallback((importedSoldLots: SoldLot[]) => {
     const withPlanType = importedSoldLots.map((sl) => ({
       ...sl,
@@ -615,6 +639,7 @@ function App() {
             dividends={dividends}
             cashInterest={cashInterest}
             onDividendsChange={handleDividendsChange}
+            onImportMsDividends={handleImportMsDividends}
             onDefaultPlanTypeChange={(value) => {
               const next = { ...settings, defaultPlanType: value };
               setSettings(next);

@@ -1,4 +1,4 @@
-﻿import { Database, Award, Briefcase, Coins, Lock, Building2 } from 'lucide-react';
+﻿import { Database, Award, Briefcase, Coins, Building2 } from 'lucide-react';
 import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
@@ -13,6 +13,8 @@ interface DataPanelProps {
   dividends: DividendEvent[];
   cashInterest: CashInterestEvent[];
   onDividendsChange: (p: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => void;
+  /** Merge dividends extracted from a Morgan Stanley activity report (replaces the MS subset only). */
+  onImportMsDividends: (dividends: DividendEvent[]) => void;
   onDefaultPlanTypeChange: (v: AppSettings['defaultPlanType']) => void;
   onImportLots: (lots: StockLot[]) => void;
   onImportSales: (soldLots: SoldLot[]) => void;
@@ -82,6 +84,7 @@ export function DataPanel({
   dividends,
   cashInterest,
   onDividendsChange,
+  onImportMsDividends,
   onDefaultPlanTypeChange,
   onImportLots,
   onImportSales,
@@ -132,7 +135,12 @@ export function DataPanel({
         </div>
         <div className="space-y-3">
           <BrokerSubheader broker="morgan_stanley" />
-          <CsvImporter broker="morgan_stanley" onImport={onImportLots} onImportSales={onImportSales} />
+          <CsvImporter
+            broker="morgan_stanley"
+            onImport={onImportLots}
+            onImportSales={onImportSales}
+            onImportDividends={onImportMsDividends}
+          />
         </div>
       </section>
 
@@ -156,11 +164,15 @@ export function DataPanel({
         <div className="space-y-3">
           <BrokerSubheader broker="morgan_stanley" />
           <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600 flex items-start gap-2.5">
-            <Lock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+            <Coins className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
             <p>
-              <span className="font-medium text-gray-800">Non disponible.</span>{' '}
-              Morgan Stanley n'expose pas d'historique de dividendes exploitable&nbsp;:
-              l'éventuel cash en attente apparaît directement dans les positions.
+              <span className="font-medium text-gray-800">Importé automatiquement.</span>{' '}
+              Les dividendes réinvestis (DRIP) figurent déjà dans le rapport
+              d'activité Morgan Stanley importé à l'étape 2{'\u00A0'}: ils sont
+              extraits puis ajoutés à la déclaration des dividendes. Hypothèse
+              retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}» est nette de
+              la retenue à la source US de 15{'\u00A0'}%, le brut et le crédit
+              d'impôt conventionnel sont reconstruits en conséquence.
             </p>
           </div>
         </div>

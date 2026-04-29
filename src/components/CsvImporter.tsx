@@ -3,14 +3,15 @@ import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, Chec
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
-import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsSalesXlsx } from '../lib/brokers/morgan-stanley';
+import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsActivityXlsx } from '../lib/brokers/morgan-stanley';
 import { useEcbConversion } from '../hooks/useEcbConversion';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { brokerLabel } from '../lib/utils';
 import type { Broker, StockLot, SoldLot } from '../lib/types';
+import type { DividendEvent } from '../lib/transaction-parser';
 
 type ImportMode = 'positions' | 'sales';
-type FileKind = 'positions' | 'sales';
+type FileKind = 'positions' | 'sales' | 'activity';
 
 interface CsvImporterProps {
   /**
@@ -23,6 +24,15 @@ interface CsvImporterProps {
   broker?: Broker;
   onImport: (lots: StockLot[]) => void;
   onImportSales?: (soldLots: SoldLot[]) => void;
+  /**
+   * Optional callback invoked when the imported file also contains dividend
+   * events (currently the case for the Morgan Stanley "Participant Share
+   * Sales Report" XLSX, which bundles DRIP rows alongside positions and
+   * sales). Receives only the dividends from this import; merging with any
+   * previously-stored dividends from other brokers is the caller's
+   * responsibility.
+   */
+  onImportDividends?: (dividends: DividendEvent[]) => void;
 }
 
 /**
@@ -46,9 +56,11 @@ function detectMsCsvKind(text: string): FileKind | null {
 interface ImportedFile {
   name: string;
   kind: FileKind;
+  /** Optional human-readable summary appended to the kind tag (e.g. "30 positions, 12 ventes, 8 dividendes"). */
+  summary?: string;
 }
 
-export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales }: CsvImporterProps) {
+export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
@@ -96,6 +108,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
 
       const collectedLots: StockLot[] = [];
       const collectedSold: SoldLot[] = [];
+      const collectedDividends: DividendEvent[] = [];
       const processed: ImportedFile[] = [];
 
       try {
@@ -105,12 +118,22 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           if (isAutoDetect) {
             // Morgan Stanley: detect kind per file and route.
             if (isXlsx) {
-              // Only the Participant Share Sales Report is exported as XLSX.
+              // The Participant Share Sales Report bundles up to three
+              // sections in a single XLSX: sales, positions, and dividend
+              // reinvestment activity. Any of them may be empty.
               const buf = await readAsArrayBuffer(file);
-              const sold = await parseMsSalesXlsx(buf);
-              if (sold.length === 0) throw new Error(`Aucune vente trouvée dans ${file.name}.`);
-              collectedSold.push(...sold);
-              processed.push({ name: file.name, kind: 'sales' });
+              const result = await parseMsActivityXlsx(buf);
+              if (result.soldLots.length === 0 && result.lots.length === 0 && result.dividends.length === 0) {
+                throw new Error(`Aucune donnée exploitable dans ${file.name} (ni vente, ni position, ni dividende).`);
+              }
+              collectedSold.push(...result.soldLots);
+              collectedLots.push(...result.lots);
+              collectedDividends.push(...result.dividends);
+              const parts: string[] = [];
+              if (result.lots.length > 0) parts.push(`${result.lots.length} positions`);
+              if (result.soldLots.length > 0) parts.push(`${result.soldLots.length} ventes`);
+              if (result.dividends.length > 0) parts.push(`${result.dividends.length} dividendes`);
+              processed.push({ name: file.name, kind: 'activity', summary: parts.join(', ') });
             } else {
               const text = await readAsText(file);
               const kind = detectMsCsvKind(text);
@@ -156,12 +179,15 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           const { converted } = await convertSoldLots(collectedSold);
           onImportSales?.(converted);
         }
+        if (collectedDividends.length > 0) {
+          onImportDividends?.(collectedDividends);
+        }
         setImportedFiles(processed);
       } catch (err) {
         setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
       }
     },
-    [onImport, onImportSales, importMode, convertLots, convertSoldLots, isAutoDetect]
+    [onImport, onImportSales, onImportDividends, importMode, convertLots, convertSoldLots, isAutoDetect]
   );
 
   const handleDrop = useCallback(
@@ -312,7 +338,9 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
                   <span key={i} className="flex items-center gap-1.5">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
                     <strong>{f.name}</strong>
-                    <span className="text-xs text-gray-500">({f.kind === 'positions' ? 'positions' : 'ventes'})</span>
+                    <span className="text-xs text-gray-500">
+                      ({f.summary ?? (f.kind === 'positions' ? 'positions' : 'ventes')})
+                    </span>
                   </span>
                 ))}
               </span>
