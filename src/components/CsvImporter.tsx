@@ -33,6 +33,12 @@ interface CsvImporterProps {
    * responsibility.
    */
   onImportDividends?: (dividends: DividendEvent[]) => void;
+  /**
+   * When rendered inside a BrokerSection card, set this to true to drop the
+   * outer Card wrapper and the redundant "Importer l'export ..." title.
+   * The broker identity is already given by the parent section.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -60,7 +66,7 @@ interface ImportedFile {
   summary?: string;
 }
 
-export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends }: CsvImporterProps) {
+export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends, embedded = false }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
@@ -217,36 +223,23 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
     [handleFiles]
   );
 
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Importer l{'\u2019'}export {brokerLabel(broker)}
-            </CardTitle>
-            <CardDescription>
-              {isAutoDetect
-                ? <>Déposez le ou les fichiers issus de l{'\u2019'}export Morgan Stanley (CSV ou XLSX). Positions et ventes sont détectées automatiquement.</>
-                : <>Glissez-déposez votre fichier d{'\u2019'}export CSV {brokerLabel(broker)} ou cliquez pour sélectionner.</>}
-            </CardDescription>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowGuide(true)}
-            aria-label="Afficher le guide d'export depuis le courtier"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-primary transition-colors whitespace-nowrap shrink-0"
-          >
-            <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
-            Comment exporter ?
-          </button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {/* Import mode selector — only when explicit positions/sales separation
-            makes sense. Morgan Stanley exports bundle both, so we hide it. */}
-        {!isAutoDetect && (
+  const helpButton = (
+    <button
+      type="button"
+      onClick={() => setShowGuide(true)}
+      aria-label="Afficher le guide d'export depuis le courtier"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-primary transition-colors whitespace-nowrap shrink-0"
+    >
+      <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+      Comment exporter ?
+    </button>
+  );
+
+  const body = (
+    <>
+      {/* Import mode selector — only when explicit positions/sales separation
+          makes sense. Morgan Stanley exports bundle both, so we hide it. */}
+      {!isAutoDetect && (
         <div className="flex w-full gap-3 mb-4">
           <button
             type="button"
@@ -373,7 +366,37 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         )}
 
         <BrokerExportGuide open={showGuide} onClose={() => setShowGuide(false)} />
-      </CardContent>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-3">
+        <div className="flex justify-end">{helpButton}</div>
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Importer l{'\u2019'}export {brokerLabel(broker)}
+            </CardTitle>
+            <CardDescription>
+              {isAutoDetect
+                ? <>Déposez le ou les fichiers issus de l{'\u2019'}export Morgan Stanley (CSV ou XLSX). Positions et ventes sont détectées automatiquement.</>
+                : <>Glissez-déposez votre fichier d{'\u2019'}export CSV {brokerLabel(broker)} ou cliquez pour sélectionner.</>}
+            </CardDescription>
+          </div>
+          {helpButton}
+        </div>
+      </CardHeader>
+      <CardContent>{body}</CardContent>
     </Card>
   );
 });

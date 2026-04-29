@@ -4,7 +4,7 @@ import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
 import { DividendsSummary } from './DividendsSummary';
 import { BrokerLogo } from './BrokerLogo';
-import { brokerBadgeClass } from '../lib/utils';
+import { brokerLabel, brokerBadgeClass } from '../lib/utils';
 import type { AppSettings, Broker, GrantInfo, StockLot, SoldLot } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 
@@ -53,15 +53,20 @@ interface BrokerSectionProps {
   children: React.ReactNode;
 }
 
-/** Sub-section grouping all imports for a single broker. */
+/**
+ * Sub-section grouping all imports for a single broker. The card carries
+ * the broker identity (logo + name + description) so its embedded
+ * importers can drop their own redundant headers.
+ */
 function BrokerSection({ broker, description, children }: BrokerSectionProps) {
   return (
-    <div className={`rounded-xl border ${brokerBadgeClass(broker)} bg-white p-4 space-y-3`}>
-      <div className="flex items-center gap-3">
+    <div className={`rounded-xl border ${brokerBadgeClass(broker)} bg-white p-5 space-y-4`}>
+      <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
         <BrokerLogo broker={broker} className="h-6" />
+        <h4 className="text-sm font-semibold text-gray-900">{brokerLabel(broker)}</h4>
       </div>
-      <p className="text-xs text-gray-600 -mt-1">{description}</p>
-      <div className="space-y-3">{children}</div>
+      <p className="text-xs text-gray-600 -mt-2">{description}</p>
+      <div className="space-y-4">{children}</div>
     </div>
   );
 }
@@ -72,7 +77,7 @@ interface SubLabelProps {
 
 function SubLabel({ label }: SubLabelProps) {
   return (
-    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide pb-1 border-b border-gray-100">
       {label}
     </div>
   );
@@ -82,14 +87,6 @@ function SubLabel({ label }: SubLabelProps) {
  * Data hub for broker / employer imports. Organised so that each courtier
  * has its own self-contained section: re-importing one courtier never
  * affects data already loaded from another.
- *
- *   1. Attributions & vesting (Microsoft StockExport, employer-wide and
- *      transverse to courtiers).
- *   2. Mes données par courtier — one card per courtier, grouping that
- *      courtier's positions, sales and dividends.
- *
- * Tax notice PDF and backup/restore live in Settings since they configure
- * the app itself rather than import external broker data.
  */
 export function DataPanel({
   settings,
@@ -104,7 +101,7 @@ export function DataPanel({
   onImportSales,
 }: DataPanelProps) {
   return (
-    <div className="space-y-6 max-w-2xl pb-6">
+    <div className="space-y-8 max-w-4xl pb-6">
       <header className="flex items-start gap-3">
         <Database className="h-5 w-5 text-primary mt-1 shrink-0" />
         <div>
@@ -135,7 +132,7 @@ export function DataPanel({
       </section>
 
       {/* 2. Per-broker data */}
-      <section className="space-y-3">
+      <section className="space-y-4">
         <SectionHeader
           step={2}
           icon={<Building2 className="h-5 w-5" />}
@@ -147,17 +144,23 @@ export function DataPanel({
           broker="fidelity"
           description="Trois fichiers distincts : positions (snapshot du portefeuille), ventes (réalisations de l'année), et historique des transactions (dividendes & intérêts)."
         >
-          <div className="space-y-2">
+          <div className="space-y-3">
             <SubLabel label="Positions & ventes" />
-            <CsvImporter broker="fidelity" onImport={onImportLots} onImportSales={onImportSales} />
+            <CsvImporter
+              broker="fidelity"
+              onImport={onImportLots}
+              onImportSales={onImportSales}
+              embedded
+            />
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <SubLabel label="Dividendes & intérêts" />
             <DividendsImporter
               broker="fidelity"
               dividends={dividends.filter((d) => d.broker === 'fidelity')}
               cashInterest={cashInterest.filter((c) => c.broker === 'fidelity')}
               onDividendsChange={onDividendsChange}
+              embedded
             />
           </div>
         </BrokerSection>
@@ -166,18 +169,16 @@ export function DataPanel({
           broker="morgan_stanley"
           description="Un seul rapport « Participant Share Sales Report » (XLSX ou CSV) regroupe positions, ventes et dividendes réinvestis (DRIP)."
         >
-          <div className="space-y-2">
-            <SubLabel label="Rapport d'activité" />
-            <CsvImporter
-              broker="morgan_stanley"
-              onImport={onImportLots}
-              onImportSales={onImportSales}
-              onImportDividends={onImportMsDividends}
-            />
-          </div>
-          <div className="space-y-2">
-            <SubLabel label="Dividendes réinvestis (DRIP)" />
-            {dividends.some((d) => d.broker === 'morgan_stanley') ? (
+          <CsvImporter
+            broker="morgan_stanley"
+            onImport={onImportLots}
+            onImportSales={onImportSales}
+            onImportDividends={onImportMsDividends}
+            embedded
+          />
+          {dividends.some((d) => d.broker === 'morgan_stanley') ? (
+            <div className="space-y-3">
+              <SubLabel label="Dividendes réinvestis (DRIP)" />
               <DividendsSummary
                 dividends={dividends.filter((d) => d.broker === 'morgan_stanley')}
                 footnote={
@@ -189,16 +190,17 @@ export function DataPanel({
                   </>
                 }
               />
-            ) : (
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Importez le rapport ci-dessus pour extraire automatiquement les
-                dividendes réinvestis. Hypothèse retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}»
-                est nette de la retenue à la source US de 15{'\u00A0'}%.
-              </p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Les dividendes réinvestis sont extraits automatiquement du rapport
+              ci-dessus. Hypothèse retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}»
+              est nette de la retenue à la source US de 15{'\u00A0'}%.
+            </p>
+          )}
         </BrokerSection>
       </section>
     </div>
   );
 }
+
