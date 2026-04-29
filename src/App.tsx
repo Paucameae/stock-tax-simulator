@@ -172,6 +172,10 @@ function App() {
   // appears far below the fold and the click looks like a no-op.
   const simResultRef = React.useRef<HTMLDivElement | null>(null);
   const [simResultFlash, setSimResultFlash] = React.useState(false);
+  // Set to true when the user mutates the lot selection in SaleSimulator
+  // after a simulation has already been computed; rendered as a discreet
+  // "relancer la simulation" hint on the result card.
+  const [simStale, setSimStale] = React.useState(false);
   const [settings, setSettings] = React.useState<AppSettings>(() => {
     return loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
   });
@@ -423,6 +427,7 @@ function App() {
     };
     const res = runSimulation(simulation);
     setSimResult(res);
+    setSimStale(false);
 
     const saved: SavedSimulation = {
       id: generateId(),
@@ -461,6 +466,7 @@ function App() {
         fiscalYear: simFiscalYear,
       };
       setSimResult(runSimulation(simulation));
+      setSimStale(false);
     }
   }, [simEntries, settings, simFiscalYear]);
 
@@ -649,12 +655,17 @@ function App() {
               </div>
             ) : (
               <>
-                <SaleSimulator lots={lots} settings={settings} onSimulate={handleSimulate} />
+                <SaleSimulator
+                  lots={lots}
+                  settings={settings}
+                  onSimulate={handleSimulate}
+                  onSelectionChange={() => { if (simResult) setSimStale(true); }}
+                />
                 <div
                   ref={simResultRef}
                   className={`scroll-mt-4 rounded-lg transition-shadow duration-500 ${simResultFlash ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                 >
-                  <TaxCalculator result={simResult} taxMode={simTaxMode} onTaxModeChange={handleSimTaxModeChange} fiscalYear={simFiscalYear} familyStatus={settings.familyStatus} />
+                  <TaxCalculator result={simResult} taxMode={simTaxMode} onTaxModeChange={handleSimTaxModeChange} fiscalYear={simFiscalYear} familyStatus={settings.familyStatus} stale={simStale} />
                 </div>
                 {simEntries.length > 0 && (
                   <PfuVsBaremeComparator lots={simEntries} settings={settings} fiscalYear={simFiscalYear} />
