@@ -2,6 +2,7 @@
 import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
+import { DividendsSummary } from './DividendsSummary';
 import { brokerLabel, brokerBadgeClass } from '../lib/utils';
 import type { AppSettings, Broker, GrantInfo, StockLot, SoldLot } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
@@ -175,13 +176,28 @@ export function DataPanel({
               onImportSales={onImportSales}
               onImportDividends={onImportMsDividends}
             />
-            <p className="text-xs text-gray-500 leading-relaxed">
-              Les dividendes réinvestis sont extraits automatiquement.
-              Hypothèse retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}»
-              est nette de la retenue à la source US de 15{'\u00A0'}%, le brut
-              et le crédit d'impôt conventionnel sont reconstruits en
-              conséquence.
-            </p>
+          </div>
+          <div className="space-y-2">
+            <SubLabel label="Dividendes réinvestis (DRIP)" />
+            {dividends.some((d) => d.broker === 'morgan_stanley') ? (
+              <DividendsSummary
+                dividends={dividends.filter((d) => d.broker === 'morgan_stanley')}
+                footnote={
+                  <>
+                    Hypothèse retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}»
+                    du rapport est nette de la retenue à la source US de
+                    15{'\u00A0'}%, le brut et le crédit d'impôt conventionnel
+                    sont reconstruits en conséquence.
+                  </>
+                }
+              />
+            ) : (
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Importez le rapport ci-dessus pour extraire automatiquement les
+                dividendes réinvestis. Hypothèse retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}»
+                est nette de la retenue à la source US de 15{'\u00A0'}%.
+              </p>
+            )}
           </div>
         </BrokerSection>
       </section>
