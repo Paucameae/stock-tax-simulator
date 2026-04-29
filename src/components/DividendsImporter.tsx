@@ -72,24 +72,42 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
     setError(null);
   };
 
+  const helpButton = (
+    <button
+      type="button"
+      onClick={() => setShowGuide(true)}
+      aria-label="Voir le guide d'export"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-primary transition-colors whitespace-nowrap shrink-0"
+    >
+      <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+      Voir le guide d&rsquo;export
+    </button>
+  );
+
+  const hasImports = dividends.length + cashInterest.length > 0;
+  const clearButton = hasImports ? (
+    <button
+      type="button"
+      onClick={handleClear}
+      aria-label="Supprimer les dividendes importés"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors whitespace-nowrap shrink-0"
+    >
+      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+      Supprimer
+    </button>
+  ) : null;
+
   const body = (
     <>
-      {!embedded && (
-        <div className="flex items-start gap-3">
-          <Coins className="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0 text-sm text-gray-600">
-            <p>
-              Importez votre <strong>historique des transactions {brokerLabel(broker)}</strong> (CSV) pour extraire
-              vos dividendes MSFT et la retenue à la source US. Indispensable pour pré-remplir les cases
-              <strong> 2DC / 2AB / 2BH</strong> de la déclaration.
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              Sans cet import, les dividendes ne sont pas suivis. Exporter <strong>l'année civile complète</strong>
-              (par exemple 2025 entière pour la déclaration 2026) pour obtenir des totaux corrects.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Prerequisite banner: replaces the bare gray paragraph so each broker
+          card opens with a coloured banner of identical structure. */}
+      <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+        <Coins className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <span>
+          Historique des transactions {brokerLabel(broker)} (CSV) sur l&rsquo;<strong>année civile complète</strong>.
+          Indispensable pour pré-remplir les cases <strong>2DC / 2AB / 2BH</strong> de la déclaration.
+        </span>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -102,27 +120,6 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
           {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           {loading ? 'Analyse…' : 'Choisir un fichier'}
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowGuide(true)}
-          className="gap-1.5"
-          aria-label="Afficher le guide d'export de l'historique des transactions"
-        >
-          <HelpCircle className="h-4 w-4" />
-          Comment l'exporter ?
-        </Button>
-        {dividends.length + cashInterest.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClear}
-            className="gap-1.5 text-red-600 hover:text-red-700 ml-auto"
-          >
-            <Trash2 className="h-4 w-4" />
-            Supprimer
-          </Button>
-        )}
       </div>
 
       <input
@@ -171,12 +168,20 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
   );
 
   if (embedded) {
-    return <div className="space-y-3">{body}</div>;
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-end gap-2">{clearButton}{helpButton}</div>
+        {body}
+      </div>
+    );
   }
 
   return (
     <Card>
-      <CardContent className="pt-5 pb-4 space-y-4">{body}</CardContent>
+      <CardContent className="pt-5 pb-4 space-y-4">
+        <div className="flex items-center justify-end gap-2">{clearButton}{helpButton}</div>
+        {body}
+      </CardContent>
     </Card>
   );
 }

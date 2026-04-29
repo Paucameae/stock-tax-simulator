@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
@@ -34,6 +34,13 @@ interface CsvImporterProps {
    */
   onImportDividends?: (dividends: DividendEvent[]) => void;
   /**
+   * Optional callback invoked when the user clicks the "Supprimer" button.
+   * The parent is expected to drop all positions / sales (and dividends, for
+   * Morgan Stanley) belonging to this broker. Without this prop the clear
+   * affordance is hidden.
+   */
+  onClear?: () => void;
+  /**
    * When rendered inside a BrokerSection card, set this to true to drop the
    * outer Card wrapper and the redundant "Importer l'export ..." title.
    * The broker identity is already given by the parent section.
@@ -66,7 +73,7 @@ interface ImportedFile {
   summary?: string;
 }
 
-export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends, embedded = false }: CsvImporterProps) {
+export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends, onClear, embedded = false }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
@@ -228,11 +235,11 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
     <button
       type="button"
       onClick={() => setShowGuide(true)}
-      aria-label="Afficher le guide d'export depuis le courtier"
+      aria-label="Voir le guide d'export"
       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-primary transition-colors whitespace-nowrap shrink-0"
     >
       <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
-      Comment exporter ?
+      Voir le guide d&rsquo;export
     </button>
   ) : (
     <span
@@ -241,9 +248,28 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
       title="Le guide d'export pour ce courtier sera ajouté prochainement"
     >
       <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
-      Guide d'export à venir
+      Guide à venir
     </span>
   );
+
+  const handleClear = useCallback(() => {
+    setImportedFiles([]);
+    setError(null);
+    onClear?.();
+  }, [onClear]);
+
+  const hasImports = importedFiles.length > 0;
+  const clearButton = hasImports && onClear ? (
+    <button
+      type="button"
+      onClick={handleClear}
+      aria-label="Supprimer les données importées"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors whitespace-nowrap shrink-0"
+    >
+      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+      Supprimer
+    </button>
+  ) : null;
 
   const body = (
     <>
@@ -292,13 +318,24 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         </div>
         )}
 
-        {/* USD requirement info */}
-        <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-          <DollarSign className="h-4 w-4 shrink-0" />
+        {/* Prerequisite banner — canonical structure shared with the other
+            importers: icon + concise sentence on a coloured background. */}
+        <div className="flex items-start gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          <DollarSign className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
           <span>
-            Le fichier doit être en <strong>dollars (USD)</strong>.
-            Les taux de change BCE seront récupérés automatiquement pour chaque date.
-            {broker === 'fidelity' && <> Exportez votre fichier depuis Fidelity avec l'option «&nbsp;USD&nbsp;».</>}
+            {isAutoDetect ? (
+              <>
+                Rapport <strong>Participant Share Sales Report</strong> Morgan Stanley en{' '}
+                <strong>USD</strong> (XLSX ou CSV). Positions, ventes et dividendes
+                réinvestis (DRIP) sont détectés automatiquement.
+              </>
+            ) : (
+              <>
+                Fichier en <strong>dollars (USD)</strong>. Les taux de change BCE seront
+                récupérés automatiquement pour chaque date.
+                {broker === 'fidelity' && <> Exportez depuis Fidelity avec l&rsquo;option «&nbsp;USD&nbsp;».</>}
+              </>
+            )}
           </span>
         </div>
 
@@ -382,7 +419,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   if (embedded) {
     return (
       <div className="space-y-3">
-        <div className="flex justify-end">{helpButton}</div>
+        <div className="flex items-center justify-end gap-2">{clearButton}{helpButton}</div>
         {body}
       </div>
     );

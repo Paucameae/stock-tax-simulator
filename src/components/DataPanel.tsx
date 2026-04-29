@@ -20,6 +20,8 @@ interface DataPanelProps {
   onDefaultPlanTypeChange: (v: AppSettings['defaultPlanType']) => void;
   onImportLots: (lots: StockLot[]) => void;
   onImportSales: (soldLots: SoldLot[]) => void;
+  /** Drop all positions + sales (and dividends, for MS) belonging to a broker. */
+  onClearBroker: (broker: Broker) => void;
 }
 
 interface SectionHeaderProps {
@@ -77,7 +79,7 @@ interface SubLabelProps {
 
 function SubLabel({ label }: SubLabelProps) {
   return (
-    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide pb-1 border-b border-gray-100">
+    <div className="text-[11px] font-medium text-gray-500 pb-1 border-b border-gray-100">
       {label}
     </div>
   );
@@ -99,6 +101,7 @@ export function DataPanel({
   onDefaultPlanTypeChange,
   onImportLots,
   onImportSales,
+  onClearBroker,
 }: DataPanelProps) {
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-6">
@@ -152,6 +155,7 @@ export function DataPanel({
               broker="fidelity"
               onImport={onImportLots}
               onImportSales={onImportSales}
+              onClear={() => onClearBroker('fidelity')}
               embedded
             />
           </div>
@@ -176,6 +180,7 @@ export function DataPanel({
             onImport={onImportLots}
             onImportSales={onImportSales}
             onImportDividends={onImportMsDividends}
+            onClear={() => onClearBroker('morgan_stanley')}
             embedded
           />
           {dividends.some((d) => d.broker === 'morgan_stanley') ? (

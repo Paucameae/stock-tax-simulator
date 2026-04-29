@@ -11,7 +11,7 @@ import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
 import { reconcileLots } from './lib/stockexport-reconciliation';
 import type { ImportResult } from './lib/backup';
-import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo } from './lib/types';
+import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo, Broker } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
 import { DividendsDeclaration } from './components/DividendsDeclaration';
 import { generateId, mergeByBroker } from './lib/utils';
@@ -333,6 +333,40 @@ function App() {
     setDeclResult(res);
     setShowSalesImportDialog(true);
   }, [settings, declTaxMode, soldLots]);
+
+  /**
+   * Drop every position, sale, and (for Morgan Stanley only) dividend that
+   * was imported from a given broker. Fidelity dividends keep their own
+   * dedicated clear button on the DividendsImporter card so users can scope
+   * the reset more precisely; on Morgan Stanley dividends ride on the same
+   * activity report as the rest, so it would be confusing to leave them
+   * behind. Cash interest is broker-agnostic in practice (only Fidelity
+   * surfaces it today) and follows the lot/sale slice.
+   */
+  const handleClearBroker = React.useCallback((broker: Broker) => {
+    setLots((prev) => prev.filter((l) => l.broker !== broker));
+    setSoldLots((prev) => prev.filter((sl) => sl.broker !== broker));
+    setCashInterest((prev) => prev.filter((c) => c.broker !== broker));
+    if (broker === 'morgan_stanley') {
+      setDividends((prev) => {
+        const next = prev.filter((d) => d.broker !== broker);
+        if (next.length === 0) {
+          clearDividends();
+        } else {
+          saveDividends({
+            dividends: next,
+            cashInterest: cashInterest.filter((c) => c.broker !== broker),
+            importedAt: new Date().toISOString(),
+          });
+        }
+        return next;
+      });
+    }
+    // Resetting the simulation state matches the import path: stale results
+    // would no longer match the (now smaller) portfolio.
+    setSimEntries([]);
+    setSimResult(null);
+  }, [cashInterest]);
 
   const handleSoldLotsChange = React.useCallback((updatedSoldLots: SoldLot[]) => {
     setSoldLots(updatedSoldLots);
@@ -670,6 +704,7 @@ function App() {
             }}
             onImportLots={handleImport}
             onImportSales={handleImportSales}
+            onClearBroker={handleClearBroker}
           />
           </React.Suspense>
         </div>
