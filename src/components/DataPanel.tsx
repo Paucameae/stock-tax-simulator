@@ -101,7 +101,7 @@ export function DataPanel({
   onImportSales,
 }: DataPanelProps) {
   return (
-    <div className="space-y-8 max-w-4xl pb-6">
+    <div className="space-y-8 max-w-4xl mx-auto pb-6">
       <header className="flex items-start gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
           <Database className="h-5 w-5" />
