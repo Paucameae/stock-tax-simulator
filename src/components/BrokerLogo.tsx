@@ -3,7 +3,7 @@ import type { Broker } from '../lib/types';
 
 const LOGOS: Record<Broker, string> = {
   fidelity: '/Fidelity-Logo.png',
-  morgan_stanley: '/Morgan_Stanley_Logo.png',
+  morgan_stanley: '/Morgan-Stanley-Logo.png',
 };
 
 interface BrokerLogoProps {

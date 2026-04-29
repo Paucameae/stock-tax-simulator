@@ -245,7 +245,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                       <td className="px-2.5 py-2 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_rgb(229,231,235)]">{formatDate(lot.acquisitionDate)}</td>
                       {hasMultipleBrokers && (
                         <td className="px-2.5 py-2 text-center">
-                          <BrokerLogo broker={lot.broker} className="h-4" />
+                          <BrokerLogo broker={lot.broker} className="h-5" />
                         </td>
                       )}
                       <td className="px-2.5 py-2 text-right">{lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
@@ -340,7 +340,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                       {originLabel(lot.origin)}
                     </Badge>
                     {hasMultipleBrokers && (
-                      <BrokerLogo broker={lot.broker} className="h-4" />
+                      <BrokerLogo broker={lot.broker} className="h-5" />
                     )}
                   </div>
                 </div>

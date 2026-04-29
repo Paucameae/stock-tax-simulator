@@ -157,7 +157,7 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
                   <td className="py-2 pr-3">{formatDate(lot.saleDate)}</td>
                   {hasMultipleBrokers && (
                     <td className="py-2 pr-3">
-                      <BrokerLogo broker={lot.broker} className="h-4" />
+                      <BrokerLogo broker={lot.broker} className="h-5" />
                     </td>
                   )}
                   <td className="py-2 pr-3 text-right tabular-nums">
@@ -222,7 +222,7 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
             <div key={lot.id} className="border rounded-lg p-3 space-y-2">
               {hasMultipleBrokers && (
                 <div>
-                  <BrokerLogo broker={lot.broker} className="h-4" />
+                  <BrokerLogo broker={lot.broker} className="h-5" />
                 </div>
               )}
               <div className="flex items-start justify-between gap-2 text-xs">
