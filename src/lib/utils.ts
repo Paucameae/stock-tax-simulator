@@ -58,6 +58,24 @@ export function brokerBadgeClass(broker: string): string {
   return map[broker] || 'bg-gray-50 text-gray-700 border-gray-200';
 }
 
+/**
+ * Replace one broker's slice of a broker-tagged list while preserving the
+ * others. Used by import handlers so that re-importing data from one
+ * courtier never wipes the data already loaded from another courtier.
+ *
+ * The broker is inferred from the first incoming item; callers must guard
+ * against an empty `incoming` array (typically by skipping the call), since
+ * we cannot tell which slice to replace otherwise.
+ */
+export function mergeByBroker<T extends { broker: string }>(
+  prev: T[],
+  incoming: T[],
+): T[] {
+  if (incoming.length === 0) return prev;
+  const broker = incoming[0].broker;
+  return [...prev.filter((x) => x.broker !== broker), ...incoming];
+}
+
 export function formatDate(date: Date | undefined): string {
   if (!date) return '—';
   return date.toLocaleDateString('fr-FR');

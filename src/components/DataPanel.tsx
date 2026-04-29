@@ -1,8 +1,8 @@
-﻿import { Database, Award, Briefcase, Coins, Building2 } from 'lucide-react';
+﻿import { Database, Award, Building2 } from 'lucide-react';
 import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
-import { brokerLabel } from '../lib/utils';
+import { brokerLabel, brokerBadgeClass } from '../lib/utils';
 import type { AppSettings, Broker, GrantInfo, StockLot, SoldLot } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 
@@ -27,7 +27,7 @@ interface SectionHeaderProps {
   description: string;
 }
 
-/** Top-level section heading. Sections group imports by *type of data*. */
+/** Top-level section heading. */
 function SectionHeader({ step, icon, title, description }: SectionHeaderProps) {
   return (
     <div className="flex items-start gap-3 pt-4 first:pt-0">
@@ -45,34 +45,49 @@ function SectionHeader({ step, icon, title, description }: SectionHeaderProps) {
   );
 }
 
-interface BrokerSubheaderProps {
+interface BrokerSectionProps {
   broker: Broker;
+  description: string;
+  children: React.ReactNode;
 }
 
-/** Subheading inside a section to identify the broker source of an importer. */
-function BrokerSubheader({ broker }: BrokerSubheaderProps) {
+/** Sub-section grouping all imports for a single broker. */
+function BrokerSection({ broker, description, children }: BrokerSectionProps) {
   return (
-    <div className="flex items-center gap-2 mt-1">
-      <Building2 className="h-3.5 w-3.5 text-gray-400" />
-      <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-        {brokerLabel(broker)}
-      </span>
+    <div className={`rounded-xl border ${brokerBadgeClass(broker)} bg-white p-4 space-y-3`}>
+      <div className="flex items-center gap-2">
+        <Building2 className="h-4 w-4" />
+        <h4 className="text-sm font-semibold uppercase tracking-wide">
+          {brokerLabel(broker)}
+        </h4>
+      </div>
+      <p className="text-xs text-gray-600 -mt-1">{description}</p>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+interface SubLabelProps {
+  label: string;
+}
+
+function SubLabel({ label }: SubLabelProps) {
+  return (
+    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+      {label}
     </div>
   );
 }
 
 /**
- * Data hub for broker / employer imports. Organised by type of data rather
- * than by broker, mirroring the French tax declaration structure:
+ * Data hub for broker / employer imports. Organised so that each courtier
+ * has its own self-contained section: re-importing one courtier never
+ * affects data already loaded from another.
  *
- *   1. Grants & vesting (Microsoft StockExport) — needed for plan-type
- *      classification and to project future vesting income.
- *   2. Mes actions — open positions and realised sales, agnostic of broker.
- *      Fidelity exports them as two distinct files (positions vs sales,
- *      hence the toggle); Morgan Stanley bundles both in a single export
- *      and is auto-detected.
- *   3. Dividendes & intérêts — Fidelity transaction history. Morgan Stanley
- *      does not currently expose a usable history.
+ *   1. Attributions & vesting (Microsoft StockExport, employer-wide and
+ *      transverse to courtiers).
+ *   2. Mes données par courtier — one card per courtier, grouping that
+ *      courtier's positions, sales and dividends.
  *
  * Tax notice PDF and backup/restore live in Settings since they configure
  * the app itself rather than import external broker data.
@@ -96,16 +111,15 @@ export function DataPanel({
         <div>
           <h2 className="text-lg font-semibold">Mes données</h2>
           <p className="text-sm text-gray-600">
-            Importez les fichiers nécessaires à votre déclaration. Les sections
-            ci-dessous suivent la structure de la déclaration : attributions,
-            actions (positions et ventes), puis revenus de capitaux mobiliers.
-            Vous pouvez combiner plusieurs courtiers : tout est agrégé
+            Importez les fichiers nécessaires à votre déclaration. Chaque
+            courtier a sa propre section{'\u00A0'}: vous pouvez les combiner
+            librement, l'agrégation (positions, ventes, dividendes) se fait
             automatiquement.
           </p>
         </div>
       </header>
 
-      {/* 1. Grants & vesting */}
+      {/* 1. Grants & vesting (transverse) */}
       <section className="space-y-3">
         <SectionHeader
           step={1}
@@ -121,61 +135,55 @@ export function DataPanel({
         />
       </section>
 
-      {/* 2. Mes actions */}
+      {/* 2. Per-broker data */}
       <section className="space-y-3">
         <SectionHeader
           step={2}
-          icon={<Briefcase className="h-5 w-5" />}
-          title="Mes actions"
-          description="Positions ouvertes (pour simuler une vente) et ventes effectuées (pour calculer l'impôt et déclarer). Importez depuis chacun de vos courtiers ; les données sont agrégées."
+          icon={<Building2 className="h-5 w-5" />}
+          title="Mes données par courtier"
+          description="Importez positions, ventes et dividendes depuis chacun de vos courtiers. Re-importer un courtier ne touche pas aux données déjà chargées des autres."
         />
-        <div className="space-y-3">
-          <BrokerSubheader broker="fidelity" />
-          <CsvImporter broker="fidelity" onImport={onImportLots} onImportSales={onImportSales} />
-        </div>
-        <div className="space-y-3">
-          <BrokerSubheader broker="morgan_stanley" />
-          <CsvImporter
-            broker="morgan_stanley"
-            onImport={onImportLots}
-            onImportSales={onImportSales}
-            onImportDividends={onImportMsDividends}
-          />
-        </div>
-      </section>
 
-      {/* 3. Dividendes & intérêts */}
-      <section className="space-y-3">
-        <SectionHeader
-          step={3}
-          icon={<Coins className="h-5 w-5" />}
-          title="Dividendes & intérêts"
-          description="Revenus de capitaux mobiliers à reporter en cases 2DC, 2AB et 2BH. Récupérés depuis l'historique des transactions du courtier."
-        />
-        <div className="space-y-3">
-          <BrokerSubheader broker="fidelity" />
-          <DividendsImporter
-            broker="fidelity"
-            dividends={dividends}
-            cashInterest={cashInterest}
-            onDividendsChange={onDividendsChange}
-          />
-        </div>
-        <div className="space-y-3">
-          <BrokerSubheader broker="morgan_stanley" />
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600 flex items-start gap-2.5">
-            <Coins className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-            <p>
-              <span className="font-medium text-gray-800">Importé automatiquement.</span>{' '}
-              Les dividendes réinvestis (DRIP) figurent déjà dans le rapport
-              d'activité Morgan Stanley importé à l'étape 2{'\u00A0'}: ils sont
-              extraits puis ajoutés à la déclaration des dividendes. Hypothèse
-              retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}» est nette de
-              la retenue à la source US de 15{'\u00A0'}%, le brut et le crédit
-              d'impôt conventionnel sont reconstruits en conséquence.
+        <BrokerSection
+          broker="fidelity"
+          description="Trois fichiers distincts : positions (snapshot du portefeuille), ventes (réalisations de l'année), et historique des transactions (dividendes & intérêts)."
+        >
+          <div className="space-y-2">
+            <SubLabel label="Positions & ventes" />
+            <CsvImporter broker="fidelity" onImport={onImportLots} onImportSales={onImportSales} />
+          </div>
+          <div className="space-y-2">
+            <SubLabel label="Dividendes & intérêts" />
+            <DividendsImporter
+              broker="fidelity"
+              dividends={dividends}
+              cashInterest={cashInterest}
+              onDividendsChange={onDividendsChange}
+            />
+          </div>
+        </BrokerSection>
+
+        <BrokerSection
+          broker="morgan_stanley"
+          description="Un seul rapport « Participant Share Sales Report » (XLSX ou CSV) regroupe positions, ventes et dividendes réinvestis (DRIP)."
+        >
+          <div className="space-y-2">
+            <SubLabel label="Rapport d'activité" />
+            <CsvImporter
+              broker="morgan_stanley"
+              onImport={onImportLots}
+              onImportSales={onImportSales}
+              onImportDividends={onImportMsDividends}
+            />
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Les dividendes réinvestis sont extraits automatiquement.
+              Hypothèse retenue{'\u00A0'}: la colonne «{'\u00A0'}Cash{'\u00A0'}»
+              est nette de la retenue à la source US de 15{'\u00A0'}%, le brut
+              et le crédit d'impôt conventionnel sont reconstruits en
+              conséquence.
             </p>
           </div>
-        </div>
+        </BrokerSection>
       </section>
     </div>
   );

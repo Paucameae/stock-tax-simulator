@@ -14,7 +14,7 @@ import type { ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
 import { DividendsDeclaration } from './components/DividendsDeclaration';
-import { generateId } from './lib/utils';
+import { generateId, mergeByBroker } from './lib/utils';
 
 // Lazy-load heavy components (pdfjs-dist via Settings, recharts via Portfolio)
 const Portfolio = React.lazy(() =>
@@ -190,15 +190,17 @@ function App() {
   const declFiscalYear = saleYear ?? new Date().getFullYear();
 
   const handleImport = React.useCallback((importedLots: StockLot[]) => {
+    if (importedLots.length === 0) return;
     // 1. First, reconcile with StockExport grants when available — this gives the
     //    most authoritative classification (actual plan type from Microsoft).
     const reconciled = grants.length > 0 ? reconcileLots(importedLots, grants).lots : importedLots;
 
     // 2. Then apply user overrides and defaults for any DO lots that are still not
     //    reconciled (no grant matched or StockExport not imported).
+    let prepared: StockLot[];
     try {
       const overrides = JSON.parse(localStorage.getItem('planTypeOverrides') || '{}');
-      const lotsWithOverrides = reconciled.map((lot) => {
+      prepared = reconciled.map((lot) => {
         if (lot.reconciled) return lot; // StockExport wins over overrides/defaults
         if (lot.origin === 'DO' && overrides[lot.id]) {
           return { ...lot, planType: overrides[lot.id] };
@@ -208,10 +210,12 @@ function App() {
         }
         return lot;
       });
-      setLots(lotsWithOverrides);
     } catch {
-      setLots(reconciled);
+      prepared = reconciled;
     }
+    // 3. Merge by broker: re-importing one courtier replaces only its slice and
+    //    leaves positions imported from any other courtier untouched.
+    setLots((prev) => mergeByBroker(prev, prepared));
     // Reset only the simulation state — freshly imported positions invalidate any
     // previous simulation. Declaration data (soldLots) lives independently.
     setSimEntries([]);
@@ -243,13 +247,23 @@ function App() {
 
   const handleDividendsChange = React.useCallback(
     (payload: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => {
-      setDividends(payload.dividends);
-      setCashInterest(payload.cashInterest);
-      if (payload.dividends.length === 0 && payload.cashInterest.length === 0) return;
-      saveDividends({
-        dividends: payload.dividends,
-        cashInterest: payload.cashInterest,
-        importedAt: new Date().toISOString(),
+      // The DividendsImporter that calls us is broker-scoped to Fidelity, so
+      // we replace the Fidelity slice in full (a re-import with fewer events
+      // must drop the missing ones) while preserving any dividend already
+      // loaded from another courtier (typically Morgan Stanley DRIP).
+      setDividends((prev) => {
+        const nextDividends = [...prev.filter((d) => d.broker !== 'fidelity'), ...payload.dividends];
+        setCashInterest((prevCash) => {
+          const nextCash = [...prevCash.filter((c) => c.broker !== 'fidelity'), ...payload.cashInterest];
+          if (nextDividends.length === 0 && nextCash.length === 0) return nextCash;
+          saveDividends({
+            dividends: nextDividends,
+            cashInterest: nextCash,
+            importedAt: new Date().toISOString(),
+          });
+          return nextCash;
+        });
+        return nextDividends;
       });
     },
     [],
@@ -280,21 +294,27 @@ function App() {
   );
 
   const handleImportSales = React.useCallback((importedSoldLots: SoldLot[]) => {
+    if (importedSoldLots.length === 0) return;
     const withPlanType = importedSoldLots.map((sl) => ({
       ...sl,
       planType: settings.defaultPlanType === 'non_qualified' ? 'non_qualified' as const : 'qualified_macron' as const,
     }));
-    setSoldLots(withPlanType);
-    // Note: positions (`lots`) are intentionally preserved — a user may legitimately
-    // hold a current portfolio AND have N-1 sales to declare at the same time.
+    // Merge by broker: re-importing one courtier replaces only its sales,
+    // leaving sales already loaded from another courtier untouched. Positions
+    // (`lots`) are also preserved, since a user may legitimately hold a current
+    // portfolio AND have N-1 sales to declare at the same time.
+    const merged = mergeByBroker(soldLots, withPlanType);
+    setSoldLots(merged);
 
-    // Default to the most recent sale year (likely N-1 for declaration)
-    const years = getSaleYears(withPlanType);
+    // Default to the most recent sale year across the *aggregated* set so that
+    // re-importing one courtier opens the dialog on the year that now matters
+    // (likely N-1 for declaration), with the full multi-broker tally for that
+    // year — which is what users actually declare in France.
+    const years = getSaleYears(merged);
     const defaultYear = years[0] ?? new Date().getFullYear();
     setSaleYear(defaultYear);
 
-    // Filter to selected year and auto-compute the declaration result
-    const yearLots = withPlanType.filter((sl) => sl.saleDate.getFullYear() === defaultYear);
+    const yearLots = merged.filter((sl) => sl.saleDate.getFullYear() === defaultYear);
     const entries = soldLotsToSaleEntries(yearLots);
     setDeclEntries(entries);
     const simulation = {
@@ -309,7 +329,7 @@ function App() {
     const res = runSimulation(simulation);
     setDeclResult(res);
     setShowSalesImportDialog(true);
-  }, [settings, declTaxMode]);
+  }, [settings, declTaxMode, soldLots]);
 
   const handleSoldLotsChange = React.useCallback((updatedSoldLots: SoldLot[]) => {
     setSoldLots(updatedSoldLots);
