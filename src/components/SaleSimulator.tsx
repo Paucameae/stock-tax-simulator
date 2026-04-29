@@ -5,10 +5,11 @@ import { Input } from './ui/input';
 import { Alert } from './ui/alert';
 import { Badge } from './ui/badge';
 import { Calculator, ShoppingCart, Filter } from 'lucide-react';
-import type { StockLot, SaleLotEntry, AppSettings, StockOrigin } from '../lib/types';
+import type { StockLot, SaleLotEntry, AppSettings, StockOrigin, Broker } from '../lib/types';
 import { formatEUR, formatUSD, formatDate, originLabel } from '../lib/utils';
 import { useMsftPrice } from '../hooks/useMsftPrice';
 import { ErrorFallback } from './ErrorFallback';
+import { BrokerLogo } from './BrokerLogo';
 
 interface SaleSimulatorProps {
   lots: StockLot[];
@@ -125,6 +126,13 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
   const origins = React.useMemo(() => {
     const set = new Set(lots.map((l) => l.origin));
     return Array.from(set).sort();
+  }, [lots]);
+
+  // Show the broker column only when lots span multiple brokers; with a single
+  // broker the BrokerSection on the data tab already conveys the courtier.
+  const hasMultipleBrokers = React.useMemo(() => {
+    const set = new Set(lots.map((l) => l.broker)) as Set<Broker>;
+    return set.size > 1;
   }, [lots]);
 
   const handleSimulate = () => {
@@ -291,6 +299,7 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
                     />
                   </th>
                   <th className="text-left p-3 font-medium">Date acq.</th>
+                  {hasMultipleBrokers && <th className="text-center p-3 font-medium">Courtier</th>}
                   <th className="text-center p-3 font-medium">Origine</th>
                   <th className="text-right p-3 font-medium">Disponible</th>
                   <th className="text-right p-3 font-medium">Prix revient</th>
@@ -329,6 +338,11 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
                         {formatDate(lot.acquisitionDate)}
                         {notAvailable && <span className="block text-xs text-amber-600">Non disponible</span>}
                       </td>
+                      {hasMultipleBrokers && (
+                        <td className="p-3 text-center">
+                          <BrokerLogo broker={lot.broker} className="h-5 mx-auto" />
+                        </td>
+                      )}
                       <td className="p-3 text-center">
                         <Badge variant={lot.origin === 'SP' ? 'secondary' : 'default'}>
                           {originLabel(lot.origin)}
