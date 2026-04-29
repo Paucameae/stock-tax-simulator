@@ -4,13 +4,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { Portfolio } from '../Portfolio';
 import type { StockLot } from '../../lib/types';
 
-// Mock recharts: jsdom has no layout engine, and the pie chart is not what we
+// Mock recharts: jsdom has no layout engine, and the chart is not what we
 // test here. A minimal pass-through is sufficient.
 vi.mock('recharts', () => ({
-  PieChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="pie-chart">{children}</div>,
-  Pie: () => null,
-  Cell: () => null,
-  Legend: () => null,
+  Treemap: () => <div data-testid="treemap" />,
   ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
 }));
 
@@ -58,7 +55,7 @@ describe('Portfolio', () => {
     render(<Portfolio lots={lots} onLotsChange={vi.fn()} />);
 
     // Initially both origins rendered — switch filter to SP
-    const originSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    const originSelect = screen.getByLabelText('Filtrer par type') as HTMLSelectElement;
     fireEvent.change(originSelect, { target: { value: 'SP' } });
     // After filter, "AGA Macron" label should not appear in rows
     expect(screen.queryAllByText('AGA Macron').length).toBe(0);

@@ -4,8 +4,8 @@ import { Badge } from './ui/badge';
 import { Alert } from './ui/alert';
 import { Tooltip } from './ui/tooltip';
 import { Select } from './ui/select';
-import { BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
+import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { Treemap, ResponsiveContainer } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
@@ -21,6 +21,30 @@ interface PortfolioProps {
   dividends?: DividendEvent[];
   cashInterest?: CashInterestEvent[];
 }
+
+// Threshold under which the lot table auto-opens — small portfolios fit on one
+// screen so collapsing them by default is more friction than help.
+const AUTO_OPEN_THRESHOLD = 10;
+const TABLE_OPEN_KEY = 'portfolioTableOpen';
+
+// Color map kept stable across the whole component (badges + treemap) so the
+// visual code (DO=blue, FM=cyan, SP=amber, FQ=red) is consistent everywhere.
+const ORIGIN_COLORS: Record<string, string> = {
+  DO: 'var(--color-primary)',
+  FM: '#50E6FF',
+  SP: '#FFB900',
+  FQ: '#E74856',
+};
+const HOLDING_COLORS: Record<string, string> = {
+  Long: '#107C10',
+  Short: '#FFB900',
+};
+const BROKER_COLORS: Record<string, string> = {
+  fidelity: 'var(--color-primary)',
+  morgan_stanley: '#50E6FF',
+};
+
+type GroupBy = 'origin' | 'holding' | 'broker';
 
 export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [] }: PortfolioProps) {
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
@@ -55,17 +79,61 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const totalValue = lots.reduce((sum, l) => sum + l.currentValue, 0);
   const totalGainLoss = lots.reduce((sum, l) => sum + l.unrealizedGainLoss, 0);
 
-  const byOrigin = lots.reduce<Record<string, number>>((acc, l) => {
-    acc[l.origin] = (acc[l.origin] || 0) + l.currentValue;
-    return acc;
-  }, {});
+  const [groupBy, setGroupBy] = React.useState<GroupBy>('origin');
 
-  const pieData = Object.entries(byOrigin).map(([origin, value]) => ({
-    name: originLabel(origin),
-    value: Math.round(value * 100) / 100,
-  }));
+  // Aggregate lots into buckets for the treemap. Buckets are sorted by value
+  // desc so recharts' squarified layout puts the dominant category top-left.
+  const treemapData = React.useMemo(() => {
+    // recharts Treemap reads the bucket label from the `name` field; we keep
+    // `code` as a short identifier (origin code, broker key) for tiny tiles.
+    type Bucket = { key: string; name: string; code: string; value: number; count: number; shares: number; gainLoss: number; fill: string };
+    const buckets = new Map<string, Bucket>();
+    for (const lot of lots) {
+      let key: string;
+      let name: string;
+      let code: string;
+      let fill: string;
+      if (groupBy === 'origin') {
+        key = lot.origin;
+        name = lot.origin;
+        code = lot.origin;
+        fill = ORIGIN_COLORS[lot.origin] ?? '#888';
+      } else if (groupBy === 'holding') {
+        key = lot.holdingPeriod;
+        name = lot.holdingPeriod === 'Long' ? '≥ 2 ans' : '< 2 ans';
+        code = lot.holdingPeriod === 'Long' ? 'LT' : 'CT';
+        fill = HOLDING_COLORS[lot.holdingPeriod] ?? '#888';
+      } else {
+        key = lot.broker;
+        name = brokerLabel(lot.broker);
+        code = lot.broker === 'fidelity' ? 'FID' : 'MS';
+        fill = BROKER_COLORS[lot.broker] ?? '#888';
+      }
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.value += lot.currentValue;
+        existing.count += 1;
+        existing.shares += lot.quantity;
+        existing.gainLoss += lot.unrealizedGainLoss;
+      } else {
+        buckets.set(key, {
+          key,
+          name,
+          code,
+          value: Math.max(0, lot.currentValue),
+          count: 1,
+          shares: lot.quantity,
+          gainLoss: lot.unrealizedGainLoss,
+          fill,
+        });
+      }
+    }
+    return Array.from(buckets.values()).sort((a, b) => b.value - a.value);
+  }, [lots, groupBy]);
 
-  const COLORS = ['var(--color-primary)', '#50E6FF', '#FFB900', '#E74856'];
+  // Hide the treemap when it would degenerate to a single full-width tile —
+  // it adds visual noise without conveying any breakdown.
+  const showTreemap = treemapData.length >= 2 && totalValue > 0;
 
   const handlePlanTypeChange = (lotId: string, planType: string) => {
     const updated = lots.map((l) => {
@@ -86,129 +154,323 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const hasUsdImport = lots.some((l) => l.importCurrency === 'USD');
   const hasEsppLots = lots.some((l) => l.origin === 'SP');
 
+  const isFiltered = filterOrigin !== 'all' || filterHolding !== 'all' || filterBroker !== 'all';
+  const resetFilters = () => {
+    setFilterOrigin('all');
+    setFilterHolding('all');
+    setFilterBroker('all');
+  };
+
+  // Collapsible lot detail: persist user choice in localStorage; auto-open
+  // for small portfolios where collapsing has no real benefit.
+  const [tableOpen, setTableOpen] = React.useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(TABLE_OPEN_KEY);
+      if (saved === 'true') return true;
+      if (saved === 'false') return false;
+    } catch {
+      /* ignore */
+    }
+    return lots.length > 0 && lots.length <= AUTO_OPEN_THRESHOLD;
+  });
+  const toggleTable = () => {
+    setTableOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(TABLE_OPEN_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Actions totales</p>
-            <p className="text-2xl font-bold">{totalQuantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Valeur totale</p>
-            <p className="text-2xl font-bold">{formatEUR(totalValue)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500 flex items-center gap-1">
-              PV/MV latente
-              {hasUsdImport && (
-                <Tooltip content="La PV/MV en euros peut différer de celle affichée par Fidelity en dollars : le coût d'acquisition est converti au taux BCE historique de chaque date d'achat, tandis que la valeur actuelle est convertie au taux du jour." />
-              )}
-            </p>
-            <p className={`text-2xl font-bold ${totalGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {totalGainLoss >= 0 ? '+' : ''}{formatEUR(totalGainLoss)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Nombre de lots</p>
-            <p className="text-2xl font-bold">{lots.length}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Pie chart */}
-      {pieData.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Répartition par type
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`}>
-                    {pieData.map((_, index) => (
-                      <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <CardTitle className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5" />
+                Mon portefeuille
+              </CardTitle>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {lots.length.toLocaleString('fr-FR')} lot{lots.length > 1 ? 's' : ''} ·{' '}
+                {totalQuantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} action
+                {totalQuantity > 1 ? 's' : ''}
+              </p>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          {/* KPIs row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+            <Kpi label="Actions totales" value={totalQuantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} />
+            <Kpi label="Valeur totale" value={formatEUR(totalValue)} />
+            <Kpi
+              label={
+                <span className="flex items-center gap-1">
+                  PV/MV latente
+                  {hasUsdImport && (
+                    <Tooltip content="La PV/MV en euros peut différer de celle affichée par Fidelity en dollars : le coût d'acquisition est converti au taux BCE historique de chaque date d'achat, tandis que la valeur actuelle est convertie au taux du jour." />
+                  )}
+                </span>
+              }
+              value={`${totalGainLoss >= 0 ? '+' : ''}${formatEUR(totalGainLoss)}`}
+              valueClassName={totalGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}
+            />
+          </div>
 
-      {/* DO lots info */}
-      {hasDOLots && (
-        <Alert>
-          Les lots <strong>DO</strong> n'indiquent pas le régime fiscal. Les lots <strong>FM</strong> et <strong>FQ</strong> sont automatiquement qualifiés.
-          Vérifiez le régime de vos lots DO auprès de votre RH. Vous pouvez modifier le régime lot par lot ci-dessous.
-        </Alert>
-      )}
+          {/* Allocation treemap */}
+          {showTreemap && (
+            <div className="mt-4 rounded-md bg-gray-50 p-3">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-medium text-gray-600">Répartition par valeur</span>
+                <Select
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                  className="h-8 text-xs w-36 px-2"
+                  aria-label="Grouper la répartition par"
+                >
+                  <option value="origin">par Origine</option>
+                  <option value="holding">par Détention</option>
+                  {hasMultipleBrokers && <option value="broker">par Courtier</option>}
+                </Select>
+              </div>
+              <div className="h-32 sm:h-36">
+                <ResponsiveContainer width="100%" height="100%">
+                  <Treemap
+                    data={treemapData}
+                    dataKey="value"
+                    aspectRatio={4 / 3}
+                    stroke="#fff"
+                    isAnimationActive={false}
+                    content={<TreemapTile total={totalValue} />}
+                  />
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
 
-      {/* Origin codes legend */}
-      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
-        <span><Badge variant="default">SP</Badge> ESPP — Employee Stock Purchase Plan</span>
-        <span><Badge variant="default">DO</Badge> Stock Award — RSU / Discretionary Award</span>
-        <span><Badge variant="default">FM</Badge> AGA Macron — Attribution gratuite qualifiée (post-2018)</span>
-        <span><Badge variant="default">FQ</Badge> AGA pré-Macron — Attribution gratuite qualifiée (pré-2018)</span>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        {hasMultipleBrokers && (
-          <Select value={filterBroker} onChange={(e) => setFilterBroker(e.target.value as Broker | 'all')} className="w-44" aria-label="Filtrer par courtier">
-            <option value="all">Tous courtiers</option>
-            {presentBrokers.map((b) => (
-              <option key={b} value={b}>{brokerLabel(b)}</option>
-            ))}
-          </Select>
-        )}
-        <Select value={filterOrigin} onChange={(e) => setFilterOrigin(e.target.value as StockOrigin | 'all')} className="w-40">
-          <option value="all">Tous types</option>
-          <option value="SP">ESPP (SP)</option>
-          <option value="DO">Stock Award (DO)</option>
-          <option value="FM">AGA Macron (FM)</option>
-          <option value="FQ">AGA pré-Macron (FQ)</option>
-        </Select>
-        <Select value={filterHolding} onChange={(e) => setFilterHolding(e.target.value as 'all' | 'Short' | 'Long')} className="w-40">
-          <option value="all">Toute période</option>
-          <option value="Short">Court terme</option>
-          <option value="Long">Long terme</option>
-        </Select>
-        <Select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'date' | 'type' | 'gain')} className="w-40">
-          <option value="date">Tri par date</option>
-          <option value="type">Tri par type</option>
-          <option value="gain">Tri par gain</option>
-        </Select>
-        {hasUsdImport && (
+          {/* Toggle row */}
           <button
             type="button"
-            onClick={() => setShowFxDetails((v) => !v)}
-            className="ml-auto text-xs text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline self-center"
+            onClick={toggleTable}
+            className="mt-3 -mx-2 -mb-2 flex w-[calc(100%+1rem)] items-center justify-between gap-2 rounded-md px-2 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            aria-expanded={tableOpen}
+            aria-controls="portfolio-lot-detail"
           >
-            {showFxDetails ? 'Masquer' : 'Afficher'} les détails de change
+            <span className="flex items-center gap-1.5 font-medium">
+              {tableOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              {tableOpen ? 'Masquer le détail' : `Voir le détail des ${lots.length} lot${lots.length > 1 ? 's' : ''}`}
+            </span>
+            {isFiltered && tableOpen && (
+              <span className="text-xs text-gray-500">
+                {filteredLots.length} / {lots.length} affiché{filteredLots.length > 1 ? 's' : ''}
+              </span>
+            )}
           </button>
-        )}
-      </div>
+        </CardHeader>
+        {tableOpen && (
+          <CardContent id="portfolio-lot-detail" className="pt-0 space-y-4">
+            {/* DO lots info */}
+            {hasDOLots && (
+              <Alert>
+                Les lots <strong>DO</strong> n'indiquent pas le régime fiscal. Les lots <strong>FM</strong> et <strong>FQ</strong> sont automatiquement qualifiés.
+                Vérifiez le régime de vos lots DO auprès de votre RH. Vous pouvez modifier le régime lot par lot ci-dessous.
+              </Alert>
+            )}
 
+            {/* Origin codes legend */}
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
+              <span><Badge variant="default">SP</Badge> ESPP — Employee Stock Purchase Plan</span>
+              <span><Badge variant="default">DO</Badge> Stock Award — RSU / Discretionary Award</span>
+              <span><Badge variant="default">FM</Badge> AGA Macron — Attribution gratuite qualifiée (post-2018)</span>
+              <span><Badge variant="default">FQ</Badge> AGA pré-Macron — Attribution gratuite qualifiée (pré-2018)</span>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3">
+              {hasMultipleBrokers && (
+                <Select value={filterBroker} onChange={(e) => setFilterBroker(e.target.value as Broker | 'all')} className="w-44" aria-label="Filtrer par courtier">
+                  <option value="all">Tous courtiers</option>
+                  {presentBrokers.map((b) => (
+                    <option key={b} value={b}>{brokerLabel(b)}</option>
+                  ))}
+                </Select>
+              )}
+              <Select value={filterOrigin} onChange={(e) => setFilterOrigin(e.target.value as StockOrigin | 'all')} className="w-40" aria-label="Filtrer par type">
+                <option value="all">Tous types</option>
+                <option value="SP">ESPP (SP)</option>
+                <option value="DO">Stock Award (DO)</option>
+                <option value="FM">AGA Macron (FM)</option>
+                <option value="FQ">AGA pré-Macron (FQ)</option>
+              </Select>
+              <Select value={filterHolding} onChange={(e) => setFilterHolding(e.target.value as 'all' | 'Short' | 'Long')} className="w-40" aria-label="Filtrer par période de détention">
+                <option value="all">Toute période</option>
+                <option value="Short">Court terme</option>
+                <option value="Long">Long terme</option>
+              </Select>
+              <Select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'date' | 'type' | 'gain')} className="w-40" aria-label="Trier les lots">
+                <option value="date">Tri par date</option>
+                <option value="type">Tri par type</option>
+                <option value="gain">Tri par gain</option>
+              </Select>
+              {isFiltered && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="text-xs text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline self-center"
+                >
+                  Réinitialiser
+                </button>
+              )}
+              {hasUsdImport && (
+                <button
+                  type="button"
+                  onClick={() => setShowFxDetails((v) => !v)}
+                  className="ml-auto text-xs text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline self-center"
+                >
+                  {showFxDetails ? 'Masquer' : 'Afficher'} les détails de change
+                </button>
+              )}
+            </div>
+
+            <PortfolioTableAndCards
+              filteredLots={filteredLots}
+              hasMultipleBrokers={hasMultipleBrokers}
+              hasUsdImport={hasUsdImport}
+              hasEsppLots={hasEsppLots}
+              showFxDetails={showFxDetails}
+              onPlanTypeChange={handlePlanTypeChange}
+            />
+          </CardContent>
+        )}
+      </Card>
+
+      <UnvestedView grants={grants} />
+      <DividendsView dividends={dividends} cashInterest={cashInterest} />
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: React.ReactNode;
+  value: React.ReactNode;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-md bg-gray-50 px-3 py-2">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className={`text-base font-semibold ${valueClassName ?? ''}`}>{value}</div>
+    </div>
+  );
+}
+
+interface TreemapTileNodeProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  index?: number;
+  // Recharts spreads bucket props at top level (name, value, fill, plus our own
+  // custom fields like `code`) onto the content component.
+  name?: string;
+  value?: number;
+  fill?: string;
+  code?: string;
+  [key: string]: unknown;
+}
+
+// Custom tile renderer for the allocation treemap. Text is rendered through a
+// `<foreignObject>` so the browser uses its native font rasteriser (much
+// crisper than SVG `<text>`). A native `title` attribute provides a tooltip on
+// hover for every tile, including slivers too small to show any inline text.
+function TreemapTile({ total, ...nodeProps }: { total: number } & TreemapTileNodeProps) {
+  const { x = 0, y = 0, width = 0, height = 0 } = nodeProps;
+  const name = nodeProps.name ?? '';
+  const code = nodeProps.code ?? name;
+  const value = nodeProps.value ?? 0;
+  const fill = nodeProps.fill ?? '#888';
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  const tooltip = `${name} · ${formatEUR(value)} · ${pct} %`;
+
+  // Choose what fits inside the rectangle. For unusable sizes we still render
+  // the rect (and keep the tooltip via `title`) so the colour stays visible.
+  const showFull = width > 70 && height > 36;
+  const showAmount = width > 90 && height > 56;
+  const showCodeOnly = !showFull && width > 26 && height > 18;
+
+  return (
+    <g>
+      <title>{tooltip}</title>
+      <rect x={x} y={y} width={width} height={height} fill={fill} stroke="#fff" strokeWidth={2} />
+      {(showFull || showCodeOnly) && (
+        <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              boxSizing: 'border-box',
+              padding: showFull ? '6px 8px' : '0',
+              color: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: showFull ? 'flex-start' : 'center',
+              alignItems: showFull ? 'flex-start' : 'center',
+              fontFamily: 'inherit',
+              lineHeight: 1.2,
+              userSelect: 'none',
+            }}
+          >
+            {showFull ? (
+              <>
+                <div style={{ fontSize: '12px', fontWeight: 600 }}>
+                  {name} <span style={{ fontWeight: 400, opacity: 0.85, marginLeft: 4 }}>{pct} %</span>
+                </div>
+                {showAmount && (
+                  <div style={{ fontSize: '11px', opacity: 0.9, marginTop: 2 }}>
+                    {formatEUR(value)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: '11px', fontWeight: 600 }}>{code}</div>
+            )}
+          </div>
+        </foreignObject>
+      )}
+    </g>
+  );
+}
+
+interface PortfolioTableAndCardsProps {
+  filteredLots: StockLot[];
+  hasMultipleBrokers: boolean;
+  hasUsdImport: boolean;
+  hasEsppLots: boolean;
+  showFxDetails: boolean;
+  onPlanTypeChange: (lotId: string, planType: string) => void;
+}
+
+function PortfolioTableAndCards({
+  filteredLots,
+  hasMultipleBrokers,
+  hasUsdImport,
+  hasEsppLots,
+  showFxDetails,
+  onPlanTypeChange: handlePlanTypeChange,
+}: PortfolioTableAndCardsProps) {
+  return (
+    <>
       {/* Table — desktop */}
-      <Card className="hidden md:block">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm whitespace-nowrap">
-              <thead>
+      <div className="hidden md:block -mx-6">
+        <div className="overflow-x-auto border-y border-gray-200">
+          <table className="w-full text-sm whitespace-nowrap">
+            <thead>
                 <tr className="border-b bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
                   <th className="text-left px-2.5 py-2 font-medium sticky left-0 z-10 bg-gray-50 shadow-[1px_0_0_0_rgb(229,231,235)]">Date</th>
                   {hasMultipleBrokers && <th className="text-center px-2.5 py-2 font-medium">Courtier</th>}
@@ -311,8 +573,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
       {/* Cards — mobile (< md) */}
       <div className="md:hidden space-y-2">
@@ -402,9 +663,6 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
           );
         })}
       </div>
-
-      <UnvestedView grants={grants} />
-      <DividendsView dividends={dividends} cashInterest={cashInterest} />
-    </div>
+    </>
   );
 }
