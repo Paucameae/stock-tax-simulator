@@ -693,6 +693,8 @@ function App() {
             settings={settings}
             grants={grants}
             onGrantsChange={handleGrantsChange}
+            lots={lots}
+            soldLots={soldLots}
             dividends={dividends}
             cashInterest={cashInterest}
             onDividendsChange={handleDividendsChange}

@@ -1,12 +1,12 @@
 import React, { useCallback } from 'react';
-import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, CheckCircle2, Trash2 } from 'lucide-react';
+import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, CheckCircle2, Trash2, Layers, TrendingUp } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsActivityXlsx } from '../lib/brokers/morgan-stanley';
 import { useEcbConversion } from '../hooks/useEcbConversion';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
-import { brokerLabel } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, originLabel } from '../lib/utils';
 import type { Broker, StockLot, SoldLot } from '../lib/types';
 import type { DividendEvent } from '../lib/transaction-parser';
 
@@ -41,6 +41,21 @@ interface CsvImporterProps {
    */
   onClear?: () => void;
   /**
+   * Persistent positions belonging to this broker (already filtered by the
+   * parent). Used to render an aggregated summary card mirroring the one
+   * the StockExport importer exposes. Optional: when omitted, no summary is
+   * shown (legacy callers).
+   */
+  lots?: StockLot[];
+  /** Persistent sales belonging to this broker (already filtered by the parent). */
+  soldLots?: SoldLot[];
+  /**
+   * Optional dividend tally to surface alongside positions / sales (used by
+   * the Morgan Stanley card whose activity report bundles DRIP rows).
+   */
+  dividendsCount?: number;
+  dividendsGrossUsd?: number;
+  /**
    * When rendered inside a BrokerSection card, set this to true to drop the
    * outer Card wrapper and the redundant "Importer l'export ..." title.
    * The broker identity is already given by the parent section.
@@ -73,7 +88,147 @@ interface ImportedFile {
   summary?: string;
 }
 
-export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends, onClear, embedded = false }: CsvImporterProps) {
+interface SummaryProps {
+  broker: Broker;
+  lots?: StockLot[];
+  soldLots?: SoldLot[];
+  dividendsCount: number;
+  dividendsGrossUsd: number;
+}
+
+/**
+ * Aggregated, persistence-backed summary of what is currently loaded for a
+ * given broker. Mirrors the StockExport importer's success card so all four
+ * "Mes données" blocks expose the same kind of post-import feedback. Hides
+ * itself when no data is loaded.
+ */
+function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividendsGrossUsd }: SummaryProps) {
+  const hasLots = !!(lots && lots.length > 0);
+  const hasSales = !!(soldLots && soldLots.length > 0);
+  const hasDividends = dividendsCount > 0;
+  if (!hasLots && !hasSales && !hasDividends) return null;
+
+  const lotsTotalShares = hasLots ? lots!.reduce((s, l) => s + l.quantity, 0) : 0;
+  // Prefer EUR market value when available; fall back to USD or to cost basis
+  // when the lot was imported without a market price (Morgan Stanley Holdings
+  // by Lot reuses the cost basis as current value by design).
+  const lotsTotalEur = hasLots
+    ? lots!.reduce((s, l) => {
+        if (l.currentValue && l.currentValue > 0) return s + l.currentValue;
+        if (l.totalCostBasis && l.totalCostBasis > 0) return s + l.totalCostBasis;
+        return s;
+      }, 0)
+    : 0;
+  const lotsTotalUsd = hasLots
+    ? lots!.reduce((s, l) => s + (l.currentValueUsd ?? l.totalCostBasisUsd ?? 0), 0)
+    : 0;
+
+  const salesQty = hasSales ? soldLots!.reduce((s, sl) => s + sl.quantity, 0) : 0;
+  const salesProceedsEur = hasSales ? soldLots!.reduce((s, sl) => s + sl.proceeds, 0) : 0;
+  const salesProceedsUsd = hasSales ? soldLots!.reduce((s, sl) => s + (sl.proceedsUsd ?? 0), 0) : 0;
+  const salesYears = hasSales
+    ? Array.from(new Set(soldLots!.map((sl) => sl.saleDate.getFullYear()))).sort((a, b) => b - a)
+    : [];
+
+  // Per-origin tally for the lot list so users see at a glance the spread
+  // between Stock Awards / AGA / ESPP without scrolling to the portfolio tab.
+  const originCounts = hasLots
+    ? lots!.reduce<Record<string, number>>((acc, l) => {
+        acc[l.origin] = (acc[l.origin] ?? 0) + l.quantity;
+        return acc;
+      }, {})
+    : {};
+  const originList = Object.entries(originCounts).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <CheckCircle2 className="h-4 w-4 text-blue-600" aria-hidden="true" />
+        <span className="font-medium text-blue-800">
+          Données {brokerLabel(broker)} chargées
+        </span>
+      </div>
+
+      {(hasLots || hasSales) && (
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          {hasLots && (
+            <SummaryCell
+              icon={<Layers className="h-3.5 w-3.5" />}
+              label={`Lot${lots!.length > 1 ? 's' : ''} ouvert${lots!.length > 1 ? 's' : ''}`}
+              value={lots!.length.toLocaleString('fr-FR')}
+              detail={`${lotsTotalShares.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`}
+            />
+          )}
+          {hasLots && (
+            <SummaryCell
+              icon={<DollarSign className="h-3.5 w-3.5" />}
+              label="Valeur portefeuille"
+              value={lotsTotalEur > 0 ? formatEUR(lotsTotalEur) : formatUSD(lotsTotalUsd)}
+              detail={lotsTotalEur > 0 && lotsTotalUsd > 0 ? formatUSD(lotsTotalUsd) : undefined}
+            />
+          )}
+          {hasSales && (
+            <SummaryCell
+              icon={<TrendingUp className="h-3.5 w-3.5" />}
+              label={`Vente${soldLots!.length > 1 ? 's' : ''} ${salesYears.length === 1 ? salesYears[0] : ''}`}
+              value={soldLots!.length.toLocaleString('fr-FR')}
+              detail={
+                salesProceedsEur > 0
+                  ? `${formatEUR(salesProceedsEur)} · ${salesQty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`
+                  : salesProceedsUsd > 0
+                  ? `${formatUSD(salesProceedsUsd)} · ${salesQty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`
+                  : `${salesQty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`
+              }
+            />
+          )}
+        </div>
+      )}
+
+      {originList.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-700 pt-2 border-t border-blue-100">
+          <span className="text-gray-500">Origines :</span>
+          {originList.map(([origin, qty]) => (
+            <span
+              key={origin}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-blue-100"
+            >
+              <strong>{originLabel(origin)}</strong>
+              <span className="text-gray-500">·&nbsp;{qty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {hasSales && salesYears.length > 1 && (
+        <p className="mt-2 text-xs text-gray-600">
+          Années couvertes : <strong>{salesYears.join(', ')}</strong>.
+        </p>
+      )}
+
+      {hasDividends && (
+        <p className="mt-2 text-xs text-gray-600">
+          Dividendes réinvestis (DRIP) : <strong>{dividendsCount}</strong> évènement{dividendsCount > 1 ? 's' : ''}
+          {dividendsGrossUsd > 0 ? <> · brut <strong>{formatUSD(dividendsGrossUsd)}</strong></> : null}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SummaryCell({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail?: string }) {
+  return (
+    <div className="bg-white rounded border border-blue-100 p-2">
+      <div className="flex items-center gap-1 text-[11px] text-gray-500">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="text-base font-semibold text-gray-900 tabular-nums leading-tight mt-0.5">{value}</div>
+      {detail && <div className="text-[11px] text-gray-500 tabular-nums mt-0.5">{detail}</div>}
+    </div>
+  );
+}
+
+export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends, onClear, lots, soldLots, dividendsCount = 0, dividendsGrossUsd = 0, embedded = false }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
@@ -402,6 +557,15 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
             onChange={handleInputChange}
           />
         </div>
+
+        <BrokerImportSummary
+          broker={broker}
+          lots={lots}
+          soldLots={soldLots}
+          dividendsCount={dividendsCount}
+          dividendsGrossUsd={dividendsGrossUsd}
+        />
+
         {(error || ecbError) && (
           <p
             className="mt-3 text-sm text-red-600"

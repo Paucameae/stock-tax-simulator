@@ -1,4 +1,5 @@
-﻿import { Database, Award, Building2 } from 'lucide-react';
+﻿import React from 'react';
+import { Database, Award, Building2 } from 'lucide-react';
 import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
@@ -12,6 +13,8 @@ interface DataPanelProps {
   settings: AppSettings;
   grants: GrantInfo[];
   onGrantsChange: (grants: GrantInfo[]) => void;
+  lots: StockLot[];
+  soldLots: SoldLot[];
   dividends: DividendEvent[];
   cashInterest: CashInterestEvent[];
   onDividendsChange: (p: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => void;
@@ -94,6 +97,8 @@ export function DataPanel({
   settings,
   grants,
   onGrantsChange,
+  lots,
+  soldLots,
   dividends,
   cashInterest,
   onDividendsChange,
@@ -103,6 +108,12 @@ export function DataPanel({
   onImportSales,
   onClearBroker,
 }: DataPanelProps) {
+  const fidelityLots = React.useMemo(() => lots.filter((l) => l.broker === 'fidelity'), [lots]);
+  const fidelitySold = React.useMemo(() => soldLots.filter((s) => s.broker === 'fidelity'), [soldLots]);
+  const msLots = React.useMemo(() => lots.filter((l) => l.broker === 'morgan_stanley'), [lots]);
+  const msSold = React.useMemo(() => soldLots.filter((s) => s.broker === 'morgan_stanley'), [soldLots]);
+  const msDividends = React.useMemo(() => dividends.filter((d) => d.broker === 'morgan_stanley'), [dividends]);
+  const msDividendsGrossUsd = React.useMemo(() => msDividends.reduce((s, d) => s + (d.grossUsd ?? 0), 0), [msDividends]);
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-6">
       <header className="flex items-start gap-3">
@@ -156,6 +167,8 @@ export function DataPanel({
               onImport={onImportLots}
               onImportSales={onImportSales}
               onClear={() => onClearBroker('fidelity')}
+              lots={fidelityLots}
+              soldLots={fidelitySold}
               embedded
             />
           </div>
@@ -181,6 +194,10 @@ export function DataPanel({
             onImportSales={onImportSales}
             onImportDividends={onImportMsDividends}
             onClear={() => onClearBroker('morgan_stanley')}
+            lots={msLots}
+            soldLots={msSold}
+            dividendsCount={msDividends.length}
+            dividendsGrossUsd={msDividendsGrossUsd}
             embedded
           />
           {dividends.some((d) => d.broker === 'morgan_stanley') ? (
