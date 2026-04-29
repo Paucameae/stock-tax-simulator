@@ -3,7 +3,8 @@ import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
 import { DividendsSummary } from './DividendsSummary';
-import { brokerLabel, brokerBadgeClass } from '../lib/utils';
+import { BrokerLogo } from './BrokerLogo';
+import { brokerBadgeClass } from '../lib/utils';
 import type { AppSettings, Broker, GrantInfo, StockLot, SoldLot } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 
@@ -56,11 +57,8 @@ interface BrokerSectionProps {
 function BrokerSection({ broker, description, children }: BrokerSectionProps) {
   return (
     <div className={`rounded-xl border ${brokerBadgeClass(broker)} bg-white p-4 space-y-3`}>
-      <div className="flex items-center gap-2">
-        <Building2 className="h-4 w-4" />
-        <h4 className="text-sm font-semibold uppercase tracking-wide">
-          {brokerLabel(broker)}
-        </h4>
+      <div className="flex items-center gap-3">
+        <BrokerLogo broker={broker} className="h-6" />
       </div>
       <p className="text-xs text-gray-600 -mt-1">{description}</p>
       <div className="space-y-3">{children}</div>

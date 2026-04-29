@@ -8,10 +8,11 @@ import { BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
-import { brokerBadgeClass, brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
 import { UnvestedView } from './UnvestedView';
 import { DividendsView } from './DividendsView';
+import { BrokerLogo } from './BrokerLogo';
 
 interface PortfolioProps {
   lots: StockLot[];
@@ -244,9 +245,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                       <td className="px-2.5 py-2 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_rgb(229,231,235)]">{formatDate(lot.acquisitionDate)}</td>
                       {hasMultipleBrokers && (
                         <td className="px-2.5 py-2 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${brokerBadgeClass(lot.broker)}`}>
-                            {brokerLabel(lot.broker)}
-                          </span>
+                          <BrokerLogo broker={lot.broker} className="h-4" />
                         </td>
                       )}
                       <td className="px-2.5 py-2 text-right">{lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
@@ -341,9 +340,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                       {originLabel(lot.origin)}
                     </Badge>
                     {hasMultipleBrokers && (
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded border ${brokerBadgeClass(lot.broker)}`}>
-                        {brokerLabel(lot.broker)}
-                      </span>
+                      <BrokerLogo broker={lot.broker} className="h-4" />
                     )}
                   </div>
                 </div>

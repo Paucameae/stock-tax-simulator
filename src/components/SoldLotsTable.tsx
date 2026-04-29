@@ -5,7 +5,8 @@ import { Badge } from './ui/badge';
 import { Select } from './ui/select';
 import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
 import type { Broker, SoldLot, StockOrigin, PlanType } from '../lib/types';
-import { brokerBadgeClass, brokerLabel, formatEUR, formatUSD, formatDate } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate } from '../lib/utils';
+import { BrokerLogo } from './BrokerLogo';
 
 interface SoldLotsTableProps {
   soldLots: SoldLot[];
@@ -156,9 +157,7 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
                   <td className="py-2 pr-3">{formatDate(lot.saleDate)}</td>
                   {hasMultipleBrokers && (
                     <td className="py-2 pr-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${brokerBadgeClass(lot.broker)}`}>
-                        {brokerLabel(lot.broker)}
-                      </span>
+                      <BrokerLogo broker={lot.broker} className="h-4" />
                     </td>
                   )}
                   <td className="py-2 pr-3 text-right tabular-nums">
@@ -223,9 +222,7 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
             <div key={lot.id} className="border rounded-lg p-3 space-y-2">
               {hasMultipleBrokers && (
                 <div>
-                  <span className={`inline-flex items-center px-2 py-0.5 text-[10px] font-medium rounded border ${brokerBadgeClass(lot.broker)}`}>
-                    {brokerLabel(lot.broker)}
-                  </span>
+                  <BrokerLogo broker={lot.broker} className="h-4" />
                 </div>
               )}
               <div className="flex items-start justify-between gap-2 text-xs">
