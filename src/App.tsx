@@ -377,6 +377,42 @@ function App() {
     setSimResult(null);
   }, [cashInterest]);
 
+  // Fine-grained per-slice clear handlers. They mirror handleClearBroker but
+  // only touch one storage bucket so the user can drop a single mistakenly
+  // imported slice (e.g. DRIP dividends) without losing positions or sales.
+  const handleClearBrokerLots = React.useCallback((broker: Broker) => {
+    setLots((prev) => prev.filter((l) => l.broker !== broker));
+    // Positions feeding the simulator are gone — purge stale results too.
+    setSimEntries([]);
+    setSimResult(null);
+  }, []);
+
+  const handleClearBrokerSales = React.useCallback((broker: Broker) => {
+    setSoldLots((prev) => prev.filter((sl) => sl.broker !== broker));
+  }, []);
+
+  const handleClearBrokerDividends = React.useCallback((broker: Broker) => {
+    setDividends((prev) => {
+      const next = prev.filter((d) => d.broker !== broker);
+      const remainingCash = broker === 'morgan_stanley'
+        ? cashInterest.filter((c) => c.broker !== broker)
+        : cashInterest;
+      if (next.length === 0 && remainingCash.length === 0) {
+        clearDividends();
+      } else {
+        saveDividends({
+          dividends: next,
+          cashInterest: remainingCash,
+          importedAt: new Date().toISOString(),
+        });
+      }
+      return next;
+    });
+    if (broker === 'morgan_stanley') {
+      setCashInterest((prev) => prev.filter((c) => c.broker !== broker));
+    }
+  }, [cashInterest]);
+
   const handleSoldLotsChange = React.useCallback((updatedSoldLots: SoldLot[]) => {
     setSoldLots(updatedSoldLots);
     // Re-run the declaration computation with year-filtered lots
@@ -737,6 +773,9 @@ function App() {
             onImportLots={handleImport}
             onImportSales={handleImportSales}
             onClearBroker={handleClearBroker}
+            onClearBrokerLots={handleClearBrokerLots}
+            onClearBrokerSales={handleClearBrokerSales}
+            onClearBrokerDividends={handleClearBrokerDividends}
           />
           </React.Suspense>
         </div>

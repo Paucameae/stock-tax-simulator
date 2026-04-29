@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, CheckCircle2, Trash2, Layers, TrendingUp } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
+import { Dialog, DialogFooter } from './ui/dialog';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsActivityXlsx } from '../lib/brokers/morgan-stanley';
 import { useEcbConversion } from '../hooks/useEcbConversion';
@@ -56,6 +57,16 @@ interface CsvImporterProps {
   dividendsCount?: number;
   dividendsGrossUsd?: number;
   /**
+   * Fine-grained clear callbacks scoped to a single data slice for this
+   * broker. Each is independent so the user can drop just their dividends
+   * without touching positions/sales (the original asymmetric concern that
+   * led to these props). When omitted the corresponding "Effacer" affordance
+   * is hidden.
+   */
+  onClearLots?: () => void;
+  onClearSales?: () => void;
+  onClearDividends?: () => void;
+  /**
    * When rendered inside a BrokerSection card, set this to true to drop the
    * outer Card wrapper and the redundant "Importer l'export ..." title.
    * The broker identity is already given by the parent section.
@@ -94,7 +105,12 @@ interface SummaryProps {
   soldLots?: SoldLot[];
   dividendsCount: number;
   dividendsGrossUsd: number;
+  onClearLots?: () => void;
+  onClearSales?: () => void;
+  onClearDividends?: () => void;
 }
+
+type ClearTarget = 'lots' | 'sales' | 'dividends';
 
 /**
  * Aggregated, persistence-backed summary of what is currently loaded for a
@@ -102,7 +118,8 @@ interface SummaryProps {
  * "Mes données" blocks expose the same kind of post-import feedback. Hides
  * itself when no data is loaded.
  */
-function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividendsGrossUsd }: SummaryProps) {
+function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividendsGrossUsd, onClearLots, onClearSales, onClearDividends }: SummaryProps) {
+  const [pendingClear, setPendingClear] = React.useState<ClearTarget | null>(null);
   const hasLots = !!(lots && lots.length > 0);
   const hasSales = !!(soldLots && soldLots.length > 0);
   const hasDividends = dividendsCount > 0;
@@ -157,6 +174,8 @@ function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividends
               label={`Lot${lots!.length > 1 ? 's' : ''} ouvert${lots!.length > 1 ? 's' : ''}`}
               value={lots!.length.toLocaleString('fr-FR')}
               detail={`${lotsTotalShares.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`}
+              onClear={onClearLots ? () => setPendingClear('lots') : undefined}
+              clearLabel="Effacer les positions"
             />
           )}
           {hasLots && (
@@ -179,6 +198,8 @@ function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividends
                   ? `${formatUSD(salesProceedsUsd)} · ${salesQty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`
                   : `${salesQty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`
               }
+              onClear={onClearSales ? () => setPendingClear('sales') : undefined}
+              clearLabel="Effacer les ventes"
             />
           )}
         </div>
@@ -206,18 +227,100 @@ function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividends
       )}
 
       {hasDividends && (
-        <p className="mt-2 text-xs text-gray-600">
-          Dividendes réinvestis (DRIP) : <strong>{dividendsCount}</strong> évènement{dividendsCount > 1 ? 's' : ''}
-          {dividendsGrossUsd > 0 ? <> · brut <strong>{formatUSD(dividendsGrossUsd)}</strong></> : null}.
-        </p>
+        <div className="mt-2 flex items-start justify-between gap-2">
+          <p className="text-xs text-gray-600">
+            Dividendes réinvestis (DRIP) : <strong>{dividendsCount}</strong> évènement{dividendsCount > 1 ? 's' : ''}
+            {dividendsGrossUsd > 0 ? <> · brut <strong>{formatUSD(dividendsGrossUsd)}</strong></> : null}.
+          </p>
+          {onClearDividends && (
+            <button
+              type="button"
+              onClick={() => setPendingClear('dividends')}
+              className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 transition-colors shrink-0"
+              aria-label="Effacer les dividendes"
+            >
+              <Trash2 className="h-3 w-3" aria-hidden="true" />
+              Effacer
+            </button>
+          )}
+        </div>
       )}
+
+      <ClearConfirmDialog
+        target={pendingClear}
+        broker={broker}
+        onCancel={() => setPendingClear(null)}
+        onConfirm={() => {
+          if (pendingClear === 'lots') onClearLots?.();
+          else if (pendingClear === 'sales') onClearSales?.();
+          else if (pendingClear === 'dividends') onClearDividends?.();
+          setPendingClear(null);
+        }}
+      />
     </div>
   );
 }
 
-function SummaryCell({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail?: string }) {
+/** Inline confirmation dialog for the per-slice clear actions. Closed when
+ *  `target` is null. Wording is tailored per slice so the user knows exactly
+ *  which subset of their data is about to disappear. */
+function ClearConfirmDialog({
+  target,
+  broker,
+  onCancel,
+  onConfirm,
+}: {
+  target: ClearTarget | null;
+  broker: Broker;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const open = target !== null;
+  const labelByTarget: Record<ClearTarget, { title: string; body: string }> = {
+    lots: {
+      title: `Effacer les positions ${brokerLabel(broker)} ?`,
+      body: 'Vos ventes et dividendes ne sont pas affectés. Cette action est irréversible — vous pourrez ré-importer le fichier à tout moment.',
+    },
+    sales: {
+      title: `Effacer les ventes ${brokerLabel(broker)} ?`,
+      body: 'Vos positions et dividendes ne sont pas affectés. Cette action est irréversible — vous pourrez ré-importer le fichier à tout moment.',
+    },
+    dividends: {
+      title: `Effacer les dividendes ${brokerLabel(broker)} ?`,
+      body: 'Vos positions et ventes ne sont pas affectées. Cette action est irréversible — vous pourrez ré-importer le fichier à tout moment.',
+    },
+  };
+  const content = target ? labelByTarget[target] : null;
   return (
-    <div className="bg-white rounded border border-blue-100 p-2">
+    <Dialog open={open} onClose={onCancel}>
+      {content && (
+        <>
+          <h2 className="text-base font-semibold mb-2">{content.title}</h2>
+          <p className="text-sm text-gray-600 mb-4">{content.body}</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={onCancel}>Annuler</Button>
+            <Button variant="destructive" onClick={onConfirm}>Effacer</Button>
+          </DialogFooter>
+        </>
+      )}
+    </Dialog>
+  );
+}
+
+function SummaryCell({ icon, label, value, detail, onClear, clearLabel }: { icon: React.ReactNode; label: string; value: string; detail?: string; onClear?: () => void; clearLabel?: string }) {
+  return (
+    <div className="bg-white rounded border border-blue-100 p-2 relative">
+      {onClear && (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label={clearLabel}
+          title={clearLabel}
+          className="absolute top-1 right-1 p-0.5 rounded text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+        >
+          <Trash2 className="h-3 w-3" aria-hidden="true" />
+        </button>
+      )}
       <div className="flex items-center gap-1 text-[11px] text-gray-500">
         {icon}
         <span>{label}</span>
@@ -228,7 +331,7 @@ function SummaryCell({ icon, label, value, detail }: { icon: React.ReactNode; la
   );
 }
 
-export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends, onClear, lots, soldLots, dividendsCount = 0, dividendsGrossUsd = 0, embedded = false }: CsvImporterProps) {
+export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity', onImport, onImportSales, onImportDividends, onClear, onClearLots, onClearSales, onClearDividends, lots, soldLots, dividendsCount = 0, dividendsGrossUsd = 0, embedded = false }: CsvImporterProps) {
   const [isDragging, setIsDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
@@ -564,6 +667,9 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           soldLots={soldLots}
           dividendsCount={dividendsCount}
           dividendsGrossUsd={dividendsGrossUsd}
+          onClearLots={onClearLots}
+          onClearSales={onClearSales}
+          onClearDividends={onClearDividends}
         />
 
         {(error || ecbError) && (

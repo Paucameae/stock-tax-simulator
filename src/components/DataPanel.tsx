@@ -25,6 +25,10 @@ interface DataPanelProps {
   onImportSales: (soldLots: SoldLot[]) => void;
   /** Drop all positions + sales (and dividends, for MS) belonging to a broker. */
   onClearBroker: (broker: Broker) => void;
+  /** Fine-grained clear actions: drop only the named slice for one broker. */
+  onClearBrokerLots: (broker: Broker) => void;
+  onClearBrokerSales: (broker: Broker) => void;
+  onClearBrokerDividends: (broker: Broker) => void;
 }
 
 interface SectionHeaderProps {
@@ -107,6 +111,9 @@ export function DataPanel({
   onImportLots,
   onImportSales,
   onClearBroker,
+  onClearBrokerLots,
+  onClearBrokerSales,
+  onClearBrokerDividends,
 }: DataPanelProps) {
   const fidelityLots = React.useMemo(() => lots.filter((l) => l.broker === 'fidelity'), [lots]);
   const fidelitySold = React.useMemo(() => soldLots.filter((s) => s.broker === 'fidelity'), [soldLots]);
@@ -167,6 +174,8 @@ export function DataPanel({
               onImport={onImportLots}
               onImportSales={onImportSales}
               onClear={() => onClearBroker('fidelity')}
+              onClearLots={() => onClearBrokerLots('fidelity')}
+              onClearSales={() => onClearBrokerSales('fidelity')}
               lots={fidelityLots}
               soldLots={fidelitySold}
               embedded
@@ -194,6 +203,9 @@ export function DataPanel({
             onImportSales={onImportSales}
             onImportDividends={onImportMsDividends}
             onClear={() => onClearBroker('morgan_stanley')}
+            onClearLots={() => onClearBrokerLots('morgan_stanley')}
+            onClearSales={() => onClearBrokerSales('morgan_stanley')}
+            onClearDividends={() => onClearBrokerDividends('morgan_stanley')}
             lots={msLots}
             soldLots={msSold}
             dividendsCount={msDividends.length}
