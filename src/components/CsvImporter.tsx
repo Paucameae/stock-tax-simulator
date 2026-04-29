@@ -223,7 +223,8 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
     [handleFiles]
   );
 
-  const helpButton = (
+  const guideAvailable = broker === 'fidelity';
+  const helpButton = guideAvailable ? (
     <button
       type="button"
       onClick={() => setShowGuide(true)}
@@ -233,6 +234,15 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
       <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
       Comment exporter ?
     </button>
+  ) : (
+    <span
+      role="note"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-dashed border-gray-300 text-gray-400 whitespace-nowrap shrink-0 cursor-not-allowed"
+      title="Le guide d'export pour ce courtier sera ajouté prochainement"
+    >
+      <HelpCircle className="h-3.5 w-3.5" aria-hidden="true" />
+      Guide d'export à venir
+    </span>
   );
 
   const body = (
@@ -365,7 +375,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           </p>
         )}
 
-        <BrokerExportGuide open={showGuide} onClose={() => setShowGuide(false)} />
+        <BrokerExportGuide open={showGuide && guideAvailable} onClose={() => setShowGuide(false)} />
     </>
   );
 
