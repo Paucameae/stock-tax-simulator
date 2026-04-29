@@ -26,6 +26,9 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const [filterHolding, setFilterHolding] = React.useState<'all' | 'Short' | 'Long'>('all');
   const [filterBroker, setFilterBroker] = React.useState<Broker | 'all'>('all');
   const [sortBy, setSortBy] = React.useState<'date' | 'type' | 'gain'>('date');
+  // Currency-conversion details (Prix USD / Taux BCE) are hidden by default to
+  // keep the table compact; user can opt in when she needs to audit FX rates.
+  const [showFxDetails, setShowFxDetails] = React.useState(false);
 
   const presentBrokers = React.useMemo(() => {
     return Array.from(new Set(lots.map((l) => l.broker))) as Broker[];
@@ -188,6 +191,15 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
           <option value="type">Tri par type</option>
           <option value="gain">Tri par gain</option>
         </Select>
+        {hasUsdImport && (
+          <button
+            type="button"
+            onClick={() => setShowFxDetails((v) => !v)}
+            className="ml-auto text-xs text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline self-center"
+          >
+            {showFxDetails ? 'Masquer' : 'Afficher'} les détails de change
+          </button>
+        )}
       </div>
 
       {/* Table — desktop */}
@@ -196,77 +208,77 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
           <div className="overflow-x-auto">
             <table className="w-full text-sm whitespace-nowrap">
               <thead>
-                <tr className="border-b bg-gray-50">
-                  <th className="text-left p-3 font-medium">Date acq.</th>
-                  {hasMultipleBrokers && <th className="text-center p-3 font-medium">Courtier</th>}
-                  <th className="text-right p-3 font-medium">Quantité</th>
-                  <th className="text-right p-3 font-medium">Prix/action</th>
-                  {hasUsdImport && (
+                <tr className="border-b bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
+                  <th className="text-left px-2.5 py-2 font-medium sticky left-0 z-10 bg-gray-50 shadow-[1px_0_0_0_rgb(229,231,235)]">Date</th>
+                  {hasMultipleBrokers && <th className="text-center px-2.5 py-2 font-medium">Courtier</th>}
+                  <th className="text-right px-2.5 py-2 font-medium">Qté</th>
+                  <th className="text-right px-2.5 py-2 font-medium">Prix/act.</th>
+                  {hasUsdImport && showFxDetails && (
                     <>
-                      <th className="text-right p-3 font-medium">Prix USD</th>
-                      <th className="text-right p-3 font-medium">Taux BCE</th>
+                      <th className="text-right px-2.5 py-2 font-medium">Prix USD</th>
+                      <th className="text-right px-2.5 py-2 font-medium">Taux BCE</th>
                     </>
                   )}
                   {hasEsppLots && (
-                    <th className="text-right p-3 font-medium">
+                    <th className="text-right px-2.5 py-2 font-medium">
                       FMV acq.
                       <Tooltip content="Valeur de marché à la date d'achat ESPP (avant décote 10 %). Utilisée comme prix de revient fiscal pour le calcul de la plus-value de cession." />
                     </th>
                   )}
-                  <th className="text-right p-3 font-medium">Valeur</th>
-                  <th className="text-right p-3 font-medium">PV/MV</th>
-                  <th className="text-center p-3 font-medium">Origine</th>
-                  <th className="text-center p-3 font-medium">
-                    Statut fiscal
+                  <th className="text-right px-2.5 py-2 font-medium">Valeur</th>
+                  <th className="text-right px-2.5 py-2 font-medium">PV/MV</th>
+                  <th className="text-center px-2.5 py-2 font-medium">Origine</th>
+                  <th className="text-center px-2.5 py-2 font-medium">
+                    Régime
                     <Tooltip content="Le régime fiscal détermine le traitement de votre gain d'acquisition. Les lots FM/FQ sont automatiquement qualifiés." />
                   </th>
-                  <th className="text-center p-3 font-medium">Période</th>
-                  <th className="text-left p-3 font-medium">Dispo. vente</th>
+                  <th className="text-center px-2.5 py-2 font-medium">Détention</th>
+                  <th className="text-left px-2.5 py-2 font-medium">Dispo.</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredLots.map((lot) => {
                   const notYetAvailable = lot.availableForSaleDate && lot.availableForSaleDate > new Date();
                   return (
-                    <tr key={lot.id} className="border-b hover:bg-gray-50">
-                      <td className="p-3">{formatDate(lot.acquisitionDate)}</td>
+                    <tr key={lot.id} className="border-b hover:bg-gray-50 group">
+                      <td className="px-2.5 py-2 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_rgb(229,231,235)]">{formatDate(lot.acquisitionDate)}</td>
                       {hasMultipleBrokers && (
-                        <td className="p-3 text-center">
+                        <td className="px-2.5 py-2 text-center">
                           <span className={`inline-flex items-center px-2 py-0.5 text-[11px] font-medium rounded border ${brokerBadgeClass(lot.broker)}`}>
                             {brokerLabel(lot.broker)}
                           </span>
                         </td>
                       )}
-                      <td className="p-3 text-right">{lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
-                      <td className="p-3 text-right">{formatEUR(lot.costBasisPerShare)}</td>
-                      {hasUsdImport && (
+                      <td className="px-2.5 py-2 text-right">{lot.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
+                      <td className="px-2.5 py-2 text-right">{formatEUR(lot.costBasisPerShare)}</td>
+                      {hasUsdImport && showFxDetails && (
                         <>
-                          <td className="p-3 text-right text-gray-500">
+                          <td className="px-2.5 py-2 text-right text-gray-500">
                             {lot.costBasisPerShareUsd ? formatUSD(lot.costBasisPerShareUsd) : '—'}
                           </td>
-                          <td className="p-3 text-right text-gray-500 font-mono text-xs">
+                          <td className="px-2.5 py-2 text-right text-gray-500 font-mono text-xs">
                             {lot.eurUsdRate ? lot.eurUsdRate.toFixed(4) : '—'}
                           </td>
                         </>
                       )}
                       {hasEsppLots && (
-                        <td className="p-3 text-right">
+                        <td className="px-2.5 py-2 text-right">
                           {lot.origin === 'SP' ? formatEUR(lot.esppFmvPerShare ?? 0) : '—'}
                         </td>
                       )}
-                      <td className="p-3 text-right">{formatEUR(lot.currentValue)}</td>
-                      <td className={`p-3 text-right ${lot.unrealizedGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <td className="px-2.5 py-2 text-right">{formatEUR(lot.currentValue)}</td>
+                      <td className={`px-2.5 py-2 text-right ${lot.unrealizedGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                         <span className="inline-flex items-center gap-1">
                           {lot.unrealizedGainLoss >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                           {formatEUR(Math.abs(lot.unrealizedGainLoss))}
                         </span>
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="px-2.5 py-2 text-center">
                         <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
                           {originLabel(lot.origin)}
                         </Badge>
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="px-2.5 py-2 text-center">
                         {lot.origin === 'DO' ? (
                           <Select
                             value={lot.planType}
@@ -280,12 +292,12 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                           <span className="text-xs">{planTypeLabel(lot.planType)}</span>
                         )}
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="px-2.5 py-2 text-center">
                         <Badge variant={lot.holdingPeriod === 'Long' ? 'success' : 'outline'}>
                           {lot.holdingPeriod === 'Long' ? '≥ 2 ans' : '< 2 ans'}
                         </Badge>
                       </td>
-                      <td className="p-3">
+                      <td className="px-2.5 py-2">
                         {notYetAvailable ? (
                           <span className="text-amber-600 text-xs font-medium">
                             ⚠️ {formatDate(lot.availableForSaleDate)}

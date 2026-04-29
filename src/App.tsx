@@ -539,7 +539,7 @@ function App() {
       </div>
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-screen-2xl mx-auto px-4 py-6">
         <div hidden={activeTab !== 'portfolio'}>
           <div className="space-y-6">
             {!settingsDone && (
