@@ -8,7 +8,7 @@ import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
-import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, loadDividends, saveDividends } from './lib/storage';
+import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
 import { reconcileLots } from './lib/stockexport-reconciliation';
 import type { ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo } from './lib/types';
@@ -255,7 +255,10 @@ function App() {
         const nextDividends = [...prev.filter((d) => d.broker !== 'fidelity'), ...payload.dividends];
         setCashInterest((prevCash) => {
           const nextCash = [...prevCash.filter((c) => c.broker !== 'fidelity'), ...payload.cashInterest];
-          if (nextDividends.length === 0 && nextCash.length === 0) return nextCash;
+          if (nextDividends.length === 0 && nextCash.length === 0) {
+            clearDividends();
+            return nextCash;
+          }
           saveDividends({
             dividends: nextDividends,
             cashInterest: nextCash,

@@ -156,8 +156,8 @@ export function DataPanel({
             <SubLabel label="Dividendes & intérêts" />
             <DividendsImporter
               broker="fidelity"
-              dividends={dividends}
-              cashInterest={cashInterest}
+              dividends={dividends.filter((d) => d.broker === 'fidelity')}
+              cashInterest={cashInterest.filter((c) => c.broker === 'fidelity')}
               onDividendsChange={onDividendsChange}
             />
           </div>

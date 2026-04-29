@@ -6,7 +6,6 @@ import { Alert } from './ui/alert';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { transactionHistoryGuide } from './guides/transaction-history-steps';
 import { parseTransactionHistoryCsv, type DividendEvent, type CashInterestEvent } from '../lib/transaction-parser';
-import { saveDividends, clearDividends } from '../lib/storage';
 import { brokerLabel, formatUSD } from '../lib/utils';
 import type { Broker } from '../lib/types';
 
@@ -47,8 +46,8 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
         setError(`Aucun dividende reconnu dans ce fichier. Vérifiez qu'il s'agit bien d'un historique des transactions ${brokerLabel(broker)}.`);
         return;
       }
-      const importedAt = new Date().toISOString();
-      saveDividends({ dividends: parsed.dividends, cashInterest: parsed.cashInterest, importedAt });
+      // Persistence is handled by the parent via onDividendsChange so that
+      // the merged multi-broker state stays consistent.
       onDividendsChange({ dividends: parsed.dividends, cashInterest: parsed.cashInterest });
       setWarnings(parsed.warnings);
     } catch (err) {
@@ -60,7 +59,6 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
   };
 
   const handleClear = () => {
-    clearDividends();
     onDividendsChange({ dividends: [], cashInterest: [] });
     setFileName(null);
     setWarnings([]);
