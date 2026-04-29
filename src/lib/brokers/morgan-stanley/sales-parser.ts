@@ -176,6 +176,18 @@ function findHeaderIndex(cells: string[]): Record<keyof ShareSaleRow, number> | 
 }
 
 /**
+ * Error thrown when a Share Sales export was generated WITHOUT the
+ * "Show Withdrawal by Lot" option: every sale row is structurally valid
+ * but the Acquisition Date / Acquisition Value columns are empty,
+ * meaning the per-lot ventilation needed for capital-gain computation is
+ * missing. The user has to re-export with the option ticked.
+ */
+export const MS_MISSING_LOT_DETAIL_MESSAGE =
+  'Le rapport contient des ventes mais sans la ventilation par lot d\u2019acquisition. ' +
+  'Re-t\u00e9l\u00e9charge le rapport depuis Morgan Stanley en cochant l\u2019option ' +
+  '\u00ab\u00a0Show Withdrawal by Lot\u00a0\u00bb (sinon le simulateur ne peut pas calculer la plus-value).';
+
+/**
  * Same as `rowsFromCells` but returns null when no recognizable Share Sales
  * header is found. Used by the XLSX path which scans multiple sheets.
  */
@@ -187,6 +199,11 @@ function tryRowsFromCells(rows: string[][]): SoldLot[] | null {
   let headerIdx: Record<keyof ShareSaleRow, number> | null = null;
   const out: SoldLot[] = [];
   const counter = { n: 0 };
+  // Track rows that look like completed sales but lack the per-lot detail
+  // (empty Acquisition Date). A non-zero count combined with an empty `out`
+  // is the "Show Withdrawal by Lot" footgun.
+  let completedRowsMissingLotDetail = 0;
+  let totalCompletedRows = 0;
 
   for (const row of rows) {
     if (!row || row.length === 0) continue;
@@ -210,8 +227,24 @@ function tryRowsFromCells(rows: string[][]): SoldLot[] | null {
       acquisitionValue: get('acquisitionValue'),
     };
 
+    if (sale.orderStatus.trim() === 'Complete') {
+      totalCompletedRows++;
+      if (!sale.acquisitionDate.trim() && !sale.acquisitionValue.trim()) {
+        completedRowsMissingLotDetail++;
+      }
+    }
+
     const sold = rowToSoldLot(sale, counter);
     if (sold) out.push(sold);
+  }
+
+  if (
+    headerIdx &&
+    out.length === 0 &&
+    totalCompletedRows > 0 &&
+    completedRowsMissingLotDetail === totalCompletedRows
+  ) {
+    throw new Error(MS_MISSING_LOT_DETAIL_MESSAGE);
   }
 
   return headerIdx ? out : null;

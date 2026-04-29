@@ -98,6 +98,19 @@ describe('parseMsSalesCsv', () => {
     expect(() => parseMsSalesCsv('foo,bar,baz\n1,2,3')).toThrow(/Format Morgan Stanley/);
   });
 
+  it('throws an explicit error when sales lack per-lot detail (Show Withdrawal by Lot unchecked)', () => {
+    const noLotDetail = [
+      'Share Sales',
+      'Date,Plan Name,Fund Name,Type,Order Status,Sale Price,Quantity,Net Cash Proceeds,Acquisition Date,Acquisition Value',
+      // Three completed sales with empty Acquisition Date / Value (the
+      // exact shape produced when "Show Withdrawal by Lot" is unticked)
+      '23-Dec-2022,Microsoft Stock Awards,MSFT,Ad Hoc,Complete,$238.19,730.000000,,,',
+      '04-Sep-2018,Microsoft Stock Awards,MSFT,Historical Transaction,Complete,$111.74,57.151000,"$6,371.07",,',
+      '06-Jul-2020,Microsoft Stock Awards,MSFT,Historical Transaction,Complete,$208.71,129.366000,"$26,984.43",,',
+    ].join('\n');
+    expect(() => parseMsSalesCsv(noLotDetail)).toThrow(/Show Withdrawal by Lot/);
+  });
+
   it('parses Excel-serial dates (XLSX-style numeric input)', () => {
     // 46013 = 22-Dec-2025; 44804 = 31-Aug-2022
     const xlsxStyle = [

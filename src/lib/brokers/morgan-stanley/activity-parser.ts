@@ -1,6 +1,7 @@
 import type { SoldLot, StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
 import type { DividendEvent } from '../fidelity/transactions-parser';
 import { parseWorksheet, parseSharedStrings, readXlsx } from '../../xlsx-reader';
+import { MS_MISSING_LOT_DETAIL_MESSAGE } from './sales-parser';
 
 /**
  * Parser for the Morgan Stanley "Participant Share Sales Report" XLSX file.
@@ -234,6 +235,8 @@ function parseShareSalesSection(
   );
 
   const out: SoldLot[] = [];
+  let totalCompletedRows = 0;
+  let completedRowsMissingLotDetail = 0;
   for (let r = section.startRowIdx; r < section.endRowIdx; r++) {
     const row = rows[r] ?? [];
     if (row.every(c => !c || !c.trim())) continue;
@@ -245,17 +248,25 @@ function parseShareSalesSection(
 
     const orderStatus = (row[map['Order Status']] ?? '').trim();
     if (orderStatus !== 'Complete') continue;
+    totalCompletedRows++;
+
+    const acqRaw = (row[map['Acquisition Date']] ?? '').trim();
+    const acqValRaw = (row[map['Acquisition Value']] ?? '').trim();
+    if (!acqRaw && !acqValRaw) {
+      completedRowsMissingLotDetail++;
+      continue;
+    }
 
     const saleDate = parseAnyMsDate(row[map['Date']] ?? '');
     if (!saleDate) continue;
-    const acquisitionDate = parseAnyMsDate(row[map['Acquisition Date']] ?? '');
+    const acquisitionDate = parseAnyMsDate(acqRaw);
     if (!acquisitionDate) continue;
 
     const quantity = parseMsAmount(row[map['Quantity']] ?? '');
     if (!Number.isFinite(quantity) || quantity <= 0) continue;
     const salePrice = parseMsAmount(row[map['Sale Price']] ?? '');
     if (!Number.isFinite(salePrice) || salePrice <= 0) continue;
-    const acquisitionValue = parseMsAmount(row[map['Acquisition Value']] ?? '');
+    const acquisitionValue = parseMsAmount(acqValRaw);
     if (!Number.isFinite(acquisitionValue) || acquisitionValue < 0) continue;
 
     const origin = planNameToOrigin(row[map['Plan Name']] ?? '');
@@ -279,6 +290,15 @@ function parseShareSalesSection(
       importCurrency: 'USD' as ImportCurrency,
     });
   }
+
+  if (
+    out.length === 0 &&
+    totalCompletedRows > 0 &&
+    completedRowsMissingLotDetail === totalCompletedRows
+  ) {
+    throw new Error(MS_MISSING_LOT_DETAIL_MESSAGE);
+  }
+
   return out;
 }
 
