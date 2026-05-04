@@ -18,6 +18,8 @@ interface StockExportImporterProps {
   /** Fallback plan type applied to DO lots when no StockExport is imported. */
   defaultPlanType?: DoPlanType;
   onDefaultPlanTypeChange?: (value: DoPlanType) => void;
+  /** When true, render without the outer Card wrapper (DataPanel provides one). */
+  embedded?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ export function StockExportImporter({
   onGrantsChange,
   defaultPlanType,
   onDefaultPlanTypeChange,
+  embedded = false,
 }: StockExportImporterProps) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -85,9 +88,8 @@ export function StockExportImporter({
     );
   }, [grants]);
 
-  return (
-    <Card>
-      <CardContent className="pt-5 pb-4 space-y-4">
+  const body = (
+    <div className="space-y-4">
         {/* Top meta-action bar: clear (when data) + help. Mirrors the broker
             cards so all four "Mes donnees" blocks share a single rhythm. */}
         <div className="flex items-center justify-end gap-2">
@@ -220,7 +222,13 @@ export function StockExportImporter({
             </div>
           </div>
         )}
-      </CardContent>
+    </div>
+  );
+
+  if (embedded) return body;
+  return (
+    <Card>
+      <CardContent className="pt-5 pb-4">{body}</CardContent>
     </Card>
   );
 }

@@ -159,12 +159,21 @@ export function DataPanel({
           title="Attributions & vesting"
           description="Métadonnées d'attribution exportées par Microsoft (plan, date, calendrier de vesting). Indispensable pour classer vos lots et projeter les vestings à venir."
         />
-        <StockExportImporter
-          grants={grants}
-          onGrantsChange={onGrantsChange}
-          defaultPlanType={settings.defaultPlanType}
-          onDefaultPlanTypeChange={onDefaultPlanTypeChange}
-        />
+        <div className="rounded-xl border border-gray-200 border-l-4 border-l-violet-500 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100 bg-violet-50/60">
+            <h4 className="text-base font-semibold text-gray-900">Microsoft StockExport</h4>
+            <Award className="h-5 w-5 text-violet-600 shrink-0" aria-hidden="true" />
+          </div>
+          <div className="p-5">
+            <StockExportImporter
+              grants={grants}
+              onGrantsChange={onGrantsChange}
+              defaultPlanType={settings.defaultPlanType}
+              onDefaultPlanTypeChange={onDefaultPlanTypeChange}
+              embedded
+            />
+          </div>
+        </div>
       </section>
 
       {/* 2. Per-broker data */}
