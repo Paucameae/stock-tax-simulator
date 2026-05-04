@@ -70,9 +70,9 @@ interface BrokerSectionProps {
 function BrokerSection({ broker, description, children }: BrokerSectionProps) {
   return (
     <div className={`rounded-xl border ${brokerBadgeClass(broker)} bg-white p-5 space-y-4`}>
-      <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
-        <BrokerLogo broker={broker} className="h-6" />
-        <h4 className="text-sm font-semibold text-gray-900">{brokerLabel(broker)}</h4>
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
+        <h4 className="text-base font-semibold text-gray-900">{brokerLabel(broker)}</h4>
+        <BrokerLogo broker={broker} className="h-6 shrink-0" />
       </div>
       <p className="text-xs text-gray-600 -mt-2">{description}</p>
       <div className="space-y-4">{children}</div>
