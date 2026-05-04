@@ -5,7 +5,7 @@ import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
 import { DividendsSummary } from './DividendsSummary';
 import { BrokerLogo } from './BrokerLogo';
-import { brokerLabel, brokerBadgeClass } from '../lib/utils';
+import { brokerLabel } from '../lib/utils';
 import type { AppSettings, Broker, GrantInfo, StockLot, SoldLot } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 
@@ -67,15 +67,28 @@ interface BrokerSectionProps {
  * the broker identity (logo + name + description) so its embedded
  * importers can drop their own redundant headers.
  */
+/**
+ * Per-broker visual accent. We deliberately keep the card body on a neutral
+ * white so the inner colored summary banners stay readable; instead we lean
+ * on a thicker coloured left border + tinted header strip for separation.
+ */
+const BROKER_ACCENT: Record<Broker, { stripe: string; header: string }> = {
+  fidelity: { stripe: 'border-l-emerald-500', header: 'bg-emerald-50/60' },
+  morgan_stanley: { stripe: 'border-l-sky-500', header: 'bg-sky-50/60' },
+};
+
 function BrokerSection({ broker, description, children }: BrokerSectionProps) {
+  const accent = BROKER_ACCENT[broker];
   return (
-    <div className={`rounded-xl border ${brokerBadgeClass(broker)} bg-white p-5 space-y-4`}>
-      <div className="flex items-center justify-between gap-3 pb-3 border-b border-gray-100">
+    <div className={`rounded-xl border border-gray-200 border-l-4 ${accent.stripe} bg-white shadow-sm overflow-hidden`}>
+      <div className={`flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100 ${accent.header}`}>
         <h4 className="text-base font-semibold text-gray-900">{brokerLabel(broker)}</h4>
         <BrokerLogo broker={broker} className="h-6 shrink-0" />
       </div>
-      <p className="text-xs text-gray-600 -mt-2">{description}</p>
-      <div className="space-y-4">{children}</div>
+      <div className="p-5 space-y-4">
+        <p className="text-xs text-gray-600">{description}</p>
+        <div className="space-y-4">{children}</div>
+      </div>
     </div>
   );
 }
