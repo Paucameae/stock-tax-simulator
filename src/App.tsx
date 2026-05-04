@@ -781,19 +781,17 @@ function App() {
         </div>
 
         <div hidden={activeTab !== 'settings'}>
-          <div className="space-y-6">
-            <React.Suspense fallback={<LazyFallback />}>
-              <Settings
-                settings={settings}
-                onSettingsChange={setSettings}
-                defaults={DEFAULT_SETTINGS}
-                lots={lots}
-                soldLots={soldLots}
-                savedSimulations={savedSimulations}
-                onBackupImport={handleBackupImport}
-              />
-            </React.Suspense>
-          </div>
+          <React.Suspense fallback={<LazyFallback />}>
+            <Settings
+              settings={settings}
+              onSettingsChange={setSettings}
+              defaults={DEFAULT_SETTINGS}
+              lots={lots}
+              soldLots={soldLots}
+              savedSimulations={savedSimulations}
+              onBackupImport={handleBackupImport}
+            />
+          </React.Suspense>
         </div>
       </main>
 
