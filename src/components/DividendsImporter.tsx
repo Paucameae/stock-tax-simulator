@@ -1,8 +1,8 @@
 import React from 'react';
-import { Upload, RefreshCw, Trash2, AlertTriangle, Coins, HelpCircle } from 'lucide-react';
-import { Button } from './ui/button';
+import { Trash2, AlertTriangle, Coins, HelpCircle } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Alert } from './ui/alert';
+import { FileDropZone } from './ui/FileDropZone';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { transactionHistoryGuide } from './guides/transaction-history-steps';
 import { DividendsSummary } from './DividendsSummary';
@@ -37,11 +37,8 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
   const [warnings, setWarnings] = React.useState<string[]>([]);
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showGuide, setShowGuide] = React.useState(false);
-  const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFile = async (file: File) => {
     setError(null);
     setWarnings([]);
     setFileName(file.name);
@@ -61,7 +58,6 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
       setError('Impossible de lire le fichier : ' + (err as Error).message);
     } finally {
       setLoading(false);
-      if (inputRef.current) inputRef.current.value = '';
     }
   };
 
@@ -109,25 +105,13 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => inputRef.current?.click()}
-          disabled={loading}
-          className="gap-1.5"
-        >
-          {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          {loading ? 'Analyse…' : 'Choisir un fichier'}
-        </Button>
-      </div>
-
-      <input
-        ref={inputRef}
-        type="file"
+      <FileDropZone
         accept=".csv,text/csv"
-        className="hidden"
-        onChange={handleFile}
+        onFile={handleFile}
+        loading={loading}
+        compact
+        prompt={`Glissez l'historique des transactions ${brokerLabel(broker)} (CSV) ici ou cliquez pour parcourir`}
+        fileName={fileName}
       />
 
       <BrokerExportGuide

@@ -2,7 +2,8 @@ import React from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Alert } from './ui/alert';
-import { Upload, FileCheck, RefreshCw } from 'lucide-react';
+import { FileCheck } from 'lucide-react';
+import { FileDropZone } from './ui/FileDropZone';
 import { parseTaxNoticePdf, type TaxNoticeData } from '../lib/tax-notice-parser';
 import { saveVersionedSettings } from '../lib/storage';
 import { formatEUR } from '../lib/utils';
@@ -24,12 +25,11 @@ export function TaxNoticeImporter({ settings, onSettingsChange, embedded = false
   const [parsed, setParsed] = React.useState<TaxNoticeData | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [fileName, setFileName] = React.useState<string | null>(null);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFile = async (file: File) => {
     setError(null);
+    setFileName(file.name);
     setLoading(true);
     try {
       const data = await parseTaxNoticePdf(file);
@@ -41,7 +41,6 @@ export function TaxNoticeImporter({ settings, onSettingsChange, embedded = false
       setError('Erreur lors de la lecture du PDF : ' + (err as Error).message);
     } finally {
       setLoading(false);
-      if (inputRef.current) inputRef.current.value = '';
     }
   };
 
@@ -63,30 +62,18 @@ export function TaxNoticeImporter({ settings, onSettingsChange, embedded = false
 
   const body = (
     <>
-      <div className="flex items-center gap-3">
-          <Upload className="h-5 w-5 text-gray-400 shrink-0" />
-          <p className="flex-1 text-sm text-gray-600">
-            Importez votre <strong>avis d'imposition</strong> (PDF de impots.gouv.fr) pour
-            pré-remplir automatiquement situation familiale, parts et revenu imposable.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => inputRef.current?.click()}
-            disabled={loading}
-            className="gap-1.5 shrink-0"
-          >
-            {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {loading ? 'Analyse…' : 'Choisir un PDF'}
-          </Button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={handleUpload}
-          />
-        </div>
+      <p className="text-sm text-gray-600">
+        Importez votre <strong>avis d'imposition</strong> (PDF de impots.gouv.fr) pour
+        pré-remplir automatiquement situation familiale, parts et revenu imposable.
+      </p>
+
+      <FileDropZone
+        accept=".pdf,application/pdf"
+        onFile={handleFile}
+        loading={loading}
+        prompt="Glissez votre avis d'imposition (PDF) ici ou cliquez pour parcourir"
+        fileName={fileName}
+      />
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 

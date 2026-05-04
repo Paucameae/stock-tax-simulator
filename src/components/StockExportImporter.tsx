@@ -1,9 +1,9 @@
 import React from 'react';
-import { Upload, RefreshCw, FileCheck, Trash2, AlertTriangle, Award, HelpCircle } from 'lucide-react';
-import { Button } from './ui/button';
+import { FileCheck, Trash2, AlertTriangle, Award, HelpCircle } from 'lucide-react';
 import { Card, CardContent } from './ui/card';
 import { Alert } from './ui/alert';
 import { Select } from './ui/select';
+import { FileDropZone } from './ui/FileDropZone';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { stockexportGuide } from './guides/stockexport-steps';
 import { parseStockExportFile, hashGrantIds } from '../lib/stockexport-parser';
@@ -42,11 +42,8 @@ export function StockExportImporter({
   const [warnings, setWarnings] = React.useState<string[]>([]);
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showGuide, setShowGuide] = React.useState(false);
-  const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFile = async (file: File) => {
     setError(null);
     setWarnings([]);
     setFileName(file.name);
@@ -65,7 +62,6 @@ export function StockExportImporter({
       setError('Impossible de lire le fichier : ' + (err as Error).message);
     } finally {
       setLoading(false);
-      if (inputRef.current) inputRef.current.value = '';
     }
   };
 
@@ -126,25 +122,12 @@ export function StockExportImporter({
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => inputRef.current?.click()}
-            disabled={loading}
-            className="gap-1.5"
-          >
-            {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {loading ? 'Analyse…' : 'Choisir un fichier'}
-          </Button>
-        </div>
-
-        <input
-          ref={inputRef}
-          type="file"
+        <FileDropZone
           accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          className="hidden"
-          onChange={handleFile}
+          onFile={handleFile}
+          loading={loading}
+          prompt="Glissez votre fichier StockExport (.xlsx) ici ou cliquez pour parcourir"
+          fileName={fileName}
         />
 
         <BrokerExportGuide
