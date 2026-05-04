@@ -50,9 +50,15 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
   }, [availableYears, fiscalYear]);
 
   const [selectedYear, setSelectedYear] = React.useState<number>(defaultYear);
-  React.useEffect(() => {
+  // When the upstream `defaultYear` changes (e.g. a new dividend import shifts
+  // the most-recent-year heuristic), realign the selected year. Tracked via
+  // a "previous-prop" state slot so the reset happens during render — see
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [lastDefaultYear, setLastDefaultYear] = React.useState(defaultYear);
+  if (defaultYear !== lastDefaultYear) {
+    setLastDefaultYear(defaultYear);
     setSelectedYear(defaultYear);
-  }, [defaultYear]);
+  }
 
   const yearSummary = React.useMemo(
     () => groups.find((g) => g.year === selectedYear) ?? null,
