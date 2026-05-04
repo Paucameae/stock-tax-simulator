@@ -21,6 +21,8 @@ export function DividendsView({ dividends, cashInterest }: DividendsViewProps) {
   const [ratesLoading, setRatesLoading] = React.useState(false);
   const [ratesError, setRatesError] = React.useState<string | null>(null);
 
+  // Fetching ECB rates is a network side effect; the synchronous setState
+  // calls before the await are intentional (loading + error reset).
   React.useEffect(() => {
     if (dividends.length === 0) return;
     let cancelled = false;
@@ -50,13 +52,15 @@ export function DividendsView({ dividends, cashInterest }: DividendsViewProps) {
 
   // All groups collapsed by default; auto-open the only year if there is just one.
   const [openYears, setOpenYears] = React.useState<Set<number>>(() => new Set());
-  const initialisedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (initialisedRef.current) return;
-    if (groups.length === 0) return;
-    initialisedRef.current = true;
+  // Track whether the auto-open logic has run; we want it to fire once, the
+  // first time `groups` becomes non-empty (which happens after the rates have
+  // resolved). Doing it at render time avoids a synchronous setState in an
+  // effect.
+  const [autoOpened, setAutoOpened] = React.useState(false);
+  if (!autoOpened && groups.length > 0) {
+    setAutoOpened(true);
     if (groups.length === 1) setOpenYears(new Set([groups[0].year]));
-  }, [groups]);
+  }
   const toggleYear = React.useCallback((year: number) => {
     setOpenYears((prev) => {
       const next = new Set(prev);

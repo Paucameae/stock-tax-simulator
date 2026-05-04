@@ -86,7 +86,16 @@ function AccentCard({ title, icon, stripe, header, iconColor, children, footer }
 
 export function Settings({ settings, onSettingsChange, defaults, lots = [], soldLots = [], savedSimulations = [], onBackupImport }: SettingsProps) {
   const [local, setLocal] = React.useState(settings);
+  const [lastSyncedSettings, setLastSyncedSettings] = React.useState(settings);
   const [saved, setSaved] = React.useState(false);
+
+  // Sync when the upstream settings prop changes (e.g. tax notice import from
+  // the Data tab). Tracked via a "previous-prop" piece of state so that the
+  // reset happens during render — see https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  if (settings !== lastSyncedSettings) {
+    setLastSyncedSettings(settings);
+    setLocal(settings);
+  }
 
   const update = (patch: Partial<AppSettings>) => {
     const next = { ...local, ...patch };
@@ -98,11 +107,6 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
 
     setLocal(next);
   };
-
-  // Sync when settings prop changes (e.g. tax notice import from Data tab)
-  React.useEffect(() => {
-    setLocal(settings);
-  }, [settings]);
 
   const handleSave = () => {
     onSettingsChange(local);

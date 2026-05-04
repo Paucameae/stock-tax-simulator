@@ -33,13 +33,20 @@ interface BrokerExportGuideProps {
 export function BrokerExportGuide({ open, onClose, guides = DEFAULT_GUIDES, title = DEFAULT_TITLE }: BrokerExportGuideProps) {
   const [activeBroker, setActiveBroker] = React.useState(0);
   const [activeStep, setActiveStep] = React.useState(0);
+  // Track the open/broker combination so we can reset the step counter at
+  // render time when the dialog re-opens or the user switches broker —
+  // avoids a synchronous setState inside useEffect.
+  const [lastResetKey, setLastResetKey] = React.useState(`${open}-${activeBroker}`);
   const dialogRef = React.useRef<HTMLDivElement>(null);
   const previouslyFocused = React.useRef<HTMLElement | null>(null);
 
-  // Reset step when dialog opens or broker changes
-  React.useEffect(() => {
-    if (open) setActiveStep(0);
-  }, [open, activeBroker]);
+  const resetKey = `${open}-${activeBroker}`;
+  if (open && resetKey !== lastResetKey) {
+    setLastResetKey(resetKey);
+    setActiveStep(0);
+  } else if (!open && lastResetKey !== resetKey) {
+    setLastResetKey(resetKey);
+  }
 
   // Close on Escape + focus trap + restore focus on close
   React.useEffect(() => {

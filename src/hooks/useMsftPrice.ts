@@ -71,7 +71,7 @@ export function useMsftPrice(): MsftPriceResult {
     }
   }, []);
 
-  // Auto-fetch on mount
+  // Auto-fetch on mount.
   useEffect(() => {
     fetchPrice();
   }, [fetchPrice]);
