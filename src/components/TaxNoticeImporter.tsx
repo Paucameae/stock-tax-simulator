@@ -11,6 +11,8 @@ import type { AppSettings } from '../lib/types';
 interface TaxNoticeImporterProps {
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
+  /** When true, render bare body without the outer Card (parent provides one). */
+  embedded?: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ interface TaxNoticeImporterProps {
  * (family status, shares, taxable income) directly to the current fiscal
  * settings. Used in the Data tab; complements the manual form in Settings.
  */
-export function TaxNoticeImporter({ settings, onSettingsChange }: TaxNoticeImporterProps) {
+export function TaxNoticeImporter({ settings, onSettingsChange, embedded = false }: TaxNoticeImporterProps) {
   const [parsed, setParsed] = React.useState<TaxNoticeData | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -59,10 +61,9 @@ export function TaxNoticeImporter({ settings, onSettingsChange }: TaxNoticeImpor
     setParsed(null);
   };
 
-  return (
-    <Card>
-      <CardContent className="pt-5 pb-4">
-        <div className="flex items-center gap-3">
+  const body = (
+    <>
+      <div className="flex items-center gap-3">
           <Upload className="h-5 w-5 text-gray-400 shrink-0" />
           <p className="flex-1 text-sm text-gray-600">
             Importez votre <strong>avis d'imposition</strong> (PDF de impots.gouv.fr) pour
@@ -149,7 +150,13 @@ export function TaxNoticeImporter({ settings, onSettingsChange }: TaxNoticeImpor
             </Alert>
           </div>
         )}
-      </CardContent>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <Card>
+      <CardContent className="pt-5 pb-4">{body}</CardContent>
     </Card>
   );
 }
