@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { reconcileLots } from '../stockexport-reconciliation';
-import type { GrantInfo, StockLot } from '../types';
+import { reconcileLots, reconcileSoldLots } from '../stockexport-reconciliation';
+import type { GrantInfo, SoldLot, StockLot } from '../types';
 
 function makeLot(partial: Partial<StockLot> & Pick<StockLot, 'id' | 'acquisitionDate' | 'origin'>): StockLot {
   return {
@@ -161,5 +161,104 @@ describe('reconcileLots', () => {
     const { stats, lots } = reconcileLots([lotA, lotB, lotC], [grant]);
     expect(stats.reconciled).toBe(3);
     expect(lots.every((l) => l.reconciled)).toBe(true);
+  });
+});
+
+function makeSoldLot(partial: Partial<SoldLot> & Pick<SoldLot, 'id' | 'acquisitionDate' | 'origin'>): SoldLot {
+  return {
+    broker: 'morgan_stanley',
+    saleDate: new Date(2025, 5, 1),
+    quantity: 2,
+    proceeds: 0,
+    costBasis: 0,
+    gainLoss: 0,
+    holdingPeriod: 'Long',
+    planType: 'qualified_macron',
+    ...partial,
+  } as SoldLot;
+}
+
+describe('reconcileSoldLots', () => {
+  it('refines a Morgan Stanley sold lot from Macron to pré-Macron when the grant matches', () => {
+    // MS sales export gives origin=FM/planType=qualified_macron by default,
+    // but the grant's awardDate places it in the pré-Macron regime.
+    const sl = makeSoldLot({
+      id: 'ms-sold-1',
+      acquisitionDate: new Date(2024, 1, 15),
+      origin: 'FM',
+      planType: 'qualified_macron',
+    });
+    const grant = makeGrant({
+      grantIdHash: 'hash-pre',
+      awardType: 'FY18 FQ Annual',
+      awardDate: new Date(2017, 7, 15),
+      planType: 'qualified_pre_macron',
+      origin: 'FQ',
+      vestSchedule: [{ date: new Date(2024, 1, 15), shares: 5 }],
+    });
+
+    const { lots, stats } = reconcileSoldLots([sl], [grant]);
+
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].reconciled).toBe(true);
+    expect(lots[0].origin).toBe('FQ');
+    expect(lots[0].planType).toBe('qualified_pre_macron');
+    expect(lots[0].grantIdHash).toBe('hash-pre');
+    expect(lots[0].awardType).toBe('FY18 FQ Annual');
+  });
+
+  it('upgrades a Fidelity sold lot from default DO to FM when a grant matches', () => {
+    // Fidelity sales have origin=DO by default; reconciliation should promote
+    // it to the actual qualified plan when the vest date matches a grant.
+    const sl = makeSoldLot({
+      id: 'fid-sold-1',
+      broker: 'fidelity',
+      acquisitionDate: new Date(2024, 1, 15),
+      origin: 'DO',
+      planType: 'qualified_macron',
+    });
+    const grant = makeGrant({
+      grantIdHash: 'hash-fm',
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [{ date: new Date(2024, 1, 15), shares: 4 }],
+    });
+
+    const { lots, stats } = reconcileSoldLots([sl], [grant]);
+
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].origin).toBe('FM');
+    expect(lots[0].reconciled).toBe(true);
+  });
+
+  it('leaves ESPP sold lots untouched', () => {
+    const sl = makeSoldLot({
+      id: 'espp-1',
+      acquisitionDate: new Date(2024, 5, 30),
+      origin: 'SP',
+      planType: 'non_qualified',
+    });
+    const { lots, stats } = reconcileSoldLots([sl], []);
+    expect(stats.notApplicable).toBe(1);
+    expect(lots[0].reconciled).toBeUndefined();
+  });
+
+  it('leaves the lot untouched when no grant matches', () => {
+    const sl = makeSoldLot({
+      id: 'ms-sold-1',
+      acquisitionDate: new Date(2024, 1, 15),
+      origin: 'FM',
+      planType: 'qualified_macron',
+    });
+    const grant = makeGrant({
+      grantIdHash: 'hash-other',
+      vestSchedule: [{ date: new Date(2026, 0, 1), shares: 1 }],
+    });
+    const { lots, stats } = reconcileSoldLots([sl], [grant]);
+    expect(stats.unmatched).toBe(1);
+    expect(lots[0].reconciled).toBeUndefined();
+    // Original origin/planType preserved.
+    expect(lots[0].origin).toBe('FM');
+    expect(lots[0].planType).toBe('qualified_macron');
   });
 });

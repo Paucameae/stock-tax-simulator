@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Alert } from './ui/alert';
 import { Badge } from './ui/badge';
 import { Select } from './ui/select';
-import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
+import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar, CheckCircle2 } from 'lucide-react';
 import type { Broker, SoldLot, StockOrigin, PlanType } from '../lib/types';
 import { brokerLabel, formatEUR, formatUSD, formatDate } from '../lib/utils';
 import { BrokerLogo } from './BrokerLogo';
@@ -112,9 +112,17 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
         </div>
 
         <div className="mb-4">
-          <Alert>
-            L'export Fidelity des ventes effectuées ne contient pas l'origine des actions. Vérifiez et corrigez le <strong>type</strong> (ESPP, Stock Award, AGA…) et le <strong>régime fiscal</strong> de chaque lot ci-dessous.
-          </Alert>
+          {filteredLots.some((l) => !l.reconciled) ? (
+            <Alert>
+              Les exports de ventes ne fournissent pas toujours l'origine et le régime fiscal exacts des actions.
+              Les lots <strong>reconciliés</strong> avec votre StockExport sont marqués d'un badge ; pour les autres,
+              vérifiez et corrigez le <strong>type</strong> (ESPP, Stock Award, AGA…) et le <strong>régime fiscal</strong> ci-dessous.
+            </Alert>
+          ) : (
+            <Alert>
+              Tous les lots affichés ont été <strong>reconciliés automatiquement</strong> avec votre StockExport.
+            </Alert>
+          )}
         </div>
 
         {hasMultipleBrokers && (
@@ -153,7 +161,17 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
             <tbody>
               {filteredLots.map((lot) => (
                 <tr key={lot.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-2 pr-3">{formatDate(lot.acquisitionDate)}</td>
+                  <td className="py-2 pr-3">
+                    <span className="inline-flex items-center gap-1">
+                      {formatDate(lot.acquisitionDate)}
+                      {lot.reconciled && (
+                        <CheckCircle2
+                          className="h-3.5 w-3.5 text-green-600"
+                          aria-label="Lot reconcilié avec StockExport"
+                        />
+                      )}
+                    </span>
+                  </td>
                   <td className="py-2 pr-3">{formatDate(lot.saleDate)}</td>
                   {hasMultipleBrokers && (
                     <td className="py-2 pr-3">
@@ -228,7 +246,15 @@ export function SoldLotsTable({ soldLots, onSoldLotsChange, defaultPlanType, sal
               <div className="flex items-start justify-between gap-2 text-xs">
                 <div>
                   <div className="text-gray-500">Acquis le</div>
-                  <div className="font-medium">{formatDate(lot.acquisitionDate)}</div>
+                  <div className="font-medium inline-flex items-center gap-1">
+                    {formatDate(lot.acquisitionDate)}
+                    {lot.reconciled && (
+                      <CheckCircle2
+                        className="h-3.5 w-3.5 text-green-600"
+                        aria-label="Lot reconcilié avec StockExport"
+                      />
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-gray-500">Vendu le</div>

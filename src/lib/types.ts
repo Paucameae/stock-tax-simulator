@@ -95,6 +95,10 @@ export interface SoldLot {
   costBasisUsd?: number;
   eurUsdRate?: number;
   importCurrency?: ImportCurrency;
+  // Reconciliation with Microsoft StockExport (optional — present when matched)
+  grantIdHash?: string;
+  awardType?: string;
+  reconciled?: boolean;
 }
 
 export interface SaleLotEntry {
