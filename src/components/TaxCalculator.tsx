@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
 import { Tooltip } from './ui/tooltip';
 import { Receipt, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import type { TaxSimulationResult, TaxMode, FamilyStatus } from '../lib/types';
@@ -11,7 +10,12 @@ import { formatEUR, formatPercent } from '../lib/utils';
 interface TaxCalculatorProps {
   result: TaxSimulationResult | null;
   taxMode: TaxMode;
-  onTaxModeChange: (mode: TaxMode) => void;
+  /**
+   * Kept for API compatibility — the régime is now driven by the
+   * PfuVsBaremeComparator card group above this component, but existing
+   * callers still pass this handler.
+   */
+  onTaxModeChange?: (mode: TaxMode) => void;
   fiscalYear: number;
   familyStatus?: FamilyStatus;
   /**
@@ -22,7 +26,7 @@ interface TaxCalculatorProps {
   stale?: boolean;
 }
 
-export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode, onTaxModeChange, fiscalYear, familyStatus = 'single', stale = false }: TaxCalculatorProps) {
+export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode, fiscalYear, familyStatus = 'single', stale = false }: TaxCalculatorProps) {
   const cfg = React.useMemo(() => getTaxConfig(fiscalYear), [fiscalYear]);
   const thresholds = React.useMemo(
     () => (result ? analyzeThresholds(result, fiscalYear, familyStatus) : null),
@@ -104,54 +108,9 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
         </div>
       )}
 
-      {/* Tax mode toggle */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-gray-700">Régime fiscal :</span>
-            <div className="flex gap-2">
-              <Button
-                variant={taxMode === 'pfu' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => onTaxModeChange('pfu')}
-              >
-                PFU (Flat Tax {pfuTotalRate})
-              </Button>
-              <Button
-                variant={taxMode === 'bareme' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => onTaxModeChange('bareme')}
-              >
-                Barème progressif
-              </Button>
-            </div>
-            <Tooltip content={`Le PFU applique un taux forfaitaire de ${pfuTotalRate} (${pfuIrRate} IR + ${psRate} PS) sur les plus-values de cession. Le barème progressif utilise les tranches de l'IR. ATTENTION : le gain d'acquisition AGA est toujours au barème progressif, quel que soit le choix.`} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Key figures */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-gray-500">Produit brut</p>
-            <p className="text-2xl font-bold">{formatEUR(r.totalProceeds)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-gray-500">Total impôts</p>
-            <p className="text-2xl font-bold text-red-600">{formatEUR(r.totalTax)}</p>
-            <p className="text-xs text-gray-400">Taux effectif : {formatPercent(r.effectiveTaxRate)}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-gray-500">Montant net estimé</p>
-            <p className="text-2xl font-bold text-green-700">{formatEUR(r.netAmount)}</p>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Tax mode is now driven by the PfuVsBaremeComparator above the
+          calculator. Show a small contextual hint so the user always knows
+          which régime the detail table reflects. */}
 
       {/* Detailed breakdown */}
       <Card>
@@ -159,6 +118,9 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
           <CardTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5" />
             Détail du calcul fiscal
+            <span className="ml-2 text-xs font-normal text-gray-500">
+              · {taxMode === 'pfu' ? `PFU ${pfuTotalRate}` : 'Barème progressif'}
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>

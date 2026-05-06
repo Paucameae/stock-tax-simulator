@@ -584,6 +584,13 @@ function App() {
     }
   }, [simEntries, settings, simFiscalYear]);
 
+  // Stable handler so SaleSimulator's "selection changed" effect does not
+  // re-fire on every parent render (would otherwise show the stale banner
+  // permanently as soon as a simulation exists).
+  const handleSimSelectionChange = React.useCallback(() => {
+    setSimStale((prev) => prev || simResult !== null);
+  }, [simResult]);
+
   const handleDeclTaxModeChange = React.useCallback((mode: TaxMode) => {
     setDeclTaxMode(mode);
     if (declEntries.length > 0) {
@@ -773,17 +780,32 @@ function App() {
                   lots={lots}
                   settings={settings}
                   onSimulate={handleSimulate}
-                  onSelectionChange={() => { if (simResult) setSimStale(true); }}
+                  onSelectionChange={handleSimSelectionChange}
                 />
                 <div
                   ref={simResultRef}
                   className={`scroll-mt-4 rounded-lg transition-shadow duration-500 ${simResultFlash ? 'ring-2 ring-primary ring-offset-2' : ''}`}
                 >
-                  <TaxCalculator result={simResult} taxMode={simTaxMode} onTaxModeChange={handleSimTaxModeChange} fiscalYear={simFiscalYear} familyStatus={settings.familyStatus} stale={simStale} />
+                  {simEntries.length > 0 && simResult && (
+                    <div className="mb-6">
+                      <PfuVsBaremeComparator
+                        lots={simEntries}
+                        settings={settings}
+                        fiscalYear={simFiscalYear}
+                        taxMode={simTaxMode}
+                        onTaxModeChange={handleSimTaxModeChange}
+                      />
+                    </div>
+                  )}
+                  <TaxCalculator
+                    result={simResult}
+                    taxMode={simTaxMode}
+                    onTaxModeChange={handleSimTaxModeChange}
+                    fiscalYear={simFiscalYear}
+                    familyStatus={settings.familyStatus}
+                    stale={simStale}
+                  />
                 </div>
-                {simEntries.length > 0 && (
-                  <PfuVsBaremeComparator lots={simEntries} settings={settings} fiscalYear={simFiscalYear} />
-                )}
               </>
             )}
           </div>

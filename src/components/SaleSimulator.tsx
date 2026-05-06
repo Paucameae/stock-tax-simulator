@@ -162,15 +162,22 @@ export const SaleSimulator = React.memo(function SaleSimulator({ lots, onSimulat
   const hasMultipleBrokers = brokers.length > 1;
 
   // Notify parent when the selection mutates after first render. We skip the
-  // initial mount so we don't fire before the user has done anything.
+  // initial mount so we don't fire before the user has done anything. We
+  // also keep the latest callback in a ref so an inline arrow on the parent
+  // (which would change identity every render) does not retrigger this
+  // effect on every render — only `selectedLots` changes should fire it.
+  const onSelectionChangeRef = React.useRef(onSelectionChange);
+  React.useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
   const initialMountRef = React.useRef(true);
   React.useEffect(() => {
     if (initialMountRef.current) {
       initialMountRef.current = false;
       return;
     }
-    onSelectionChange?.();
-  }, [selectedLots, onSelectionChange]);
+    onSelectionChangeRef.current?.();
+  }, [selectedLots]);
 
   const handleSimulate = () => {
     const entries: SaleLotEntry[] = [];

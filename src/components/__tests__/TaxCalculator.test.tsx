@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { TaxCalculator } from '../TaxCalculator';
 import type { TaxSimulationResult } from '../../lib/types';
 
@@ -61,23 +61,23 @@ describe('TaxCalculator component', () => {
     expect(screen.getAllByText(/40[\s\u202f]000,00/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('shows PFU button as active in PFU mode', () => {
+  it('shows PFU hint in the detail card title when in PFU mode', () => {
     const result = makeResult();
     render(
       <TaxCalculator result={result} taxMode="pfu" onTaxModeChange={vi.fn()} fiscalYear={2025} />
     );
-    const pfuButton = screen.getByText(/PFU/);
-    expect(pfuButton).toBeInTheDocument();
+    // The toggle was moved to PfuVsBaremeComparator; TaxCalculator now just
+    // shows a contextual hint next to the detail title.
+    expect(screen.getByText(/Détail du calcul fiscal/)).toBeInTheDocument();
+    expect(screen.getByText(/PFU/)).toBeInTheDocument();
   });
 
-  it('calls onTaxModeChange when clicking barème button', () => {
-    const onTaxModeChange = vi.fn();
+  it('shows the barème hint in the detail card title when in barème mode', () => {
     const result = makeResult();
     render(
-      <TaxCalculator result={result} taxMode="pfu" onTaxModeChange={onTaxModeChange} fiscalYear={2025} />
+      <TaxCalculator result={result} taxMode="bareme" onTaxModeChange={vi.fn()} fiscalYear={2025} />
     );
-    fireEvent.click(screen.getByText('Barème progressif'));
-    expect(onTaxModeChange).toHaveBeenCalledWith('bareme');
+    expect(screen.getByText(/Barème progressif/)).toBeInTheDocument();
   });
 
   it('displays acquisition gain section when totalAcquisitionGain > 0', () => {
