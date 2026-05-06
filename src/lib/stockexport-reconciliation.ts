@@ -1,4 +1,4 @@
-import type { GrantInfo, PlanType, StockLot, StockOrigin } from './types';
+import type { GrantInfo, PlanType, SoldLot, StockLot, StockOrigin } from './types';
 
 /**
  * Tolerance window when matching Fidelity deposit dates to Microsoft vest dates.
@@ -39,15 +39,7 @@ export function reconcileLots(lots: StockLot[], grants: GrantInfo[]): Reconcilia
   const warnings: string[] = [];
 
   // Pre-index: vest date (day-granularity) → list of grants having a vest event on that day.
-  const byDay = new Map<string, GrantInfo[]>();
-  for (const grant of grants) {
-    for (const vest of grant.vestSchedule) {
-      const key = dayKey(vest.date);
-      const list = byDay.get(key) ?? [];
-      list.push(grant);
-      byDay.set(key, list);
-    }
-  }
+  const byDay = indexGrantsByVestDay(grants);
 
   const out = lots.map((lot) => {
     // ESPP lots are self-describing (Fidelity encodes them as SP with correct metadata).
@@ -88,19 +80,109 @@ export function reconcileLots(lots: StockLot[], grants: GrantInfo[]): Reconcilia
   return { lots: out, stats, warnings };
 }
 
-function findCandidateGrants(lot: StockLot, byDay: Map<string, GrantInfo[]>): GrantInfo[] {
-  const key = dayKey(lot.acquisitionDate);
+/**
+ * Same logic as `reconcileLots` but for already-realised sales.
+ *
+ * Why we need this even though Morgan Stanley sales already carry an origin
+ * derived from the Plan Name: matching against StockExport grants lets us
+ * refine the planType (`qualified_macron` vs `qualified_pre_macron`, decided
+ * by the grant *award* date which is not present in the sales export) and
+ * stamp `grantIdHash` / `awardType` for traceability — exactly like for
+ * positions. For Fidelity sales (which lack origin entirely) it can also
+ * upgrade the default `DO` to `FM` / `FQ` when a grant matches.
+ *
+ * Matching is by acquisition date only — same rationale as `reconcileLots`
+ * (Fidelity reports net-of-withholding shares, MS reports the gross vest
+ * quantity, so quantity comparison is unreliable).
+ */
+export function reconcileSoldLots(soldLots: SoldLot[], grants: GrantInfo[]): {
+  lots: SoldLot[];
+  stats: ReconciliationStats;
+  warnings: string[];
+} {
+  const stats: ReconciliationStats = { reconciled: 0, ambiguous: 0, unmatched: 0, notApplicable: 0 };
+  const warnings: string[] = [];
+
+  const byDay = indexGrantsByVestDay(grants);
+
+  const out = soldLots.map((sl) => {
+    if (sl.origin === 'SP') {
+      stats.notApplicable++;
+      return sl;
+    }
+
+    const candidates = findCandidateGrantsByDate(sl.acquisitionDate, byDay);
+    if (candidates.length === 0) {
+      stats.unmatched++;
+      return sl;
+    }
+
+    const uniqueGrants = Array.from(new Map(candidates.map((g) => [g.grantIdHash, g])).values());
+
+    if (uniqueGrants.length === 1) {
+      stats.reconciled++;
+      return applyGrantToSoldLot(sl, uniqueGrants[0]);
+    }
+
+    const planTypes = new Set(uniqueGrants.map((g) => g.planType));
+    const origins = new Set(uniqueGrants.map((g) => g.origin));
+    if (planTypes.size === 1 && origins.size === 1) {
+      stats.reconciled++;
+      return applyGrantToSoldLot(sl, uniqueGrants[0]);
+    }
+
+    stats.ambiguous++;
+    warnings.push(
+      `Lot vendu acquis le ${sl.acquisitionDate.toLocaleDateString('fr-FR')} : plusieurs grants candidats avec classifications différentes — qualification conservée telle quelle.`,
+    );
+    return sl;
+  });
+
+  return { lots: out, stats, warnings };
+}
+
+function indexGrantsByVestDay(grants: GrantInfo[]): Map<string, GrantInfo[]> {
+  const byDay = new Map<string, GrantInfo[]>();
+  for (const grant of grants) {
+    for (const vest of grant.vestSchedule) {
+      const key = dayKey(vest.date);
+      const list = byDay.get(key) ?? [];
+      list.push(grant);
+      byDay.set(key, list);
+    }
+  }
+  return byDay;
+}
+
+function findCandidateGrantsByDate(date: Date, byDay: Map<string, GrantInfo[]>): GrantInfo[] {
+  const key = dayKey(date);
   const sameDay = byDay.get(key);
   if (sameDay && sameDay.length > 0) return sameDay;
 
-  // Tolerant fallback (±1 day) — handles rare timezone edge cases.
-  const t = lot.acquisitionDate.getTime();
+  const t = date.getTime();
   const fuzzy: GrantInfo[] = [];
   for (const [k, list] of byDay.entries()) {
     const d = dayFromKey(k);
     if (Math.abs(d.getTime() - t) <= DATE_MATCH_TOLERANCE_MS) fuzzy.push(...list);
   }
   return fuzzy;
+}
+
+function applyGrantToSoldLot(sl: SoldLot, grant: GrantInfo): SoldLot {
+  const origin: StockOrigin = grant.origin;
+  const planType: PlanType = grant.planType;
+  return {
+    ...sl,
+    origin,
+    planType,
+    grantIdHash: grant.grantIdHash,
+    awardType: grant.awardType,
+    reconciled: true,
+  };
+}
+
+function findCandidateGrants(lot: StockLot, byDay: Map<string, GrantInfo[]>): GrantInfo[] {
+  return findCandidateGrantsByDate(lot.acquisitionDate, byDay);
 }
 
 function applyGrant(lot: StockLot, grant: GrantInfo): StockLot {

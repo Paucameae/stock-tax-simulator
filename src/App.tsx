@@ -9,7 +9,7 @@ import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
-import { reconcileLots } from './lib/stockexport-reconciliation';
+import { reconcileLots, reconcileSoldLots } from './lib/stockexport-reconciliation';
 import type { ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo, Broker } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
@@ -252,7 +252,15 @@ function App() {
         // non-fatal
       }
     }
-  }, [lots]);
+    // Apply the same refinement to already-imported sold lots so the
+    // declaration view picks up the StockExport classification immediately
+    // (e.g. switches Macron lots to pré-Macron) without forcing the user to
+    // re-import their sales export.
+    if (soldLots.length > 0 && nextGrants.length > 0) {
+      const reconciledSold = reconcileSoldLots(soldLots, nextGrants).lots;
+      setSoldLots(reconciledSold);
+    }
+  }, [lots, soldLots]);
 
   const handleDividendsChange = React.useCallback(
     (payload: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => {
@@ -307,10 +315,25 @@ function App() {
 
   const handleImportSales = React.useCallback((importedSoldLots: SoldLot[]) => {
     if (importedSoldLots.length === 0) return;
-    const withPlanType = importedSoldLots.map((sl) => ({
-      ...sl,
-      planType: settings.defaultPlanType === 'non_qualified' ? 'non_qualified' as const : 'qualified_macron' as const,
-    }));
+    // 1. Reconcile against StockExport grants when available — this refines the
+    //    planType (Macron vs pré-Macron, decided by the grant award date which
+    //    sales exports do not carry) and stamps grantIdHash/awardType so the
+    //    UI can mark these lots as "verified". Same matching logic as for
+    //    open positions: by acquisition (vest) date.
+    const reconciled = grants.length > 0
+      ? reconcileSoldLots(importedSoldLots, grants).lots
+      : importedSoldLots;
+
+    // 2. For lots that did NOT reconcile, fall back to the user's default
+    //    planType (Macron / pré-Macron). Reconciled lots keep the planType
+    //    derived from their grant — never overwrite it.
+    const withPlanType = reconciled.map((sl) => {
+      if (sl.reconciled) return sl;
+      return {
+        ...sl,
+        planType: settings.defaultPlanType === 'non_qualified' ? 'non_qualified' as const : 'qualified_macron' as const,
+      };
+    });
     // Merge by broker: re-importing one courtier replaces only its sales,
     // leaving sales already loaded from another courtier untouched. Positions
     // (`lots`) are also preserved, since a user may legitimately hold a current
@@ -341,7 +364,7 @@ function App() {
     const res = runSimulation(simulation);
     setDeclResult(res);
     setShowSalesImportDialog(true);
-  }, [settings, declTaxMode, soldLots]);
+  }, [settings, declTaxMode, soldLots, grants]);
 
   /**
    * Drop every position, sale, and (for Morgan Stanley only) dividend that
@@ -803,7 +826,14 @@ function App() {
         <DialogHeader>
           <p className="font-semibold text-gray-900 mb-2">Vérification nécessaire</p>
           <p>
-            L'export Fidelity des ventes effectuées ne contient pas l'origine des actions. Vérifiez et corrigez le <strong>type</strong> (ESPP, Stock Award, AGA…) et le <strong>régime fiscal</strong> de chaque lot importé dans l'onglet <strong>Ma déclaration</strong>.
+            Les exports de ventes ne contiennent pas toujours l'origine ni le régime fiscal exact des actions
+            (Fidelity ne fournit aucune origine&nbsp;; Morgan Stanley fournit le plan mais pas l'année d'attribution).
+            {grants.length > 0 ? (
+              <> Les lots dont la date d'acquisition correspond à une attribution de votre StockExport ont été <strong>reconciliés automatiquement</strong>. </>
+            ) : (
+              <> Importez votre fichier StockExport dans <strong>Mes données &gt; Attributions</strong> pour qualifier automatiquement les lots dont la date correspond à une attribution. </>
+            )}
+            Vérifiez et corrigez le <strong>type</strong> (ESPP, Stock Award, AGA…) et le <strong>régime fiscal</strong> des lots non reconciliés dans l'onglet <strong>Ma déclaration</strong>.
           </p>
         </DialogHeader>
         <DialogFooter>
