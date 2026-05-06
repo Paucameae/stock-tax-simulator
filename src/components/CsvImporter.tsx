@@ -3,6 +3,7 @@ import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, Chec
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Dialog, DialogFooter } from './ui/dialog';
+import { Alert } from './ui/alert';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsActivityXlsx } from '../lib/brokers/morgan-stanley';
 import { useEcbConversion } from '../hooks/useEcbConversion';
@@ -337,6 +338,17 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
   const [importMode, setImportMode] = React.useState<ImportMode>('positions');
   const [showGuide, setShowGuide] = React.useState(false);
+  // Total count of lots whose ECB rate could not be resolved during the
+  // most recent import. Drives the destructive alert + retry button: a
+  // failed BCE lookup leaves proceeds/costBasis at 0, which is what users
+  // see as "all zeros" on the sales tab. Reset on each new file pick.
+  const [ecbMissingCount, setEcbMissingCount] = React.useState(0);
+  // Keep the most recent raw batch so the user can retry the BCE
+  // conversion without having to re-pick the file (typical cause:
+  // transient network failure when fetching ECB rates).
+  const lastBatchRef = React.useRef<{ lots: StockLot[]; sold: SoldLot[] } | null>(null);
+  const [hasRetryableBatch, setHasRetryableBatch] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const { convertLots, convertSoldLots, loading, error: ecbError } = useEcbConversion();
 
@@ -364,6 +376,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   const handleFiles = useCallback(
     async (files: File[]) => {
       setError(null);
+      setEcbMissingCount(0);
 
       const MAX_FILE_SIZE = 5 * 1024 * 1024;
       for (const f of files) {
@@ -442,24 +455,63 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           }
         }
 
+        let totalMissing = 0;
         if (collectedLots.length > 0) {
-          const { converted } = await convertLots(collectedLots);
+          const { converted, missingCount } = await convertLots(collectedLots);
+          totalMissing += missingCount;
           onImport(converted);
         }
         if (collectedSold.length > 0) {
-          const { converted } = await convertSoldLots(collectedSold);
+          const { converted, missingCount } = await convertSoldLots(collectedSold);
+          totalMissing += missingCount;
           onImportSales?.(converted);
         }
         if (collectedDividends.length > 0) {
           onImportDividends?.(collectedDividends);
         }
         setImportedFiles(processed);
+        setEcbMissingCount(totalMissing);
+        // Stash the raw batch for the retry button: convertLots /
+        // convertSoldLots are pure w.r.t. the input lots, so re-running
+        // them on the same raw data after a successful BCE fetch will
+        // produce correctly-converted lots that overwrite the broker
+        // slice (handlers use mergeByBroker).
+        lastBatchRef.current = { lots: collectedLots, sold: collectedSold };
+        setHasRetryableBatch(collectedLots.length > 0 || collectedSold.length > 0);
       } catch (err) {
         setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
       }
     },
     [onImport, onImportSales, onImportDividends, importMode, convertLots, convertSoldLots, isAutoDetect]
   );
+
+  /**
+   * Re-run the ECB conversion on the most recent raw batch and re-publish
+   * the results. Used when the initial import couldn't resolve some
+   * EUR/USD rates (typically a transient network failure on the BCE feed)
+   * and the lots show up with proceeds/costBasis at 0.
+   */
+  const handleRetryEcb = useCallback(async () => {
+    const batch = lastBatchRef.current;
+    if (!batch) return;
+    setRetrying(true);
+    try {
+      let totalMissing = 0;
+      if (batch.lots.length > 0) {
+        const { converted, missingCount } = await convertLots(batch.lots);
+        totalMissing += missingCount;
+        onImport(converted);
+      }
+      if (batch.sold.length > 0) {
+        const { converted, missingCount } = await convertSoldLots(batch.sold);
+        totalMissing += missingCount;
+        onImportSales?.(converted);
+      }
+      setEcbMissingCount(totalMissing);
+    } finally {
+      setRetrying(false);
+    }
+  }, [convertLots, convertSoldLots, onImport, onImportSales]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -672,14 +724,45 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           onClearDividends={onClearDividends}
         />
 
-        {(error || ecbError) && (
+        {error && (
           <p
             className="mt-3 text-sm text-red-600"
             role="alert"
             aria-live="assertive"
           >
-            {error || ecbError}
+            {error}
           </p>
+        )}
+
+        {(ecbError || ecbMissingCount > 0) && (
+          <div className="mt-3">
+            <Alert variant="destructive">
+              <div className="flex flex-col gap-2">
+                <div>
+                  <p className="font-medium">
+                    Conversion EUR indisponible
+                    {ecbMissingCount > 0 && ` pour ${ecbMissingCount} lot${ecbMissingCount > 1 ? 's' : ''}`}.
+                  </p>
+                  <p className="text-xs mt-1">
+                    Les taux de change BCE n'ont pas pu être récupérés (problème réseau ou indisponibilité du flux BCE).
+                    Les montants en euros restent à 0&nbsp;€ pour ces lots — les valeurs en dollars sont conservées.
+                  </p>
+                </div>
+                {hasRetryableBatch && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRetryEcb}
+                    disabled={retrying || loading}
+                    className="self-start"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${retrying ? 'animate-spin' : ''}`} aria-hidden="true" />
+                    {retrying ? 'Reconversion en cours…' : 'Réessayer la conversion BCE'}
+                  </Button>
+                )}
+              </div>
+            </Alert>
+          </div>
         )}
 
         <BrokerExportGuide open={showGuide && guideAvailable} onClose={() => setShowGuide(false)} />
