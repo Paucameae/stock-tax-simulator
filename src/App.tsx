@@ -767,7 +767,7 @@ function App() {
                   Importez vos positions actuelles pour simuler une vente.
                 </p>
                 <button
-                  onClick={() => setActiveTab('portfolio')}
+                  onClick={() => setActiveTab('data')}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
                   <Upload className="h-4 w-4" />
@@ -829,7 +829,7 @@ function App() {
                   Importez votre historique de ventes ou de dividendes pour préparer votre déclaration.
                 </p>
                 <button
-                  onClick={() => setActiveTab('portfolio')}
+                  onClick={() => setActiveTab('data')}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
                   <Upload className="h-4 w-4" />
