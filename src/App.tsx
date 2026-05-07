@@ -8,7 +8,7 @@ import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
-import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
+import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, saveGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
 import { reconcileLots, reconcileSoldLots } from './lib/stockexport-reconciliation';
 import { applyBulkChoiceToLots, applyBulkChoiceToSoldLots, countEligible, type BulkQualifyChoice } from './lib/bulk-qualify';
 import type { ImportResult } from './lib/backup';
@@ -615,6 +615,13 @@ function App() {
     setSoldLots(imported.soldLots);
     setSavedSimulations(imported.savedSimulations);
     safeSetItem('savedSimulations', JSON.stringify(imported.savedSimulations));
+    // v3 backups carry StockExport grants. v1/v2 backups arrive with grants=[];
+    // we then leave any existing localStorage grants untouched rather than wipe
+    // them — mirroring how we don't clear other unrelated state.
+    if (imported.grants.length > 0) {
+      setGrants(imported.grants);
+      saveGrants(imported.grants);
+    }
     // Reset derived/session state — results will be re-computed from imported data on demand
     setSimEntries([]);
     setSimResult(null);
@@ -900,6 +907,7 @@ function App() {
               lots={lots}
               soldLots={soldLots}
               savedSimulations={savedSimulations}
+              grants={grants}
               onBackupImport={handleBackupImport}
             />
           </React.Suspense>
