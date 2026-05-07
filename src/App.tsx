@@ -857,6 +857,15 @@ function App() {
                     onSaleYearChange={handleSaleYearChange}
                   />
                 )}
+                {soldLots.length > 0 && declEntries.length > 0 && declResult && (
+                  <PfuVsBaremeComparator
+                    lots={declEntries}
+                    settings={settings}
+                    fiscalYear={declFiscalYear}
+                    taxMode={declTaxMode}
+                    onTaxModeChange={handleDeclTaxModeChange}
+                  />
+                )}
                 {soldLots.length > 0 && (
                   <TaxCalculator result={declResult} taxMode={declTaxMode} onTaxModeChange={handleDeclTaxModeChange} fiscalYear={declFiscalYear} familyStatus={settings.familyStatus} />
                 )}
