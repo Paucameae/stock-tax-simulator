@@ -51,6 +51,21 @@ describe('isEligibleForBulk', () => {
     expect(isEligibleForBulk({ acquisitionDate: new Date(), origin: 'FM', planType: 'qualified_macron' })).toBe(true);
     expect(isEligibleForBulk({ acquisitionDate: new Date(), origin: 'FQ', planType: 'qualified_pre_macron' })).toBe(true);
   });
+
+  it('includes ESPP lots when includeEspp option is set', () => {
+    expect(
+      isEligibleForBulk({ acquisitionDate: new Date(), origin: 'SP', planType: 'non_qualified' }, { includeEspp: true }),
+    ).toBe(true);
+  });
+
+  it('still excludes reconciled lots even when includeEspp is set', () => {
+    expect(
+      isEligibleForBulk(
+        { acquisitionDate: new Date(), origin: 'SP', planType: 'non_qualified', reconciled: true },
+        { includeEspp: true },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('applyBulkChoice — uniform', () => {
@@ -120,6 +135,31 @@ describe('countEligible', () => {
       makeLot({ id: '4', acquisitionDate: new Date(), origin: 'FQ', planType: 'qualified_pre_macron' }),
     ];
     expect(countEligible(items)).toBe(2);
+  });
+
+  it('counts ESPP lots too when includeEspp is set', () => {
+    const items = [
+      makeLot({ id: '1', acquisitionDate: new Date(), origin: 'DO' }),
+      makeLot({ id: '2', acquisitionDate: new Date(), origin: 'SP', planType: 'non_qualified' }),
+      makeLot({ id: '3', acquisitionDate: new Date(), origin: 'SP', planType: 'non_qualified', reconciled: true }),
+    ];
+    expect(countEligible(items, { includeEspp: true })).toBe(2);
+  });
+});
+
+describe('applyBulkChoice — includeEspp', () => {
+  it('rewrites ESPP lots when the option is set', () => {
+    const lots = [
+      makeLot({ id: 'espp', acquisitionDate: new Date(2024, 0, 1), origin: 'SP', planType: 'non_qualified' }),
+      makeLot({ id: 'do', acquisitionDate: new Date(2020, 0, 1), origin: 'DO' }),
+    ];
+    const out = applyBulkChoiceToLots(
+      lots,
+      { kind: 'uniform', origin: 'DO', planType: 'non_qualified' },
+      { includeEspp: true },
+    );
+    expect(out[0]).toMatchObject({ origin: 'DO', planType: 'non_qualified' });
+    expect(out[1]).toMatchObject({ origin: 'DO', planType: 'non_qualified' });
   });
 });
 

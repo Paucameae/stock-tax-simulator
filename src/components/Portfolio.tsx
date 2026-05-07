@@ -16,7 +16,7 @@ import { BrokerLogo } from './BrokerLogo';
 import { Dialog, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
-import { countEligible, type BulkQualifyChoice } from '../lib/bulk-qualify';
+import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
 
 interface PortfolioProps {
   lots: StockLot[];
@@ -25,7 +25,7 @@ interface PortfolioProps {
   dividends?: DividendEvent[];
   cashInterest?: CashInterestEvent[];
   /** Optional: opens a bulk-qualify panel when there are non-reconciled lots. */
-  onBulkQualify?: (choice: BulkQualifyChoice) => void;
+  onBulkQualify?: (choice: BulkQualifyChoice, options: BulkQualifyOptions) => void;
   /** Whether the user has imported a StockExport file — drives the wording of the banner. */
   hasGrants?: boolean;
 }
@@ -207,6 +207,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const hasUsdImport = lots.some((l) => l.importCurrency === 'USD');
   const hasEsppLots = lots.some((l) => l.origin === 'SP');
   const totalEligibleForBulk = countEligible(lots);
+  const esppEligibleForBulk = countEligible(lots, { includeEspp: true }) - totalEligibleForBulk;
   const [bulkOpen, setBulkOpen] = React.useState(false);
 
   const isFiltered = filterOrigin !== 'all' || filterHolding !== 'all' || filterBroker !== 'all';
@@ -371,12 +372,13 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                 </div>
               </Alert>
             )}
-            {onBulkQualify && bulkOpen && totalEligibleForBulk > 0 && (
+            {onBulkQualify && bulkOpen && (totalEligibleForBulk > 0 || esppEligibleForBulk > 0) && (
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                 <BulkQualifyPanel
                   eligibleCount={totalEligibleForBulk}
-                  onApply={(choice) => {
-                    onBulkQualify(choice);
+                  esppEligibleCount={esppEligibleForBulk}
+                  onApply={(choice, options) => {
+                    onBulkQualify(choice, options);
                     setBulkOpen(false);
                   }}
                   compact

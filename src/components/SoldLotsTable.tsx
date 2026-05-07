@@ -8,7 +8,7 @@ import type { Broker, SoldLot, StockOrigin, PlanType } from '../lib/types';
 import { brokerLabel, formatEUR, formatUSD, formatDate } from '../lib/utils';
 import { BrokerLogo } from './BrokerLogo';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
-import { countEligible, type BulkQualifyChoice } from '../lib/bulk-qualify';
+import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
 
 interface SoldLotsTableProps {
   soldLots: SoldLot[];
@@ -17,7 +17,7 @@ interface SoldLotsTableProps {
   saleYear: number | null;
   onSaleYearChange: (year: number) => void;
   /** Optional: opens a bulk-qualify panel when there are non-reconciled lots. */
-  onBulkQualify?: (choice: BulkQualifyChoice) => void;
+  onBulkQualify?: (choice: BulkQualifyChoice, options: BulkQualifyOptions) => void;
   /** Whether the user has imported a StockExport file — drives the wording of the banner. */
   hasGrants?: boolean;
 }
@@ -82,6 +82,7 @@ export function SoldLotsTable({
   // *sees*, not what gets requalified.
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const totalEligible = countEligible(soldLots);
+  const esppEligible = countEligible(soldLots, { includeEspp: true }) - totalEligible;
 
   return (
     <Card>
@@ -164,12 +165,13 @@ export function SoldLotsTable({
               Tous les lots affichés ont été <strong>reconciliés automatiquement</strong> avec votre StockExport.
             </Alert>
           )}
-          {onBulkQualify && bulkOpen && totalEligible > 0 && (
+          {onBulkQualify && bulkOpen && (totalEligible > 0 || esppEligible > 0) && (
             <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <BulkQualifyPanel
                 eligibleCount={totalEligible}
-                onApply={(choice) => {
-                  onBulkQualify(choice);
+                esppEligibleCount={esppEligible}
+                onApply={(choice, options) => {
+                  onBulkQualify(choice, options);
                   setBulkOpen(false);
                 }}
                 compact

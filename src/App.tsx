@@ -10,7 +10,7 @@ import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, saveGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
 import { reconcileLots, reconcileSoldLots } from './lib/stockexport-reconciliation';
-import { applyBulkChoiceToLots, applyBulkChoiceToSoldLots, countEligible, type BulkQualifyChoice } from './lib/bulk-qualify';
+import { applyBulkChoiceToLots, applyBulkChoiceToSoldLots, countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from './lib/bulk-qualify';
 import type { ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo, Broker } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
@@ -466,9 +466,9 @@ function App() {
    * Re-runs the declaration computation so the result card reflects the new
    * classification immediately.
    */
-  const handleBulkQualifySoldLots = React.useCallback((choice: BulkQualifyChoice) => {
+  const handleBulkQualifySoldLots = React.useCallback((choice: BulkQualifyChoice, options: BulkQualifyOptions = {}) => {
     setSoldLots((prev) => {
-      const next = applyBulkChoiceToSoldLots(prev, choice);
+      const next = applyBulkChoiceToSoldLots(prev, choice, options);
       const yearLots = saleYear != null
         ? next.filter((sl) => sl.saleDate.getFullYear() === saleYear)
         : next;
@@ -495,13 +495,16 @@ function App() {
    * expose origin editing for open lots — bulk-set origins remain
    * authoritative until the next import.)
    */
-  const handleBulkQualifyLots = React.useCallback((choice: BulkQualifyChoice) => {
+  const handleBulkQualifyLots = React.useCallback((choice: BulkQualifyChoice, options: BulkQualifyOptions = {}) => {
     setLots((prev) => {
-      const next = applyBulkChoiceToLots(prev, choice);
+      const next = applyBulkChoiceToLots(prev, choice, options);
       try {
         const overrides = JSON.parse(localStorage.getItem('planTypeOverrides') || '{}');
         for (const lot of next) {
-          if (lot.reconciled || lot.origin === 'SP') continue;
+          if (lot.reconciled) continue;
+          // Persist overrides for any lot we just touched (DO/FM/FQ as before,
+          // and SP only when the user explicitly opted in).
+          if (lot.origin === 'SP' && !options.includeEspp) continue;
           overrides[lot.id] = lot.planType;
         }
         safeSetItem('planTypeOverrides', JSON.stringify(overrides));
@@ -951,8 +954,9 @@ function App() {
             </p>
             <BulkQualifyPanel
               eligibleCount={countEligible(soldLots)}
-              onApply={(choice) => {
-                handleBulkQualifySoldLots(choice);
+              esppEligibleCount={countEligible(soldLots, { includeEspp: true }) - countEligible(soldLots)}
+              onApply={(choice, options) => {
+                handleBulkQualifySoldLots(choice, options);
                 setShowSalesImportDialog(false);
                 setActiveTab('declaration');
               }}
