@@ -53,7 +53,29 @@ export interface StockLot {
    * a lot is showing up out of the usual vest schedule.
    */
   isReinvestedDividend?: boolean;
+  /**
+   * Provenance of the current (origin, planType) on this lot — used to
+   * surface a tooltip explaining *why* the lot is classified as it is.
+   * Set everywhere the classification is established or changed: parsers,
+   * StockExport reconciliation, manual edits and bulk-qualify.
+   */
+  qualificationReason?: QualificationReason;
 }
+
+/**
+ * Why a lot carries its current (origin, planType). Populated as the lot
+ * moves through parsing → reconciliation → user edits. Display-only;
+ * never affects the tax computation.
+ */
+export type QualificationReason =
+  | 'broker_default'           // value chosen by the broker parser without external info
+  | 'broker_plan_name'         // origin derived from the broker's plan label (Morgan Stanley)
+  | 'reconciled_unique'        // single StockExport grant matched on vest date
+  | 'reconciled_by_quantity'   // multiple grants — disambiguated by net-share count
+  | 'reconciled_by_agreement'  // multiple grants but identical (origin, planType)
+  | 'nq_via_withholding'       // grant reclassified as NQ thanks to the StockExport Transactions sheet
+  | 'manual'                   // user changed the value via a Select on the lot row
+  | 'bulk_qualify';            // user used the bulk-qualify panel
 
 /**
  * A single vesting event from the StockExport Vest Schedules sheet.
@@ -132,6 +154,8 @@ export interface SoldLot {
   reconciled?: boolean;
   /** See StockLot.isReinvestedDividend. Carried through to sold lots so the table can flag historical DRIP sales. */
   isReinvestedDividend?: boolean;
+  /** See StockLot.qualificationReason. */
+  qualificationReason?: QualificationReason;
 }
 
 export interface SaleLotEntry {

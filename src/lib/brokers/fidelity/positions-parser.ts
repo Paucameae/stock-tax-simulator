@@ -225,6 +225,7 @@ export function parseCsvFile(csvText: string): StockLot[] {
       origin,
       holdingPeriod,
       planType: getDefaultPlanType(origin),
+      qualificationReason: 'broker_default',
       ...(isDrip && { isReinvestedDividend: true }),
     });
   }
@@ -352,6 +353,7 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
       origin,
       planType: 'qualified_macron',
       importCurrency: 'USD',
+      qualificationReason: 'broker_default',
       ...(isDrip && { isReinvestedDividend: true }),
     });
   }

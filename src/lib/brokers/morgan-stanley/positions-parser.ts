@@ -141,6 +141,7 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
       origin,
       holdingPeriod: 'Long' as HoldingPeriod,
       planType: defaultPlanTypeFor(origin),
+      qualificationReason: 'broker_plan_name',
       ...(isDrip && { isReinvestedDividend: true }),
     });
   }

@@ -8,7 +8,7 @@ import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight, Arr
 import { Treemap, ResponsiveContainer } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
-import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel, qualificationReasonLabel, isDripQualifiedInconsistent } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
 import { UnvestedView } from './UnvestedView';
 import { DividendsView } from './DividendsView';
@@ -191,7 +191,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const handlePlanTypeChange = (lotId: string, planType: string) => {
     const updated = lots.map((l) => {
       if (l.id === lotId && l.origin === 'DO') {
-        const newLot = { ...l, planType: planType as StockLot['planType'] };
+        const newLot: StockLot = { ...l, planType: planType as StockLot['planType'], qualificationReason: 'manual' };
         // Persist in localStorage
         const overrides = JSON.parse(localStorage.getItem('planTypeOverrides') || '{}');
         overrides[lotId] = planType;
@@ -657,7 +657,10 @@ function PortfolioTableAndCards({
                       </td>
                       <td className="px-2.5 py-2 text-center">
                         <div className="inline-flex items-center gap-1">
-                          <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
+                          <Badge
+                            variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}
+                            title={qualificationReasonLabel(lot.qualificationReason)}
+                          >
                             {originLabel(lot.origin)}
                           </Badge>
                           {lot.isReinvestedDividend && (
@@ -668,6 +671,16 @@ function PortfolioTableAndCards({
                             >
                               DRIP
                             </Badge>
+                          )}
+                          {isDripQualifiedInconsistent(lot) && (
+                            <span
+                              role="img"
+                              aria-label="Incohérence : un dividende réinvesti ne peut pas bénéficier d'un régime qualifié"
+                              title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français. Reclassez ce lot en non qualifié."
+                              className="text-amber-600"
+                            >
+                              ⚠
+                            </span>
                           )}
                         </div>
                       </td>
@@ -762,13 +775,26 @@ function MobileLotCard({
             </div>
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-1">
-                <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
+                <Badge
+                  variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}
+                  title={qualificationReasonLabel(lot.qualificationReason)}
+                >
                   {originLabel(lot.origin)}
                 </Badge>
                 {lot.isReinvestedDividend && (
                   <Badge variant="outline" className="text-[10px] font-normal" title="Dividende réinvesti">
                     DRIP
                   </Badge>
+                )}
+                {isDripQualifiedInconsistent(lot) && (
+                  <span
+                    role="img"
+                    aria-label="Incohérence DRIP / qualifié"
+                    title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français."
+                    className="text-amber-600"
+                  >
+                    ⚠
+                  </span>
                 )}
               </div>
               {hasMultipleBrokers && (

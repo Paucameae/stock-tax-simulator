@@ -1,5 +1,47 @@
 import { describe, it, expect } from 'vitest';
-import { mergeByBroker, isLikelyReinvestedDividend } from '../utils';
+import { mergeByBroker, isLikelyReinvestedDividend, qualificationReasonLabel, isDripQualifiedInconsistent } from '../utils';
+
+describe('qualificationReasonLabel', () => {
+  it('returns a non-empty French sentence for every known reason', () => {
+    const reasons = [
+      'broker_default',
+      'broker_plan_name',
+      'reconciled_unique',
+      'reconciled_by_quantity',
+      'reconciled_by_agreement',
+      'nq_via_withholding',
+      'manual',
+      'bulk_qualify',
+    ] as const;
+    for (const r of reasons) {
+      const label = qualificationReasonLabel(r);
+      expect(label.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('returns a sensible fallback for undefined', () => {
+    expect(qualificationReasonLabel(undefined)).toMatch(/non document/i);
+  });
+});
+
+describe('isDripQualifiedInconsistent', () => {
+  it('flags a DRIP lot on a Macron-qualified plan', () => {
+    expect(isDripQualifiedInconsistent({ isReinvestedDividend: true, planType: 'qualified_macron' })).toBe(true);
+  });
+
+  it('flags a DRIP lot on a pré-Macron qualified plan', () => {
+    expect(isDripQualifiedInconsistent({ isReinvestedDividend: true, planType: 'qualified_pre_macron' })).toBe(true);
+  });
+
+  it('does not flag a DRIP lot on a non-qualified plan', () => {
+    expect(isDripQualifiedInconsistent({ isReinvestedDividend: true, planType: 'non_qualified' })).toBe(false);
+  });
+
+  it('does not flag a non-DRIP lot regardless of the plan type', () => {
+    expect(isDripQualifiedInconsistent({ isReinvestedDividend: false, planType: 'qualified_macron' })).toBe(false);
+    expect(isDripQualifiedInconsistent({ planType: 'qualified_macron' })).toBe(false);
+  });
+});
 
 describe('isLikelyReinvestedDividend', () => {
   it('flags fractional quantity on vest origins (DO/FM/FQ) — vests are always whole shares', () => {

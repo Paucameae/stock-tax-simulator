@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Select } from './ui/select';
 import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar, CheckCircle2 } from 'lucide-react';
 import type { Broker, SoldLot, StockOrigin, PlanType } from '../lib/types';
-import { brokerLabel, formatEUR, formatUSD, formatDate } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, qualificationReasonLabel, isDripQualifiedInconsistent } from '../lib/utils';
 import { BrokerLogo } from './BrokerLogo';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
 import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
@@ -63,14 +63,14 @@ export function SoldLotsTable({
     };
     onSoldLotsChange(
       soldLots.map((l) =>
-        l.id === lotId ? { ...l, origin, planType: planMap[origin] } : l
+        l.id === lotId ? { ...l, origin, planType: planMap[origin], qualificationReason: 'manual' } : l
       )
     );
   };
 
   const handlePlanTypeChange = (lotId: string, planType: PlanType) => {
     onSoldLotsChange(
-      soldLots.map((l) => (l.id === lotId ? { ...l, planType } : l))
+      soldLots.map((l) => (l.id === lotId ? { ...l, planType, qualificationReason: 'manual' } : l))
     );
   };
 
@@ -230,6 +230,16 @@ export function SoldLotsTable({
                           DRIP
                         </Badge>
                       )}
+                      {isDripQualifiedInconsistent(lot) && (
+                        <span
+                          role="img"
+                          aria-label="Incohérence DRIP / qualifié"
+                          title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français. Reclassez ce lot en non qualifié."
+                          className="text-amber-600"
+                        >
+                          ⚠
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="py-2 pr-3">{formatDate(lot.saleDate)}</td>
@@ -260,6 +270,7 @@ export function SoldLotsTable({
                     <Select
                       value={lot.origin}
                       aria-label={`Origine du lot acquis le ${formatDate(lot.acquisitionDate)}`}
+                      title={qualificationReasonLabel(lot.qualificationReason)}
                       onChange={(e) => handleOriginChange(lot.id, e.target.value as StockOrigin)}
                     >
                       <option value="DO">Stock Award</option>
@@ -319,6 +330,16 @@ export function SoldLotsTable({
                         DRIP
                       </Badge>
                     )}
+                    {isDripQualifiedInconsistent(lot) && (
+                      <span
+                        role="img"
+                        aria-label="Incohérence DRIP / qualifié"
+                        title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français."
+                        className="text-amber-600"
+                      >
+                        ⚠
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -352,6 +373,7 @@ export function SoldLotsTable({
                 <Select
                   value={lot.origin}
                   aria-label={`Origine du lot acquis le ${formatDate(lot.acquisitionDate)}`}
+                  title={qualificationReasonLabel(lot.qualificationReason)}
                   onChange={(e) => handleOriginChange(lot.id, e.target.value as StockOrigin)}
                   className="text-xs h-8"
                 >

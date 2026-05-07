@@ -1,4 +1,4 @@
-import type { PlanType, SoldLot, StockLot, StockOrigin } from './types';
+import type { PlanType, QualificationReason, SoldLot, StockLot, StockOrigin } from './types';
 
 /**
  * User intent for bulk-requalifying a set of lots:
@@ -23,6 +23,7 @@ interface QualifiableLot {
   origin: StockOrigin;
   planType: PlanType;
   reconciled?: boolean;
+  qualificationReason?: QualificationReason;
 }
 
 /**
@@ -70,10 +71,10 @@ export function applyBulkChoice<T extends QualifiableLot>(
   return items.map((item) => {
     if (!isEligibleForBulk(item, options)) return item;
     if (choice.kind === 'uniform') {
-      return { ...item, origin: choice.origin, planType: choice.planType };
+      return { ...item, origin: choice.origin, planType: choice.planType, qualificationReason: 'bulk_qualify' };
     }
     const target = item.acquisitionDate.getTime() < choice.pivotDate.getTime() ? choice.before : choice.after;
-    return { ...item, origin: target.origin, planType: target.planType };
+    return { ...item, origin: target.origin, planType: target.planType, qualificationReason: 'bulk_qualify' };
   });
 }
 

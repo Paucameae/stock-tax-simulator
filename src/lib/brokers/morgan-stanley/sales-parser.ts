@@ -156,6 +156,7 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
     origin,
     planType: defaultPlanTypeFor(origin),
     importCurrency: 'USD' as ImportCurrency,
+    qualificationReason: 'broker_plan_name',
     ...(isDrip && { isReinvestedDividend: true }),
   };
 }

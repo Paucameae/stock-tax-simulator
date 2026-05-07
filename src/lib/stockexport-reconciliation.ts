@@ -1,4 +1,4 @@
-import type { GrantInfo, PlanType, SoldLot, StockLot, StockOrigin, VestEvent } from './types';
+import type { GrantInfo, PlanType, QualificationReason, SoldLot, StockLot, StockOrigin, VestEvent } from './types';
 
 /**
  * Tolerance window when matching Fidelity deposit dates to Microsoft vest dates.
@@ -24,87 +24,123 @@ export interface ReconciliationResult {
 }
 
 /**
+ * Outcome of trying to attach a single (lot or sold-lot) to a StockExport grant.
+ * Shared between `reconcileLots` and `reconcileSoldLots` so both paths
+ * apply *strictly* the same matching rules — see #5 in the lot-qualification
+ * improvement plan.
+ */
+export type ReconciliationDecision =
+  | { kind: 'notApplicable' }
+  | { kind: 'unmatched' }
+  | { kind: 'ambiguous' }
+  | { kind: 'reconciled'; grant: GrantInfo; via: 'unique' | 'by_quantity' | 'by_agreement' };
+
+/**
+ * Single source of truth for the matching logic. Given a lot's
+ * (acquisitionDate, origin, quantity) and the pre-indexed grants, decides
+ * which grant — if any — should be applied. Exported for the symmetry test.
+ */
+export function decideReconciliation(
+  acquisitionDate: Date,
+  origin: StockOrigin,
+  quantity: number,
+  byDay: Map<string, GrantInfo[]>,
+): ReconciliationDecision {
+  // ESPP lots are self-describing (Fidelity encodes them as SP with correct metadata).
+  if (origin === 'SP') return { kind: 'notApplicable' };
+
+  const candidates = findCandidateGrantsByDate(acquisitionDate, byDay);
+  if (candidates.length === 0) return { kind: 'unmatched' };
+
+  // De-duplicate by grantIdHash (a grant could have several vest events on the same day).
+  const uniqueGrants = Array.from(new Map(candidates.map((g) => [g.grantIdHash, g])).values());
+
+  if (uniqueGrants.length === 1) {
+    return { kind: 'reconciled', grant: uniqueGrants[0], via: 'unique' };
+  }
+
+  // Multiple grants — first try to disambiguate by net-share quantity (the
+  // Transactions sheet exposes the *net* shares actually deposited at each
+  // vest, which is what brokers report).
+  const byQuantity = pickByQuantity(uniqueGrants, acquisitionDate, quantity);
+  if (byQuantity) {
+    return { kind: 'reconciled', grant: byQuantity, via: 'by_quantity' };
+  }
+
+  // Otherwise, only safe when they all agree on the classification.
+  const planTypes = new Set(uniqueGrants.map((g) => g.planType));
+  const origins = new Set(uniqueGrants.map((g) => g.origin));
+  if (planTypes.size === 1 && origins.size === 1) {
+    return { kind: 'reconciled', grant: uniqueGrants[0], via: 'by_agreement' };
+  }
+
+  return { kind: 'ambiguous' };
+}
+
+function viaToReason(via: 'unique' | 'by_quantity' | 'by_agreement'): QualificationReason {
+  switch (via) {
+    case 'unique':
+      return 'reconciled_unique';
+    case 'by_quantity':
+      return 'reconciled_by_quantity';
+    case 'by_agreement':
+      return 'reconciled_by_agreement';
+  }
+}
+
+/**
+ * When the matched grant was reclassified as non-qualified thanks to the
+ * StockExport Transactions sheet (`nqDetected`), the *reason* the resulting
+ * lot ends up non-qualified is the withholding signal — not the date match.
+ * Surface that more informative reason instead of the generic reconciliation
+ * reason so the UI tooltip explains the actual evidence.
+ */
+function reasonForGrant(grant: GrantInfo, via: 'unique' | 'by_quantity' | 'by_agreement'): QualificationReason {
+  if (grant.nqDetected && grant.planType === 'non_qualified') {
+    return 'nq_via_withholding';
+  }
+  return viaToReason(via);
+}
+
+/**
  * Apply StockExport grant metadata to a set of Fidelity lots:
  *  - assign planType and refine origin when a grant can be identified by vest date;
  *  - flag lots as `reconciled` so the UI can display them differently;
  *  - keep lots untouched when matching is ambiguous or no grant is found.
- *
- * Strategy: match on vest date only. Quantities don't match 1:1 because Microsoft
- * reports gross vest shares while Fidelity reports net-of-withholding shares.
- * When multiple grants share a vest date but all derive the same planType, we
- * still reconcile (safe ambiguity). Otherwise we abstain.
  */
 export function reconcileLots(lots: StockLot[], grants: GrantInfo[]): ReconciliationResult {
   const stats: ReconciliationStats = { reconciled: 0, ambiguous: 0, unmatched: 0, notApplicable: 0 };
   const warnings: string[] = [];
 
-  // Pre-index: vest date (day-granularity) → list of grants having a vest event on that day.
   const byDay = indexGrantsByVestDay(grants);
 
   const out = lots.map((lot) => {
-    // ESPP lots are self-describing (Fidelity encodes them as SP with correct metadata).
-    if (lot.origin === 'SP') {
-      stats.notApplicable++;
-      return lot;
+    const decision = decideReconciliation(lot.acquisitionDate, lot.origin, lot.quantity, byDay);
+    switch (decision.kind) {
+      case 'notApplicable':
+        stats.notApplicable++;
+        return lot;
+      case 'unmatched':
+        stats.unmatched++;
+        return lot;
+      case 'reconciled':
+        stats.reconciled++;
+        return applyGrant(lot, decision.grant, reasonForGrant(decision.grant, decision.via));
+      case 'ambiguous':
+        stats.ambiguous++;
+        warnings.push(
+          `Lot du ${lot.acquisitionDate.toLocaleDateString('fr-FR')} : plusieurs grants candidats avec classifications différentes — qualification conservée telle quelle.`,
+        );
+        return lot;
     }
-
-    const candidates = findCandidateGrants(lot, byDay);
-    if (candidates.length === 0) {
-      stats.unmatched++;
-      return lot;
-    }
-
-    // De-duplicate by grantIdHash (a grant could have several vest events on the same day).
-    const uniqueGrants = Array.from(new Map(candidates.map((g) => [g.grantIdHash, g])).values());
-
-    if (uniqueGrants.length === 1) {
-      stats.reconciled++;
-      return applyGrant(lot, uniqueGrants[0]);
-    }
-
-    // Multiple grants — first try to disambiguate by quantity (Microsoft's
-    // Transactions sheet exposes the *net* shares actually deposited at each
-    // vest, which is what brokers report). When exactly one grant has a vest
-    // matching the lot's date AND quantity, it wins regardless of
-    // classification differences.
-    const byQuantity = pickByQuantity(uniqueGrants, lot.acquisitionDate, lot.quantity);
-    if (byQuantity) {
-      stats.reconciled++;
-      return applyGrant(lot, byQuantity);
-    }
-
-    // Otherwise, only safe when they all agree on the classification.
-    const planTypes = new Set(uniqueGrants.map((g) => g.planType));
-    const origins = new Set(uniqueGrants.map((g) => g.origin));
-    if (planTypes.size === 1 && origins.size === 1) {
-      stats.reconciled++;
-      return applyGrant(lot, uniqueGrants[0]);
-    }
-
-    stats.ambiguous++;
-    warnings.push(
-      `Lot du ${lot.acquisitionDate.toLocaleDateString('fr-FR')} : plusieurs grants candidats avec classifications différentes — qualification conservée telle quelle.`,
-    );
-    return lot;
   });
 
   return { lots: out, stats, warnings };
 }
 
 /**
- * Same logic as `reconcileLots` but for already-realised sales.
- *
- * Why we need this even though Morgan Stanley sales already carry an origin
- * derived from the Plan Name: matching against StockExport grants lets us
- * refine the planType (`qualified_macron` vs `qualified_pre_macron`, decided
- * by the grant *award* date which is not present in the sales export) and
- * stamp `grantIdHash` / `awardType` for traceability — exactly like for
- * positions. For Fidelity sales (which lack origin entirely) it can also
- * upgrade the default `DO` to `FM` / `FQ` when a grant matches.
- *
- * Matching is by acquisition date only — same rationale as `reconcileLots`
- * (Fidelity reports net-of-withholding shares, MS reports the gross vest
- * quantity, so quantity comparison is unreliable).
+ * Same logic as `reconcileLots` but for already-realised sales. The decision
+ * function is shared so the two paths cannot drift (see symmetry test).
  */
 export function reconcileSoldLots(soldLots: SoldLot[], grants: GrantInfo[]): {
   lots: SoldLot[];
@@ -117,43 +153,24 @@ export function reconcileSoldLots(soldLots: SoldLot[], grants: GrantInfo[]): {
   const byDay = indexGrantsByVestDay(grants);
 
   const out = soldLots.map((sl) => {
-    if (sl.origin === 'SP') {
-      stats.notApplicable++;
-      return sl;
+    const decision = decideReconciliation(sl.acquisitionDate, sl.origin, sl.quantity, byDay);
+    switch (decision.kind) {
+      case 'notApplicable':
+        stats.notApplicable++;
+        return sl;
+      case 'unmatched':
+        stats.unmatched++;
+        return sl;
+      case 'reconciled':
+        stats.reconciled++;
+        return applyGrantToSoldLot(sl, decision.grant, reasonForGrant(decision.grant, decision.via));
+      case 'ambiguous':
+        stats.ambiguous++;
+        warnings.push(
+          `Lot vendu acquis le ${sl.acquisitionDate.toLocaleDateString('fr-FR')} : plusieurs grants candidats avec classifications différentes — qualification conservée telle quelle.`,
+        );
+        return sl;
     }
-
-    const candidates = findCandidateGrantsByDate(sl.acquisitionDate, byDay);
-    if (candidates.length === 0) {
-      stats.unmatched++;
-      return sl;
-    }
-
-    const uniqueGrants = Array.from(new Map(candidates.map((g) => [g.grantIdHash, g])).values());
-
-    if (uniqueGrants.length === 1) {
-      stats.reconciled++;
-      return applyGrantToSoldLot(sl, uniqueGrants[0]);
-    }
-
-    // Same quantity-based tie-breaker as for open positions.
-    const byQuantity = pickByQuantity(uniqueGrants, sl.acquisitionDate, sl.quantity);
-    if (byQuantity) {
-      stats.reconciled++;
-      return applyGrantToSoldLot(sl, byQuantity);
-    }
-
-    const planTypes = new Set(uniqueGrants.map((g) => g.planType));
-    const origins = new Set(uniqueGrants.map((g) => g.origin));
-    if (planTypes.size === 1 && origins.size === 1) {
-      stats.reconciled++;
-      return applyGrantToSoldLot(sl, uniqueGrants[0]);
-    }
-
-    stats.ambiguous++;
-    warnings.push(
-      `Lot vendu acquis le ${sl.acquisitionDate.toLocaleDateString('fr-FR')} : plusieurs grants candidats avec classifications différentes — qualification conservée telle quelle.`,
-    );
-    return sl;
   });
 
   return { lots: out, stats, warnings };
@@ -186,7 +203,7 @@ function findCandidateGrantsByDate(date: Date, byDay: Map<string, GrantInfo[]>):
   return fuzzy;
 }
 
-function applyGrantToSoldLot(sl: SoldLot, grant: GrantInfo): SoldLot {
+function applyGrantToSoldLot(sl: SoldLot, grant: GrantInfo, reason: QualificationReason): SoldLot {
   const origin: StockOrigin = grant.origin;
   const planType: PlanType = grant.planType;
   return {
@@ -196,11 +213,8 @@ function applyGrantToSoldLot(sl: SoldLot, grant: GrantInfo): SoldLot {
     grantIdHash: grant.grantIdHash,
     awardType: grant.awardType,
     reconciled: true,
+    qualificationReason: reason,
   };
-}
-
-function findCandidateGrants(lot: StockLot, byDay: Map<string, GrantInfo[]>): GrantInfo[] {
-  return findCandidateGrantsByDate(lot.acquisitionDate, byDay);
 }
 
 /**
@@ -236,7 +250,7 @@ function pickByQuantity(grants: GrantInfo[], date: Date, quantity: number): Gran
   return matches.length === 1 ? matches[0] : null;
 }
 
-function applyGrant(lot: StockLot, grant: GrantInfo): StockLot {
+function applyGrant(lot: StockLot, grant: GrantInfo, reason: QualificationReason): StockLot {
   const origin: StockOrigin = grant.origin;
   const planType: PlanType = grant.planType;
   return {
@@ -246,6 +260,7 @@ function applyGrant(lot: StockLot, grant: GrantInfo): StockLot {
     grantIdHash: grant.grantIdHash,
     awardType: grant.awardType,
     reconciled: true,
+    qualificationReason: reason,
   };
 }
 
