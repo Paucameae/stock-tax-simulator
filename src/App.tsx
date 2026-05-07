@@ -960,7 +960,7 @@ function App() {
       </Dialog>
 
       {/* Footer */}
-      <footer className="border-t bg-white mt-12">
+      <footer className={`border-t bg-white mt-12 ${activeTab === 'simulator' ? 'mb-20' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-gray-400 space-y-1">
           <div>
             ⚠️ Cet outil est un simulateur indicatif. Il ne constitue pas un conseil fiscal. Les calculs sont basés sur la législation fiscale française en vigueur et peuvent évoluer. Pour votre déclaration officielle, consultez un conseiller fiscal ou référez-vous aux instructions de KPMG Avocats fournies par votre employeur.
