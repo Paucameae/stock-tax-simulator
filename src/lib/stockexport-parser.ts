@@ -25,6 +25,26 @@ const VEST_COL = {
   vestShares: 'I',
 } as const;
 
+/**
+ * Columns in the "Transactions" sheet (one row per actual vest/purchase event).
+ * The two fields we care about are `Shares For Taxes` (BA) and `Net Shares` (BB):
+ *   - Any row with `Shares For Taxes > 0` is a Stock Award US (non-qualified)
+ *     vest — Microsoft only withholds shares to cover income tax on NQ vests.
+ *     For qualified (FQ/FM) and ESPP grants, no withholding occurs.
+ *   - `Net Shares` is what the broker actually deposits, which is what we see
+ *     on the Fidelity / Morgan Stanley export. This lets us disambiguate two
+ *     grants vesting on the same day by matching quantities exactly.
+ */
+const TX_COL = {
+  txDate: 'D',
+  txAmount: 'E',
+  txType: 'G',
+  awardId: 'H',
+  awardDate: 'I',
+  sharesForTaxes: 'BA',
+  netShares: 'BB',
+} as const;
+
 /** Macron law takes effect for awards granted on/after 2015-08-07 (JO 2015-08-07). */
 const MACRON_START = new Date('2015-08-07T00:00:00Z');
 
@@ -50,11 +70,13 @@ export async function parseStockExportFile(file: File): Promise<ParsedStockExpor
     'xl/sharedStrings.xml',
     'xl/worksheets/sheet1.xml',
     'xl/worksheets/sheet2.xml',
+    'xl/worksheets/sheet3.xml',
   ]);
 
   const sharedStringsXml = parts.get('xl/sharedStrings.xml');
   const awardXml = parts.get('xl/worksheets/sheet1.xml');
   const vestXml = parts.get('xl/worksheets/sheet2.xml');
+  const txXml = parts.get('xl/worksheets/sheet3.xml');
 
   if (!awardXml || !vestXml) {
     throw new Error(
@@ -66,26 +88,62 @@ export async function parseStockExportFile(file: File): Promise<ParsedStockExpor
   const sharedStrings = sharedStringsXml ? parseSharedStrings(sharedStringsXml) : [];
   const awardRows = parseWorksheet(awardXml, sharedStrings);
   const vestRows = parseWorksheet(vestXml, sharedStrings);
+  const txRows = txXml ? parseWorksheet(txXml, sharedStrings) : [];
 
-  if (awardRows.length > MAX_ROWS || vestRows.length > MAX_ROWS) {
+  if (awardRows.length > MAX_ROWS || vestRows.length > MAX_ROWS || txRows.length > MAX_ROWS) {
     throw new Error(`Fichier StockExport anormalement volumineux (> ${MAX_ROWS} lignes).`);
   }
 
-  return buildGrants(awardRows, vestRows);
+  return buildGrants(awardRows, vestRows, txRows);
 }
 
 /**
  * Test-friendly variant: operate on already-extracted rows.
  * Kept separate from the file-based entry point to make unit tests trivial.
  */
-export function buildGrantsForTest(awardRows: SheetRow[], vestRows: SheetRow[]): ParsedStockExport {
-  return buildGrants(awardRows, vestRows);
+export function buildGrantsForTest(awardRows: SheetRow[], vestRows: SheetRow[], txRows: SheetRow[] = []): ParsedStockExport {
+  return buildGrants(awardRows, vestRows, txRows);
 }
 
-function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[]): ParsedStockExport {
+function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[], txRows: SheetRow[]): ParsedStockExport {
   const warnings: string[] = [];
 
-  // Index vest events by Award ID (plaintext — never leaves this function).
+  // ---------- Pass 1: index transactions by Award ID, keyed by vest day ----------
+  // Per Award ID, we collect:
+  //   - the {netShares, sharesForTaxes} per vest day (used to enrich VestEvent)
+  //   - whether ANY vest withheld shares for tax (⇒ non-qualified Stock Award)
+  interface TxAggregate {
+    nq: boolean;
+    byDay: Map<string, { netShares: number; sharesForTaxes: number }>;
+  }
+  const txByAward = new Map<string, TxAggregate>();
+  for (const row of txRows) {
+    if (row.rowIndex === 1) continue; // header
+    const awardId = row.cells[TX_COL.awardId];
+    const dateRaw = row.cells[TX_COL.txDate];
+    if (!awardId || !dateRaw) continue;
+
+    const date = parseIsoDate(dateRaw);
+    if (!date) continue;
+
+    const sft = parseNumber(row.cells[TX_COL.sharesForTaxes]) || 0;
+    const net = parseNumber(row.cells[TX_COL.netShares]) || 0;
+
+    const agg = txByAward.get(awardId) ?? { nq: false, byDay: new Map() };
+    if (sft > 0) agg.nq = true;
+    const key = dayKey(date);
+    const prev = agg.byDay.get(key) ?? { netShares: 0, sharesForTaxes: 0 };
+    agg.byDay.set(key, {
+      netShares: prev.netShares + net,
+      sharesForTaxes: prev.sharesForTaxes + sft,
+    });
+    txByAward.set(awardId, agg);
+  }
+
+  // ---------- Pass 2: index vest events by Award ID ----------
+  // Vest schedules carry the *gross* share count. We enrich each event with the
+  // matching `netShares` / `sharesForTaxes` from the transactions sheet (when
+  // available).
   const vestByAward = new Map<string, VestEvent[]>();
   for (const row of vestRows) {
     if (row.rowIndex === 1) continue; // header
@@ -98,11 +156,20 @@ function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[]): ParsedStockEx
     const shares = parseNumber(sharesRaw);
     if (!date || !Number.isFinite(shares) || shares <= 0) continue;
 
+    const txDay = txByAward.get(awardIdRaw)?.byDay.get(dayKey(date));
+
+    const event: VestEvent = { date, shares };
+    if (txDay) {
+      event.netShares = txDay.netShares;
+      event.sharesForTaxes = txDay.sharesForTaxes;
+    }
+
     const existing = vestByAward.get(awardIdRaw) ?? [];
-    existing.push({ date, shares });
+    existing.push(event);
     vestByAward.set(awardIdRaw, existing);
   }
 
+  // ---------- Pass 3: build grants from Award Summary, applying NQ override ----------
   const grants: GrantInfo[] = [];
   for (const row of awardRows) {
     if (row.rowIndex === 1) continue; // header
@@ -128,15 +195,30 @@ function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[]): ParsedStockEx
 
     const vestSchedule = (vestByAward.get(awardIdRaw) ?? []).slice().sort((a, b) => a.date.getTime() - b.date.getTime());
 
-    const { origin, planType } = classifyAward(awardType, awardDate);
-    if (origin === 'DO' && planType === 'non_qualified') {
+    let { origin, planType } = classifyAward(awardType, awardDate);
+    const nqDetected = txByAward.get(awardIdRaw)?.nq === true;
+
+    // The Transactions sheet is authoritative: a vest that withheld shares for
+    // tax is unambiguously a Stock Award US (non-qualified). Override any
+    // label-based classification, and warn the user when this happens to a
+    // grant the label would have classified as qualified — that signals either
+    // a labelling oddity or a misconfigured plan.
+    if (nqDetected && planType !== 'non_qualified') {
+      warnings.push(
+        `Grant "${awardType}" reclassé en non qualifié : retenue d'actions pour impôt détectée dans l'historique des transactions.`,
+      );
+      origin = 'DO';
+      planType = 'non_qualified';
+    }
+
+    if (origin === 'DO' && planType === 'non_qualified' && !nqDetected) {
       // Only emit a warning when we truly could not categorise — not for normal SA/ESPP.
       if (!/\b(SA|RSU|ESPP|FQ|FM)\b/i.test(awardType)) {
         warnings.push(`Type d'award inconnu : "${awardType}". Classé comme Stock Award non qualifié par défaut.`);
       }
     }
 
-    grants.push({
+    const grant: GrantInfo = {
       grantIdHash: '', // filled below (async)
       awardType,
       awardDate,
@@ -146,13 +228,20 @@ function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[]): ParsedStockEx
       totalAwarded,
       totalVested,
       totalUnvested,
-    });
+    };
+    if (nqDetected) grant.nqDetected = true;
+    grants.push(grant);
 
     // Stash the plaintext ID on a side channel for the async hash pass.
     (grants[grants.length - 1] as GrantInfo & { __rawAwardId: string }).__rawAwardId = awardIdRaw;
   }
 
   return { grants, warnings };
+}
+
+/** YYYY-MM-DD key for day-granularity comparisons (local time). */
+function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { GrantInfo, PlanType, SoldLot, StockLot, StockOrigin } from './types';
+import type { GrantInfo, PlanType, SoldLot, StockLot, StockOrigin, VestEvent } from './types';
 
 /**
  * Tolerance window when matching Fidelity deposit dates to Microsoft vest dates.
@@ -62,7 +62,18 @@ export function reconcileLots(lots: StockLot[], grants: GrantInfo[]): Reconcilia
       return applyGrant(lot, uniqueGrants[0]);
     }
 
-    // Multiple grants — only safe when they all agree on the classification.
+    // Multiple grants — first try to disambiguate by quantity (Microsoft's
+    // Transactions sheet exposes the *net* shares actually deposited at each
+    // vest, which is what brokers report). When exactly one grant has a vest
+    // matching the lot's date AND quantity, it wins regardless of
+    // classification differences.
+    const byQuantity = pickByQuantity(uniqueGrants, lot.acquisitionDate, lot.quantity);
+    if (byQuantity) {
+      stats.reconciled++;
+      return applyGrant(lot, byQuantity);
+    }
+
+    // Otherwise, only safe when they all agree on the classification.
     const planTypes = new Set(uniqueGrants.map((g) => g.planType));
     const origins = new Set(uniqueGrants.map((g) => g.origin));
     if (planTypes.size === 1 && origins.size === 1) {
@@ -124,6 +135,13 @@ export function reconcileSoldLots(soldLots: SoldLot[], grants: GrantInfo[]): {
       return applyGrantToSoldLot(sl, uniqueGrants[0]);
     }
 
+    // Same quantity-based tie-breaker as for open positions.
+    const byQuantity = pickByQuantity(uniqueGrants, sl.acquisitionDate, sl.quantity);
+    if (byQuantity) {
+      stats.reconciled++;
+      return applyGrantToSoldLot(sl, byQuantity);
+    }
+
     const planTypes = new Set(uniqueGrants.map((g) => g.planType));
     const origins = new Set(uniqueGrants.map((g) => g.origin));
     if (planTypes.size === 1 && origins.size === 1) {
@@ -183,6 +201,39 @@ function applyGrantToSoldLot(sl: SoldLot, grant: GrantInfo): SoldLot {
 
 function findCandidateGrants(lot: StockLot, byDay: Map<string, GrantInfo[]>): GrantInfo[] {
   return findCandidateGrantsByDate(lot.acquisitionDate, byDay);
+}
+
+/**
+ * Tie-breaker used when multiple distinct grants have a vest near the lot's
+ * acquisition date. Returns the unique grant whose vest event on (or nearest
+ * to) `date` has `netShares` equal to `quantity`. Returns null if zero or
+ * more than one candidate matches — in that case the caller falls back to
+ * the classification-agreement check.
+ *
+ * Only meaningful when the StockExport Transactions sheet was parsed (i.e.
+ * `vest.netShares` is populated). When it isn't, every comparison fails and
+ * this helper returns null — leaving prior behaviour unchanged.
+ */
+function pickByQuantity(grants: GrantInfo[], date: Date, quantity: number): GrantInfo | null {
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+  const t = date.getTime();
+  const matches: GrantInfo[] = [];
+  for (const grant of grants) {
+    // Find the vest event closest to `date` within the tolerance window.
+    let best: VestEvent | null = null;
+    let bestDelta = Infinity;
+    for (const vest of grant.vestSchedule) {
+      const delta = Math.abs(vest.date.getTime() - t);
+      if (delta <= DATE_MATCH_TOLERANCE_MS && delta < bestDelta) {
+        best = vest;
+        bestDelta = delta;
+      }
+    }
+    if (best && best.netShares !== undefined && best.netShares === quantity) {
+      matches.push(grant);
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function applyGrant(lot: StockLot, grant: GrantInfo): StockLot {

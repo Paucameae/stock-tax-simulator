@@ -48,10 +48,22 @@ export interface StockLot {
  * A single vesting event from the StockExport Vest Schedules sheet.
  * For qualified plans, this is the legal acquisition date (date d'acquisition
  * définitive) which triggers the gain d'acquisition for French tax purposes.
+ *
+ * `shares` is the *gross* number of shares awarded by the vest. For qualified
+ * (FQ/FM) and ESPP grants it equals the number of shares actually deposited
+ * to the broker. For non-qualified Stock Awards (DO), the broker withholds a
+ * portion of shares to cover income tax, so the deposit equals
+ * `shares - sharesForTaxes` (= `netShares`). When the StockExport Transactions
+ * sheet is available, we capture both so the reconciliation can match against
+ * either gross or net quantity.
  */
 export interface VestEvent {
   date: Date;
   shares: number;
+  /** Net shares actually deposited to the broker (gross − withheld). Optional: only filled when the Transactions sheet was parsed. */
+  netShares?: number;
+  /** Shares withheld for tax. > 0 ⇒ non-qualified Stock Award. Optional: only filled when the Transactions sheet was parsed. */
+  sharesForTaxes?: number;
 }
 
 /**
@@ -76,6 +88,14 @@ export interface GrantInfo {
   totalAwarded: number;
   totalVested: number;
   totalUnvested: number;
+  /**
+   * True when at least one vest of this grant withheld shares for tax (i.e.
+   * `sharesForTaxes > 0` on the Transactions sheet). This is the unambiguous
+   * signature of a non-qualified Stock Award (DO / non_qualified) and
+   * overrides any classification derived from the award label alone.
+   * Only set when the Transactions sheet was parsed.
+   */
+  nqDetected?: boolean;
 }
 
 export interface SoldLot {
