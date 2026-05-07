@@ -225,6 +225,11 @@ export function SoldLotsTable({
                           aria-label="Lot reconcilié avec StockExport"
                         />
                       )}
+                      {lot.isReinvestedDividend && (
+                        <Badge variant="outline" className="text-[10px] font-normal py-0 px-1" title="Dividende réinvesti">
+                          DRIP
+                        </Badge>
+                      )}
                     </span>
                   </td>
                   <td className="py-2 pr-3">{formatDate(lot.saleDate)}</td>
@@ -308,6 +313,11 @@ export function SoldLotsTable({
                         className="h-3.5 w-3.5 text-green-600"
                         aria-label="Lot reconcilié avec StockExport"
                       />
+                    )}
+                    {lot.isReinvestedDividend && (
+                      <Badge variant="outline" className="text-[10px] font-normal py-0 px-1" title="Dividende réinvesti">
+                        DRIP
+                      </Badge>
                     )}
                   </div>
                 </div>

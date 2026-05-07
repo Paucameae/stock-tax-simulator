@@ -656,9 +656,20 @@ function PortfolioTableAndCards({
                         </span>
                       </td>
                       <td className="px-2.5 py-2 text-center">
-                        <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
-                          {originLabel(lot.origin)}
-                        </Badge>
+                        <div className="inline-flex items-center gap-1">
+                          <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
+                            {originLabel(lot.origin)}
+                          </Badge>
+                          {lot.isReinvestedDividend && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-normal"
+                              title="Actions issues d'un dividende réinvesti (quantité fractionnaire)"
+                            >
+                              DRIP
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td className="px-2.5 py-2 text-center">
                         {lot.origin === 'DO' ? (
@@ -750,9 +761,16 @@ function MobileLotCard({
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
-                {originLabel(lot.origin)}
-              </Badge>
+              <div className="flex items-center gap-1">
+                <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
+                  {originLabel(lot.origin)}
+                </Badge>
+                {lot.isReinvestedDividend && (
+                  <Badge variant="outline" className="text-[10px] font-normal" title="Dividende réinvesti">
+                    DRIP
+                  </Badge>
+                )}
+              </div>
               {hasMultipleBrokers && (
                 <BrokerLogo broker={lot.broker} className="h-5" />
               )}

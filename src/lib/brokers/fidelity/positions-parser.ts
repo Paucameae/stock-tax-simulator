@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import type { StockLot, StockOrigin, HoldingPeriod, PlanType, SoldLot } from '../../types';
+import { isLikelyReinvestedDividend } from '../../utils';
 
 // Safety guard: reject CSV files with absurd row counts to prevent DoS.
 const MAX_CSV_ROWS = 5000;
@@ -199,6 +200,8 @@ export function parseCsvFile(csvText: string): StockLot[] {
 
     id++;
 
+    const isDrip = isLikelyReinvestedDividend(origin, quantity);
+
     lots.push({
       id: `lot-${id}`,
       broker: 'fidelity',
@@ -222,6 +225,7 @@ export function parseCsvFile(csvText: string): StockLot[] {
       origin,
       holdingPeriod,
       planType: getDefaultPlanType(origin),
+      ...(isDrip && { isReinvestedDividend: true }),
     });
   }
 
@@ -330,6 +334,9 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
 
     id++;
 
+    const origin: StockOrigin = 'DO';
+    const isDrip = isLikelyReinvestedDividend(origin, quantity);
+
     lots.push({
       id: `sold-${id}`,
       broker: 'fidelity',
@@ -342,9 +349,10 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
       proceedsUsd: proceeds,
       costBasisUsd: costBasis,
       holdingPeriod,
-      origin: 'DO',
+      origin,
       planType: 'qualified_macron',
       importCurrency: 'USD',
+      ...(isDrip && { isReinvestedDividend: true }),
     });
   }
 

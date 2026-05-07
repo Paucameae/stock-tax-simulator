@@ -132,6 +132,7 @@ function validateLot(raw: unknown): StockLot | null {
     reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
     grantIdHash: typeof raw.grantIdHash === 'string' ? raw.grantIdHash : undefined,
     awardType: typeof raw.awardType === 'string' ? raw.awardType : undefined,
+    isReinvestedDividend: typeof raw.isReinvestedDividend === 'boolean' ? raw.isReinvestedDividend : undefined,
   };
 }
 
@@ -163,6 +164,7 @@ function validateSoldLot(raw: unknown): SoldLot | null {
     reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
     grantIdHash: typeof raw.grantIdHash === 'string' ? raw.grantIdHash : undefined,
     awardType: typeof raw.awardType === 'string' ? raw.awardType : undefined,
+    isReinvestedDividend: typeof raw.isReinvestedDividend === 'boolean' ? raw.isReinvestedDividend : undefined,
   };
 }
 

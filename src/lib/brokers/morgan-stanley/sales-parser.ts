@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import type { SoldLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
+import { isLikelyReinvestedDividend } from '../../utils';
 import { parseWorksheet, parseSharedStrings, readXlsx } from '../../xlsx-reader';
 
 const MAX_ROWS = 5000;
@@ -137,6 +138,7 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
 
   const proceedsUsd = quantity * salePrice;
   const holdingPeriod = computeHoldingPeriod(acquisitionDate, saleDate);
+  const isDrip = isLikelyReinvestedDividend(origin, quantity);
 
   idCounter.n++;
   return {
@@ -154,6 +156,7 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
     origin,
     planType: defaultPlanTypeFor(origin),
     importCurrency: 'USD' as ImportCurrency,
+    ...(isDrip && { isReinvestedDividend: true }),
   };
 }
 

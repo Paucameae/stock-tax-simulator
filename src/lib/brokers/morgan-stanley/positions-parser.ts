@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import type { StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
+import { isLikelyReinvestedDividend } from '../../utils';
 
 const MAX_ROWS = 5000;
 
@@ -118,6 +119,7 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
     const costBasisPerShareUsd = acquisitionValue / quantity;
 
     id++;
+    const isDrip = isLikelyReinvestedDividend(origin, quantity);
     lots.push({
       id: `ms-lot-${id}`,
       broker: 'morgan_stanley',
@@ -139,6 +141,7 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
       origin,
       holdingPeriod: 'Long' as HoldingPeriod,
       planType: defaultPlanTypeFor(origin),
+      ...(isDrip && { isReinvestedDividend: true }),
     });
   }
 

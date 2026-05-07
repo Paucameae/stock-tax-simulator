@@ -1,8 +1,29 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import type { StockOrigin } from './types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/**
+ * True when the lot looks like shares received from a reinvested dividend
+ * (DRIP). Vests of any plan (DO / FM / FQ) always come in whole shares, so
+ * a fractional quantity on a vest-origin lot is the unambiguous signature
+ * of a DRIP.
+ *
+ * ESPP-tagged lots (origin SP) can legitimately be fractional too (the
+ * quantity = contribution / discounted price), so we don't auto-detect on
+ * SP — the user can opt in via the bulk-qualify panel if a particular SP
+ * lot is actually a mislabelled DRIP.
+ *
+ * Tolerance: treat anything within 1e-6 of an integer as a whole share to
+ * absorb floating-point rounding from CSV/XLSX parsers.
+ */
+export function isLikelyReinvestedDividend(origin: StockOrigin, quantity: number): boolean {
+  if (origin === 'SP') return false;
+  if (!Number.isFinite(quantity) || quantity <= 0) return false;
+  return Math.abs(quantity - Math.round(quantity)) > 1e-6;
 }
 
 export function formatEUR(value: number): string {

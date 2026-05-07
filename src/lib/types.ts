@@ -42,6 +42,17 @@ export interface StockLot {
   grantIdHash?: string;
   awardType?: string;
   reconciled?: boolean;
+  /**
+   * True when this lot is recognised as shares received from a reinvested
+   * dividend (DRIP). Auto-detected when the lot has a fractional quantity AND
+   * its declared origin is a vest-only origin (DO / FM / FQ — vests always
+   * come in whole shares, so any fractional quantity is the signature of a
+   * DRIP). ESPP-tagged lots (origin SP) can also be fractional, so we don't
+   * auto-flag them here.
+   * Display-only flag at the moment: surfaced in the UI so the user knows why
+   * a lot is showing up out of the usual vest schedule.
+   */
+  isReinvestedDividend?: boolean;
 }
 
 /**
@@ -119,6 +130,8 @@ export interface SoldLot {
   grantIdHash?: string;
   awardType?: string;
   reconciled?: boolean;
+  /** See StockLot.isReinvestedDividend. Carried through to sold lots so the table can flag historical DRIP sales. */
+  isReinvestedDividend?: boolean;
 }
 
 export interface SaleLotEntry {
