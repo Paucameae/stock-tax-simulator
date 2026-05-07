@@ -4,13 +4,16 @@
 // Dates are stored as ISO strings and re-hydrated on import. Unknown/invalid
 // fields are rejected to keep the runtime state consistent.
 
-import type { AppSettings, Broker, StockLot, SoldLot, SavedSimulation } from './types';
-import { validateSettings } from './storage';
+import type { AppSettings, Broker, GrantInfo, StockLot, SoldLot, SavedSimulation } from './types';
+import { validateGrant, validateSettings } from './storage';
 
 // v1: original schema (Fidelity-only, no `broker` field).
 // v2: added `broker` on every StockLot and SoldLot. v1 backups are still
 //     accepted; lots without a `broker` field are migrated as 'fidelity'.
-const BACKUP_VERSION = 2;
+// v3: added StockExport reconciliation fields (reconciled / grantIdHash /
+//     awardType) on StockLot and SoldLot, and a top-level `grants` array
+//     so the StockExport classification survives a backup round-trip.
+const BACKUP_VERSION = 3;
 
 const VALID_BROKERS: readonly Broker[] = ['fidelity', 'morgan_stanley'];
 
@@ -28,6 +31,9 @@ export interface BackupPayload {
   lots: StockLot[];
   soldLots: SoldLot[];
   savedSimulations: SavedSimulation[];
+  /** Microsoft StockExport grants (since v3). Optional in input/output to keep
+   *  v1/v2 backups roundtrippable. */
+  grants?: GrantInfo[];
 }
 
 export interface BackupInput {
@@ -35,6 +41,7 @@ export interface BackupInput {
   lots: StockLot[];
   soldLots: SoldLot[];
   savedSimulations: SavedSimulation[];
+  grants?: GrantInfo[];
 }
 
 export interface ImportResult {
@@ -42,10 +49,16 @@ export interface ImportResult {
   lots: StockLot[];
   soldLots: SoldLot[];
   savedSimulations: SavedSimulation[];
+  grants: GrantInfo[];
   warnings: string[];
 }
 
-/** Serialize the app state to a JSON-safe object. */
+/**
+ * Serialize the app state to a JSON-safe object. Date instances on lots,
+ * sold lots, and grants are converted to ISO strings by JSON.stringify
+ * (the on-the-wire shape for grants matches `saveGrants` in storage.ts so
+ * that `validateGrant` can re-hydrate them).
+ */
 export function buildBackup(input: BackupInput): BackupPayload {
   return {
     version: BACKUP_VERSION,
@@ -55,6 +68,9 @@ export function buildBackup(input: BackupInput): BackupPayload {
     lots: input.lots,
     soldLots: input.soldLots,
     savedSimulations: input.savedSimulations,
+    // Always emit `grants` (possibly []) so v3 readers can distinguish
+    // "no grants imported" from "older backup that didn't carry grants".
+    grants: input.grants ?? [],
   };
 }
 
@@ -112,6 +128,10 @@ function validateLot(raw: unknown): StockLot | null {
     currentValueUsd: typeof raw.currentValueUsd === 'number' ? raw.currentValueUsd : undefined,
     eurUsdRate: typeof raw.eurUsdRate === 'number' ? raw.eurUsdRate : undefined,
     importCurrency: raw.importCurrency === 'USD' || raw.importCurrency === 'EUR' ? raw.importCurrency : undefined,
+    // v3 — Microsoft StockExport reconciliation (absent on v1/v2 backups).
+    reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
+    grantIdHash: typeof raw.grantIdHash === 'string' ? raw.grantIdHash : undefined,
+    awardType: typeof raw.awardType === 'string' ? raw.awardType : undefined,
   };
 }
 
@@ -139,6 +159,10 @@ function validateSoldLot(raw: unknown): SoldLot | null {
     costBasisUsd: typeof raw.costBasisUsd === 'number' ? raw.costBasisUsd : undefined,
     eurUsdRate: typeof raw.eurUsdRate === 'number' ? raw.eurUsdRate : undefined,
     importCurrency: raw.importCurrency === 'USD' || raw.importCurrency === 'EUR' ? raw.importCurrency : undefined,
+    // v3 — Microsoft StockExport reconciliation (absent on v1/v2 backups).
+    reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
+    grantIdHash: typeof raw.grantIdHash === 'string' ? raw.grantIdHash : undefined,
+    awardType: typeof raw.awardType === 'string' ? raw.awardType : undefined,
   };
 }
 
@@ -195,5 +219,17 @@ export function importFromJsonString(text: string, defaults: AppSettings): Impor
     (s): s is SavedSimulation => isObj(s) && typeof (s as { id?: unknown }).id === 'string'
   );
 
-  return { settings, lots, soldLots, savedSimulations, warnings };
+  // v3+: StockExport grants. Re-validated with the same shape used by storage.ts.
+  // Absent on v1/v2 backups → empty array.
+  const rawGrants = Array.isArray(parsed.grants) ? parsed.grants : [];
+  const grants: GrantInfo[] = [];
+  for (const raw of rawGrants) {
+    const g = validateGrant(raw);
+    if (g) grants.push(g);
+  }
+  if (grants.length < rawGrants.length) {
+    warnings.push(`${rawGrants.length - grants.length} grant(s) ignoré(s) car invalide(s).`);
+  }
+
+  return { settings, lots, soldLots, savedSimulations, grants, warnings };
 }

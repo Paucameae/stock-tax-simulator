@@ -172,7 +172,7 @@ export function clearGrants(): void {
   }
 }
 
-function validateGrant(raw: unknown): GrantInfo | null {
+export function validateGrant(raw: unknown): GrantInfo | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
 

@@ -5,7 +5,7 @@ import {
   buildBackupFilename,
   type BackupInput,
 } from '../backup';
-import type { AppSettings, StockLot, SoldLot } from '../types';
+import type { AppSettings, GrantInfo, StockLot, SoldLot } from '../types';
 
 const DEFAULTS: AppSettings = {
   familyStatus: 'single',
@@ -67,7 +67,7 @@ describe('exportToJsonString', () => {
     const json = exportToJsonString(makeInput());
     const parsed = JSON.parse(json);
     expect(parsed.app).toBe('stock-tax-simulator');
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(typeof parsed.exportedAt).toBe('string');
     expect(parsed.lots).toHaveLength(1);
     expect(parsed.soldLots).toHaveLength(1);
@@ -223,5 +223,110 @@ describe('importFromJsonString', () => {
     expect(result.lots).toEqual([]);
     expect(result.soldLots).toEqual([]);
     expect(result.savedSimulations).toEqual([]);
+    expect(result.grants).toEqual([]);
+  });
+
+  it('preserves StockExport reconciliation fields on lots and sold lots (v3)', () => {
+    const reconciledLot: StockLot = {
+      ...LOT,
+      reconciled: true,
+      grantIdHash: 'hash-abc',
+      awardType: 'RSU',
+    };
+    const reconciledSold: SoldLot = {
+      ...SOLD,
+      reconciled: true,
+      grantIdHash: 'hash-xyz',
+      awardType: 'RSU',
+    };
+    const json = exportToJsonString(makeInput({ lots: [reconciledLot], soldLots: [reconciledSold] }));
+    const result = importFromJsonString(json, DEFAULTS);
+
+    expect(result.lots[0].reconciled).toBe(true);
+    expect(result.lots[0].grantIdHash).toBe('hash-abc');
+    expect(result.lots[0].awardType).toBe('RSU');
+    expect(result.soldLots[0].reconciled).toBe(true);
+    expect(result.soldLots[0].grantIdHash).toBe('hash-xyz');
+    expect(result.soldLots[0].awardType).toBe('RSU');
+  });
+
+  it('round-trips StockExport grants with their vest schedule (v3)', () => {
+    const grant: GrantInfo = {
+      grantIdHash: 'hash-grant-1',
+      awardType: 'RSU',
+      awardDate: new Date(2022, 7, 15),
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [
+        { date: new Date(2023, 7, 15), shares: 25 },
+        { date: new Date(2024, 7, 15), shares: 25 },
+      ],
+      totalAwarded: 100,
+      totalVested: 50,
+      totalUnvested: 50,
+    };
+    const json = exportToJsonString(makeInput({ grants: [grant] }));
+    const result = importFromJsonString(json, DEFAULTS);
+
+    expect(result.grants).toHaveLength(1);
+    expect(result.grants[0].grantIdHash).toBe('hash-grant-1');
+    expect(result.grants[0].awardDate).toBeInstanceOf(Date);
+    expect(result.grants[0].awardDate.getTime()).toBe(grant.awardDate.getTime());
+    expect(result.grants[0].vestSchedule).toHaveLength(2);
+    expect(result.grants[0].vestSchedule[0].date).toBeInstanceOf(Date);
+    expect(result.grants[0].vestSchedule[0].shares).toBe(25);
+    expect(result.grants[0].totalAwarded).toBe(100);
+  });
+
+  it('accepts v2 backups (no grants, no reconciliation fields)', () => {
+    const v2Lot = {
+      id: 'v2-lot',
+      broker: 'fidelity',
+      acquisitionDate: new Date(2023, 5, 15).toISOString(),
+      quantity: 10,
+      costBasisPerShare: 100,
+      totalCostBasis: 1000,
+      currentValue: 1500,
+      unrealizedGainLoss: 500,
+      origin: 'FM',
+      holdingPeriod: 'Long',
+      planType: 'qualified_macron',
+    };
+    const payload = JSON.stringify({
+      version: 2,
+      app: 'stock-tax-simulator',
+      exportedAt: new Date().toISOString(),
+      settings: DEFAULTS,
+      lots: [v2Lot],
+      soldLots: [],
+      savedSimulations: [],
+    });
+
+    const result = importFromJsonString(payload, DEFAULTS);
+    expect(result.lots).toHaveLength(1);
+    expect(result.lots[0].reconciled).toBeUndefined();
+    expect(result.lots[0].grantIdHash).toBeUndefined();
+    expect(result.grants).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('drops invalid grants and records a warning', () => {
+    const payload = JSON.stringify({
+      version: 3,
+      app: 'stock-tax-simulator',
+      exportedAt: new Date().toISOString(),
+      settings: DEFAULTS,
+      lots: [],
+      soldLots: [],
+      savedSimulations: [],
+      grants: [
+        { grantIdHash: 'incomplete' }, // missing required fields
+        null,
+      ],
+    });
+
+    const result = importFromJsonString(payload, DEFAULTS);
+    expect(result.grants).toEqual([]);
+    expect(result.warnings.some((w) => /grant/i.test(w))).toBe(true);
   });
 });
