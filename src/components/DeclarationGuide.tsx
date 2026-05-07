@@ -106,18 +106,31 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
             <div>
               <h4 className="font-semibold text-blue-800 mb-3 text-base">FORMULAIRE 2074 — Plus-values mobilières</h4>
               <p className="text-sm text-gray-600 mb-3">
-                À remplir avec le détail de chaque opération de cession :
+                À remplir avec le détail de chaque opération de cession (les numéros entre parenthèses
+                renvoient aux lignes du <strong>cadre 510</strong> du formulaire 2074) :
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-100">
-                      <th className="p-2 text-left">Date vente</th>
-                      <th className="p-2 text-right">Nb actions</th>
-                      <th className="p-2 text-left">Type</th>
-                      <th className="p-2 text-right">Prix vente</th>
-                      <th className="p-2 text-right">Prix revient</th>
-                      <th className="p-2 text-right">PV/MV</th>
+                      <th className="p-2 text-left">
+                        Date vente <span className="text-gray-500 font-normal">(512)</span>
+                      </th>
+                      <th className="p-2 text-right">
+                        Nb actions <span className="text-gray-500 font-normal">(515)</span>
+                      </th>
+                      <th className="p-2 text-left">
+                        Type <span className="text-gray-500 font-normal">(511)</span>
+                      </th>
+                      <th className="p-2 text-right">
+                        Prix vente <span className="text-gray-500 font-normal">(516)</span>
+                      </th>
+                      <th className="p-2 text-right">
+                        Prix revient <span className="text-gray-500 font-normal">(523)</span>
+                      </th>
+                      <th className="p-2 text-right">
+                        PV/MV <span className="text-gray-500 font-normal">(524)</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
