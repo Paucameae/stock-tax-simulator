@@ -1,4 +1,5 @@
 import type { TaxSimulationResult, DeclarationData, Form2074Line, SaleLotEntry } from './types';
+import { FORM_2042, FORM_2042C_AGA_MACRON, FORM_2074_CADRE_510 } from './tax-forms';
 
 export function generateDeclaration(
   result: TaxSimulationResult,
@@ -76,30 +77,31 @@ export function formatDeclarationText(data: DeclarationData): string {
   let text = `📋 INSTRUCTIONS DE DÉCLARATION — REVENUS ${data.fiscalYear}\n\n`;
 
   text += `FORMULAIRE 2042 (déclaration principale) :\n`;
-  if (data.case3VG > 0) text += `  Case 3VG : ${fmt(data.case3VG)} (plus-value nette de cession)\n`;
-  if (data.case3VH > 0) text += `  Case 3VH : ${fmt(data.case3VH)} (moins-value nette)\n`;
-  text += `  Case 2OP : ${data.option2OP ? '☑ Cocher' : '☐ Ne pas cocher'} (option barème progressif)\n`;
+  if (data.case3VG > 0) text += `  Case ${FORM_2042.case3VG.code} : ${fmt(data.case3VG)} (${FORM_2042.case3VG.label.toLowerCase()})\n`;
+  if (data.case3VH > 0) text += `  Case ${FORM_2042.case3VH.code} : ${fmt(data.case3VH)} (${FORM_2042.case3VH.label.toLowerCase()})\n`;
+  text += `  Case ${FORM_2042.option2OP.code} : ${data.option2OP ? '☑ Cocher' : '☐ Ne pas cocher'} (${FORM_2042.option2OP.label.toLowerCase()})\n`;
   if (data.case3SG > 0)
-    text += `  Case 3SG : ${fmt(data.case3SG)} (abattement de droit commun)\n`;
+    text += `  Case ${FORM_2042.case3SG.code} : ${fmt(data.case3SG)} (${FORM_2042.case3SG.label.toLowerCase()})\n`;
   text += '\n';
 
   if (data.case1TZ > 0 || data.case1UZ > 0 || data.case1TT > 0) {
     text += `FORMULAIRE 2042-C (déclaration complémentaire) :\n`;
     if (data.case1TZ > 0)
-      text += `  Case 1TZ : ${fmt(data.case1TZ)} (gain d'acquisition AGA, fraction ≤ 300k€, après abattement 50%)\n`;
+      text += `  Case ${FORM_2042C_AGA_MACRON.case1TZ.code} : ${fmt(data.case1TZ)} (${FORM_2042C_AGA_MACRON.case1TZ.label})\n`;
     if (data.case1UZ > 0)
-      text += `  Case 1UZ : ${fmt(data.case1UZ)} (abattement 50% appliqué)\n`;
+      text += `  Case ${FORM_2042C_AGA_MACRON.case1UZ.code} : ${fmt(data.case1UZ)} (${FORM_2042C_AGA_MACRON.case1UZ.label})\n`;
     if (data.case1TT > 0)
-      text += `  Case 1TT : ${fmt(data.case1TT)} (gain d'acquisition AGA, fraction > 300k€)\n`;
+      text += `  Case ${FORM_2042C_AGA_MACRON.case1TT.code} : ${fmt(data.case1TT)} (${FORM_2042C_AGA_MACRON.case1TT.label})\n`;
     text += '\n';
   }
 
   text += `FORMULAIRE 2074 (plus-values mobilières) :\n`;
   text += `  À remplir avec le détail de chaque opération de cession (codes lignes du cadre 510) :\n`;
+  const F = FORM_2074_CADRE_510;
   for (const line of data.form2074Lines) {
     const totalSale = line.quantity * line.salePrice;
     const totalCost = line.quantity * line.costBasis;
-    text += `  ${line.date} (512) | ${line.origin} (511) | ${line.quantity} actions (515) | PU vente ${fmt(line.salePrice)} (514) | Montant vente ${fmt(totalSale)} (516) | PU acquisition ${fmt(line.costBasis)} (520) | Prix revient ${fmt(totalCost)} (523) | ${line.gainLoss >= 0 ? 'PV' : 'MV'} ${fmt(Math.abs(line.gainLoss))} (524)\n`;
+    text += `  ${line.date} (${F.saleDate.line}) | ${line.origin} (${F.designation.line}) | ${line.quantity} actions (${F.quantity.line}) | PU vente ${fmt(line.salePrice)} (${F.unitSalePrice.line}) | Montant vente ${fmt(totalSale)} (${F.totalSale.line}) | PU acquisition ${fmt(line.costBasis)} (${F.unitAcqPrice.line}) | Prix revient ${fmt(totalCost)} (${F.costBasis.line}) | ${line.gainLoss >= 0 ? 'PV' : 'MV'} ${fmt(Math.abs(line.gainLoss))} (${F.result.line})\n`;
   }
   text += '\n';
 

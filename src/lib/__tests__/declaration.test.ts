@@ -193,3 +193,42 @@ describe('formatDeclarationText', () => {
     expect(text).toContain('reportable pendant 10 ans');
   });
 });
+
+describe('declaration anti-regression guards', () => {
+  const result = makeResult();
+  const lot = makeLot();
+  const entry: SaleLotEntry = { lot, quantitySold: 50, salePricePerShare: 400 };
+
+  it('uses case 1UZ for AGA Macron 50% abatement (NOT 1WZ — that is the dirigeant retraite case)', () => {
+    const decl = generateDeclaration(result, [entry], 2024);
+    const text = formatDeclarationText(decl);
+    expect(text).toContain('Case 1UZ');
+    expect(text).not.toMatch(/\b1WZ\b/);
+  });
+
+  it('exposes only the expected AGA Macron cases (1TZ, 1UZ, 1TT)', () => {
+    const decl = generateDeclaration(result, [entry], 2024);
+    expect(decl).toHaveProperty('case1TZ');
+    expect(decl).toHaveProperty('case1UZ');
+    expect(decl).toHaveProperty('case1TT');
+    expect(decl).not.toHaveProperty('case1WZ');
+  });
+
+  it('exports 2074 lines with the correct cadre 510 line numbers (514, 515, 516, 520, 523, 524)', () => {
+    const decl = generateDeclaration(result, [entry], 2024);
+    const text = formatDeclarationText(decl);
+    for (const line of ['(511)', '(512)', '(514)', '(515)', '(516)', '(520)', '(523)', '(524)']) {
+      expect(text, `expected line ${line} to appear in 2074 export`).toContain(line);
+    }
+  });
+
+  it('keeps 2074 arithmetic consistent: 516 = 514 × 515 and 524 = 516 − 523', () => {
+    // Use a non-trivial case (PU acquisition ≠ PU vente)
+    const e: SaleLotEntry = { lot: makeLot({ costBasisPerShare: 250 }), quantitySold: 50, salePricePerShare: 400 };
+    const decl = generateDeclaration(result, [e], 2024);
+    const ln = decl.form2074Lines[0];
+    const totalSale = ln.quantity * ln.salePrice;     // line 516
+    const totalCost = ln.quantity * ln.costBasis;     // line 523
+    expect(ln.gainLoss).toBeCloseTo(totalSale - totalCost, 6); // line 524
+  });
+});

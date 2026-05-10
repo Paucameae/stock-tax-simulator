@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { FileText, Copy, Check } from 'lucide-react';
 import type { TaxSimulationResult, SaleLotEntry } from '../lib/types';
 import { generateDeclaration, formatDeclarationText } from '../lib/declaration';
+import { FORM_2042, FORM_2042C_AGA_MACRON, FORM_2074_CADRE_510 } from '../lib/tax-forms';
 import { formatEUR } from '../lib/utils';
 
 interface DeclarationGuideProps {
@@ -56,14 +57,14 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
               <h4 className="font-semibold text-blue-800 mb-3 text-base">FORMULAIRE 2042 — Déclaration principale</h4>
               <div className="space-y-2">
                 {declaration.case3VG > 0 && (
-                  <CaseRow code="3VG" label="Plus-value nette de cession" value={declaration.case3VG} />
+                  <CaseRow code={FORM_2042.case3VG.code} label={FORM_2042.case3VG.label} value={declaration.case3VG} />
                 )}
                 {declaration.case3VH > 0 && (
-                  <CaseRow code="3VH" label="Moins-value nette" value={declaration.case3VH} variant="warning" />
+                  <CaseRow code={FORM_2042.case3VH.code} label={FORM_2042.case3VH.label} value={declaration.case3VH} variant="warning" />
                 )}
                 <div className="flex items-center gap-3 p-2 rounded bg-gray-50">
-                  <span className="font-mono font-bold text-sm bg-gray-200 px-2 py-1 rounded">2OP</span>
-                  <span className="flex-1 text-sm">Option barème progressif</span>
+                  <span className="font-mono font-bold text-sm bg-gray-200 px-2 py-1 rounded">{FORM_2042.option2OP.code}</span>
+                  <span className="flex-1 text-sm">{FORM_2042.option2OP.label}</span>
                   <span className="font-medium text-sm">
                     {declaration.option2OP ? '☑ Cocher' : '☐ Ne pas cocher'}
                   </span>
@@ -78,23 +79,23 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 <div className="space-y-2">
                   {declaration.case1TZ > 0 && (
                     <CaseRow
-                      code="1TZ"
-                      label="Gain d'acquisition AGA (≤ 300k€, après abattement 50%)"
+                      code={FORM_2042C_AGA_MACRON.case1TZ.code}
+                      label={FORM_2042C_AGA_MACRON.case1TZ.label}
                       value={declaration.case1TZ}
                     />
                   )}
                   {declaration.case1UZ > 0 && (
                     <CaseRow
-                      code="1UZ"
-                      label="Abattement 50% appliqué"
+                      code={FORM_2042C_AGA_MACRON.case1UZ.code}
+                      label={FORM_2042C_AGA_MACRON.case1UZ.label}
                       value={declaration.case1UZ}
                       variant="success"
                     />
                   )}
                   {declaration.case1TT > 0 && (
                     <CaseRow
-                      code="1TT"
-                      label="Gain d'acquisition AGA (> 300k€)"
+                      code={FORM_2042C_AGA_MACRON.case1TT.code}
+                      label={FORM_2042C_AGA_MACRON.case1TT.label}
                       value={declaration.case1TT}
                     />
                   )}
@@ -114,28 +115,28 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="p-2 text-left">
-                        Date vente <span className="text-gray-500 font-normal">(512)</span>
+                        Date vente <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.saleDate.line})</span>
                       </th>
                       <th className="p-2 text-left">
-                        Type <span className="text-gray-500 font-normal">(511)</span>
+                        Type <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.designation.line})</span>
                       </th>
                       <th className="p-2 text-right">
-                        Nb actions <span className="text-gray-500 font-normal">(515)</span>
+                        Nb actions <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.quantity.line})</span>
                       </th>
                       <th className="p-2 text-right">
-                        PU vente <span className="text-gray-500 font-normal">(514)</span>
+                        PU vente <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.unitSalePrice.line})</span>
                       </th>
                       <th className="p-2 text-right">
-                        Montant vente <span className="text-gray-500 font-normal">(516)</span>
+                        Montant vente <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.totalSale.line})</span>
                       </th>
                       <th className="p-2 text-right">
-                        PU acquisition <span className="text-gray-500 font-normal">(520)</span>
+                        PU acquisition <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.unitAcqPrice.line})</span>
                       </th>
                       <th className="p-2 text-right">
-                        Prix revient <span className="text-gray-500 font-normal">(523)</span>
+                        Prix revient <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.costBasis.line})</span>
                       </th>
                       <th className="p-2 text-right">
-                        PV/MV <span className="text-gray-500 font-normal">(524)</span>
+                        PV/MV <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.result.line})</span>
                       </th>
                     </tr>
                   </thead>
