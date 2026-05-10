@@ -259,4 +259,31 @@ describe('declaration anti-regression guards', () => {
     const text = formatDeclarationText(decl);
     expect(text).not.toMatch(/2074-ABT/);
   });
+
+  it('warns about MV imputable on AGA acquisition gain when both coexist (KPMG slide 48)', () => {
+    const mixed = makeResult({
+      acquisitionGainTax: {
+        ...result.acquisitionGainTax,
+        below300k: 10_000,
+        abatement50: 5_000,
+      },
+      capitalGainTax: { ...result.capitalGainTax, netGain: 0, netLoss: 3_000 },
+    });
+    const decl = generateDeclaration(mixed, [entry], 2025);
+    expect(decl.case1TZ).toBeGreaterThan(0);
+    expect(decl.case3VH).toBeGreaterThan(0);
+    const text = formatDeclarationText(decl);
+    expect(text).toMatch(/OPTIMISATION POSSIBLE/);
+    expect(text).toMatch(/imput[ée]/i);
+  });
+
+  it('does NOT show the AGA imputation warning when there is no AGA acquisition gain', () => {
+    const lossOnly = makeResult({
+      acquisitionGainTax: { ...result.acquisitionGainTax, below300k: 0, abatement50: 0 },
+      capitalGainTax: { ...result.capitalGainTax, netGain: 0, netLoss: 1_000 },
+    });
+    const decl = generateDeclaration(lossOnly, [entry], 2025);
+    const text = formatDeclarationText(decl);
+    expect(text).not.toMatch(/OPTIMISATION POSSIBLE/);
+  });
 });

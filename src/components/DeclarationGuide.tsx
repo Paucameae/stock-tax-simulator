@@ -217,6 +217,27 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 )}
               </ul>
             </div>
+
+            {/* Optimisation possible : MV qualifiée imputable sur gain d'acquisition (KPMG slide 48) */}
+            {declaration.case3VH > 0 && (declaration.case1TZ > 0 || declaration.case1TT > 0) && (
+              <div className="p-4 bg-orange-50 border border-orange-300 rounded-lg">
+                <h4 className="font-semibold text-orange-900 mb-2">⚠️ Optimisation possible (AGA qualifiées)</h4>
+                <p className="text-sm text-orange-800">
+                  Vous avez à la fois un <strong>gain d'acquisition AGA</strong> ({formatEUR(declaration.case1TZ + declaration.case1TT)})
+                  et une <strong>moins-value de cession</strong> ({formatEUR(declaration.case3VH)}).
+                </p>
+                <p className="text-sm text-orange-800 mt-2">
+                  Pour les Stock Awards qualifiés, la moins-value de cession peut être
+                  <strong> imputée sur le gain d'acquisition afférent aux mêmes actions</strong>
+                  (au lieu d'être reportée 10 ans). Cela réduit immédiatement le 1TZ taxable
+                  au barème et évite un report potentiellement inutilisable.
+                </p>
+                <p className="text-xs text-orange-700 mt-2">
+                  Cette optimisation n'est pas calculée automatiquement par l'outil. À évaluer manuellement
+                  selon vos PV à venir. Référence : KPMG « Obligations fiscales Microsoft » (mai 2026, slides 24, 47-48).
+                </p>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
