@@ -95,9 +95,11 @@ export function formatDeclarationText(data: DeclarationData): string {
   }
 
   text += `FORMULAIRE 2074 (plus-values mobilières) :\n`;
-  text += `  À remplir avec le détail de chaque opération de cession :\n`;
+  text += `  À remplir avec le détail de chaque opération de cession (codes lignes du cadre 510) :\n`;
   for (const line of data.form2074Lines) {
-    text += `  ${line.date} | ${line.quantity} actions | ${line.origin} | Vente ${fmt(line.salePrice)}/action | Revient ${fmt(line.costBasis)}/action | ${line.gainLoss >= 0 ? 'PV' : 'MV'} ${fmt(Math.abs(line.gainLoss))}\n`;
+    const totalSale = line.quantity * line.salePrice;
+    const totalCost = line.quantity * line.costBasis;
+    text += `  ${line.date} (512) | ${line.origin} (511) | ${line.quantity} actions (515) | PU vente ${fmt(line.salePrice)} (514) | Montant vente ${fmt(totalSale)} (516) | PU acquisition ${fmt(line.costBasis)} (520) | Prix revient ${fmt(totalCost)} (523) | ${line.gainLoss >= 0 ? 'PV' : 'MV'} ${fmt(Math.abs(line.gainLoss))} (524)\n`;
   }
   text += '\n';
 

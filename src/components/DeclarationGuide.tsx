@@ -116,14 +116,20 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                       <th className="p-2 text-left">
                         Date vente <span className="text-gray-500 font-normal">(512)</span>
                       </th>
-                      <th className="p-2 text-right">
-                        Nb actions <span className="text-gray-500 font-normal">(515)</span>
-                      </th>
                       <th className="p-2 text-left">
                         Type <span className="text-gray-500 font-normal">(511)</span>
                       </th>
                       <th className="p-2 text-right">
-                        Prix vente <span className="text-gray-500 font-normal">(516)</span>
+                        Nb actions <span className="text-gray-500 font-normal">(515)</span>
+                      </th>
+                      <th className="p-2 text-right">
+                        PU vente <span className="text-gray-500 font-normal">(514)</span>
+                      </th>
+                      <th className="p-2 text-right">
+                        Montant vente <span className="text-gray-500 font-normal">(516)</span>
+                      </th>
+                      <th className="p-2 text-right">
+                        PU acquisition <span className="text-gray-500 font-normal">(520)</span>
                       </th>
                       <th className="p-2 text-right">
                         Prix revient <span className="text-gray-500 font-normal">(523)</span>
@@ -134,18 +140,24 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                     </tr>
                   </thead>
                   <tbody>
-                    {declaration.form2074Lines.map((line, i) => (
-                      <tr key={i} className="border-b">
-                        <td className="p-2">{line.date}</td>
-                        <td className="p-2 text-right">{line.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
-                        <td className="p-2">{line.origin}</td>
-                        <td className="p-2 text-right">{formatEUR(line.salePrice)}</td>
-                        <td className="p-2 text-right">{formatEUR(line.costBasis)}</td>
-                        <td className={`p-2 text-right font-medium ${line.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {line.gainLoss >= 0 ? '+' : ''}{formatEUR(line.gainLoss)}
-                        </td>
-                      </tr>
-                    ))}
+                    {declaration.form2074Lines.map((line, i) => {
+                      const totalSale = line.quantity * line.salePrice;
+                      const totalCost = line.quantity * line.costBasis;
+                      return (
+                        <tr key={i} className="border-b">
+                          <td className="p-2">{line.date}</td>
+                          <td className="p-2">{line.origin}</td>
+                          <td className="p-2 text-right">{line.quantity.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
+                          <td className="p-2 text-right">{formatEUR(line.salePrice)}</td>
+                          <td className="p-2 text-right">{formatEUR(totalSale)}</td>
+                          <td className="p-2 text-right">{formatEUR(line.costBasis)}</td>
+                          <td className="p-2 text-right">{formatEUR(totalCost)}</td>
+                          <td className={`p-2 text-right font-medium ${line.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {line.gainLoss >= 0 ? '+' : ''}{formatEUR(line.gainLoss)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
