@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateDeclaration, formatDeclarationText } from '../declaration';
+import { generateDeclaration, formatDeclarationText, groupForm2074Lines } from '../declaration';
 import type { TaxSimulationResult, SaleLotEntry, StockLot } from '../types';
 
 function makeLot(overrides: Partial<StockLot> = {}): StockLot {
@@ -214,21 +214,24 @@ describe('declaration anti-regression guards', () => {
     expect(decl).not.toHaveProperty('case1WZ');
   });
 
-  it('exports 2074 lines with the correct cadre 510 line numbers (514, 515, 516, 520, 523, 524)', () => {
+  it('exports 2074 lines with the correct cadre 510 line numbers (514, 515, 516, 520, 521, 524)', () => {
     const decl = generateDeclaration(result, [entry], 2024);
     const text = formatDeclarationText(decl);
-    for (const line of ['(511)', '(512)', '(514)', '(515)', '(516)', '(520)', '(523)', '(524)']) {
+    // 521 = prix d'acquisition global (saisi par l'utilisateur sur impots.gouv.fr).
+    // 523 = prix de revient = 521 + 522, calculé automatiquement (lecture seule).
+    // On exporte donc 521 et non 523.
+    for (const line of ['(511)', '(512)', '(514)', '(515)', '(516)', '(520)', '(521)', '(524)']) {
       expect(text, `expected line ${line} to appear in 2074 export`).toContain(line);
     }
   });
 
-  it('keeps 2074 arithmetic consistent: 516 = 514 × 515 and 524 = 516 − 523', () => {
+  it('keeps 2074 arithmetic consistent: 516 = 514 × 515 and 524 = 516 − 521 (avec 522 = 0)', () => {
     // Use a non-trivial case (PU acquisition ≠ PU vente)
     const e: SaleLotEntry = { lot: makeLot({ costBasisPerShare: 250 }), quantitySold: 50, salePricePerShare: 400 };
     const decl = generateDeclaration(result, [e], 2024);
     const ln = decl.form2074Lines[0];
     const totalSale = ln.quantity * ln.salePrice;     // line 516
-    const totalCost = ln.quantity * ln.costBasis;     // line 523
+    const totalCost = ln.quantity * ln.costBasis;     // line 521 (= 523 quand 522 = 0)
     expect(ln.gainLoss).toBeCloseTo(totalSale - totalCost, 6); // line 524
   });
 
@@ -285,5 +288,62 @@ describe('declaration anti-regression guards', () => {
     const decl = generateDeclaration(lossOnly, [entry], 2025);
     const text = formatDeclarationText(decl);
     expect(text).not.toMatch(/OPTIMISATION POSSIBLE/);
+  });
+});
+
+describe('groupForm2074Lines', () => {
+  it('groups lines with identical (date, salePrice, costBasis, origin) and sums quantities', () => {
+    const lines = [
+      { date: '15/03/2024', quantity: 10, origin: 'Stock Award', salePrice: 400, costBasis: 250, gainLoss: 1500 },
+      { date: '15/03/2024', quantity: 5,  origin: 'Stock Award', salePrice: 400, costBasis: 250, gainLoss: 750 },
+      { date: '15/03/2024', quantity: 8,  origin: 'Stock Award', salePrice: 400, costBasis: 250, gainLoss: 1200 },
+    ];
+    const grouped = groupForm2074Lines(lines);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0].quantity).toBe(23);
+    expect(grouped[0].gainLoss).toBeCloseTo(23 * (400 - 250), 6);
+  });
+
+  it('keeps lines separate when any key differs', () => {
+    const lines = [
+      { date: '15/03/2024', quantity: 10, origin: 'Stock Award', salePrice: 400, costBasis: 250, gainLoss: 1500 },
+      { date: '16/03/2024', quantity: 10, origin: 'Stock Award', salePrice: 400, costBasis: 250, gainLoss: 1500 }, // date diff
+      { date: '15/03/2024', quantity: 10, origin: 'Stock Award', salePrice: 401, costBasis: 250, gainLoss: 1510 }, // PU vente diff
+      { date: '15/03/2024', quantity: 10, origin: 'Stock Award', salePrice: 400, costBasis: 251, gainLoss: 1490 }, // PU acq diff
+      { date: '15/03/2024', quantity: 10, origin: 'ESPP',        salePrice: 400, costBasis: 250, gainLoss: 1500 }, // origin diff
+    ];
+    expect(groupForm2074Lines(lines)).toHaveLength(5);
+  });
+
+  it('preserves the total quantity and total gainLoss', () => {
+    const lines = [
+      { date: '01/06/2024', quantity: 1,  origin: 'Stock Award', salePrice: 450, costBasis: 300, gainLoss: 150 },
+      { date: '01/06/2024', quantity: 7,  origin: 'Stock Award', salePrice: 450, costBasis: 300, gainLoss: 1050 },
+      { date: '02/06/2024', quantity: 4,  origin: 'ESPP',        salePrice: 450, costBasis: 280, gainLoss: 680 },
+      { date: '02/06/2024', quantity: 6,  origin: 'ESPP',        salePrice: 450, costBasis: 280, gainLoss: 1020 },
+    ];
+    const totalQty = lines.reduce((s, l) => s + l.quantity, 0);
+    const totalGain = lines.reduce((s, l) => s + l.gainLoss, 0);
+    const grouped = groupForm2074Lines(lines);
+    expect(grouped).toHaveLength(2);
+    expect(grouped.reduce((s, l) => s + l.quantity, 0)).toBe(totalQty);
+    expect(grouped.reduce((s, l) => s + l.gainLoss, 0)).toBeCloseTo(totalGain, 6);
+  });
+
+  it('ignores floating-point noise on prices (rounds to cents)', () => {
+    const lines = [
+      { date: '15/03/2024', quantity: 10, origin: 'Stock Award', salePrice: 400.00000001, costBasis: 250, gainLoss: 1500 },
+      { date: '15/03/2024', quantity: 5,  origin: 'Stock Award', salePrice: 400,          costBasis: 250, gainLoss: 750 },
+    ];
+    expect(groupForm2074Lines(lines)).toHaveLength(1);
+  });
+
+  it('returns an empty array for empty input and a copy (no aliasing) for a single line', () => {
+    expect(groupForm2074Lines([])).toEqual([]);
+    const single = { date: '15/03/2024', quantity: 10, origin: 'Stock Award', salePrice: 400, costBasis: 250, gainLoss: 1500 };
+    const grouped = groupForm2074Lines([single]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).not.toBe(single); // ne pas muter l'entrée
+    expect(grouped[0]).toEqual(single);
   });
 });

@@ -3,9 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { FileText, Copy, Check } from 'lucide-react';
 import type { TaxSimulationResult, SaleLotEntry } from '../lib/types';
-import { generateDeclaration, formatDeclarationText } from '../lib/declaration';
+import { generateDeclaration, formatDeclarationText, groupForm2074Lines } from '../lib/declaration';
 import { FORM_2042, FORM_2042C_AGA_MACRON, FORM_2074_CADRE_510 } from '../lib/tax-forms';
 import { formatEUR } from '../lib/utils';
+
+/** impots.gouv.fr limite la saisie manuelle du cadre 510 à 99 lignes. */
+const IMPOTS_GOUV_MAX_LINES = 99;
 
 interface DeclarationGuideProps {
   result: TaxSimulationResult | null;
@@ -15,6 +18,7 @@ interface DeclarationGuideProps {
 
 export const DeclarationGuide = React.memo(function DeclarationGuide({ result, lots, fiscalYear }: DeclarationGuideProps) {
   const [copied, setCopied] = React.useState(false);
+  const [groupLines, setGroupLines] = React.useState(false);
 
   if (!result) {
     return (
@@ -26,7 +30,16 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
     );
   }
 
-  const declaration = generateDeclaration(result, lots, fiscalYear);
+  const baseDeclaration = generateDeclaration(result, lots, fiscalYear);
+  const displayedLines = groupLines
+    ? groupForm2074Lines(baseDeclaration.form2074Lines)
+    : baseDeclaration.form2074Lines;
+  const declaration = { ...baseDeclaration, form2074Lines: displayedLines };
+  const rawLineCount = baseDeclaration.form2074Lines.length;
+  const displayedLineCount = displayedLines.length;
+  // On bascule automatiquement la suggestion de regroupement si le nombre
+  // brut dépasse la limite impots.gouv.fr (99 lignes).
+  const exceedsImpotsLimit = rawLineCount > IMPOTS_GOUV_MAX_LINES;
   const text = formatDeclarationText(declaration);
 
   const handleCopy = async () => {
@@ -106,10 +119,49 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
             {/* Formulaire 2074 */}
             <div>
               <h4 className="font-semibold text-blue-800 mb-3 text-base">FORMULAIRE 2074 — Plus-values mobilières</h4>
-              <p className="text-sm text-gray-600 mb-3">
+              <p className="text-sm text-gray-600 mb-2">
                 À remplir avec le détail de chaque opération de cession (les numéros entre parenthèses
-                renvoient aux lignes du <strong>cadre 510</strong> du formulaire 2074) :
+                renvoient aux lignes du <strong>cadre 510</strong> du formulaire 2074).
               </p>
+              <p className="text-xs text-gray-500 mb-3">
+                <strong>NB :</strong> sur impots.gouv.fr, la ligne <strong>521</strong> (prix d'acquisition global)
+                est celle que vous saisissez. La ligne <strong>523</strong> (prix de revient) = 521 + 522 est calculée
+                automatiquement (lecture seule). Pour les salariés MSFT, <strong>522 = 0</strong> (pas de frais d'acquisition),
+                donc 521 = 523.
+              </p>
+              <div className="flex flex-wrap items-center gap-3 mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={groupLines}
+                    onChange={(e) => setGroupLines(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  <span className="font-medium">Regrouper les lignes identiques</span>
+                </label>
+                <span className="text-xs text-gray-600">
+                  (même date de vente, même PU vente, même PU acquisition)
+                </span>
+                <span className="ml-auto text-xs">
+                  {groupLines ? (
+                    <span className="text-blue-700 font-medium">
+                      {displayedLineCount} ligne{displayedLineCount > 1 ? 's' : ''} regroupée{displayedLineCount > 1 ? 's' : ''} depuis {rawLineCount}
+                    </span>
+                  ) : (
+                    <span className={exceedsImpotsLimit ? 'text-red-600 font-medium' : 'text-gray-600'}>
+                      {rawLineCount} ligne{rawLineCount > 1 ? 's' : ''}
+                      {exceedsImpotsLimit && ` (limite impots.gouv.fr : ${IMPOTS_GOUV_MAX_LINES})`}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {exceedsImpotsLimit && !groupLines && (
+                <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mb-3">
+                  ⚠️ Vous dépassez la limite de <strong>{IMPOTS_GOUV_MAX_LINES} lignes</strong> de saisie manuelle
+                  sur impots.gouv.fr. Activez le regroupement ci-dessus, ou bien joignez un état détaillé
+                  en annexe au formulaire 2074.
+                </p>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -133,7 +185,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                         PU acquisition <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.unitAcqPrice.line})</span>
                       </th>
                       <th className="p-2 text-right">
-                        Prix revient <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.costBasis.line})</span>
+                        Prix acquisition global <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.totalAcqPrice.line})</span>
                       </th>
                       <th className="p-2 text-right">
                         PV/MV <span className="text-gray-500 font-normal">({FORM_2074_CADRE_510.result.line})</span>

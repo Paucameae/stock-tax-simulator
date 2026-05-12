@@ -1,6 +1,44 @@
 import type { TaxSimulationResult, DeclarationData, Form2074Line, SaleLotEntry } from './types';
 import { FORM_2042, FORM_2042C_AGA_MACRON, FORM_2074_CADRE_510 } from './tax-forms';
 
+/**
+ * Regroupe les lignes 2074 partageant les mêmes (date de vente, PU vente,
+ * PU acquisition, origine) en sommant les quantités. C'est fiscalement neutre
+ * dès lors que les PU sont identiques (516, 521, 523 et 524 se recomposent
+ * proportionnellement à la quantité).
+ *
+ * Cas d'usage : impots.gouv.fr limite la saisie manuelle à **99 lignes** dans
+ * le cadre 510 du formulaire 2074 (« Plus-values ou moins-values déterminées
+ * par vous-même »). Pour les contribuables ayant beaucoup de petits lots
+ * (multi-vesting MSFT par ex.), un regroupement par PU permet de passer
+ * sous le seuil sans changer la PV/MV totale.
+ */
+export function groupForm2074Lines(lines: Form2074Line[]): Form2074Line[] {
+  const groups = new Map<string, Form2074Line>();
+  for (const line of lines) {
+    // Clé : date + PU vente + PU acquisition + origine. Les quantités
+    // s'additionnent ; tout le reste (PV/MV) est dérivé de la quantité.
+    // On arrondit les PU au centime pour éviter qu'un float résiduel
+    // (ex. 100.00000000001) sépare deux lignes identiques.
+    const key = [
+      line.date,
+      line.origin,
+      Math.round(line.salePrice * 100),
+      Math.round(line.costBasis * 100),
+    ].join('|');
+    const existing = groups.get(key);
+    if (existing) {
+      existing.quantity += line.quantity;
+      // gainLoss = quantity * (salePrice - costBasis) ; on le recalcule
+      // pour éviter une dérive d'arrondi sur l'agrégat.
+      existing.gainLoss = existing.quantity * (existing.salePrice - existing.costBasis);
+    } else {
+      groups.set(key, { ...line });
+    }
+  }
+  return [...groups.values()];
+}
+
 export function generateDeclaration(
   result: TaxSimulationResult,
   lots: SaleLotEntry[],
@@ -97,11 +135,13 @@ export function formatDeclarationText(data: DeclarationData): string {
 
   text += `FORMULAIRE 2074 (plus-values mobilières) :\n`;
   text += `  À remplir avec le détail de chaque opération de cession (codes lignes du cadre 510) :\n`;
+  text += `  NB : 521 (prix d'acquisition global) = champ saisi ; 523 (prix de revient) = 521 + 522, calculé\n`;
+  text += `       automatiquement sur impots.gouv.fr (lecture seule). 522 (frais d'acquisition) = 0 pour MSFT.\n`;
   const F = FORM_2074_CADRE_510;
   for (const line of data.form2074Lines) {
     const totalSale = line.quantity * line.salePrice;
     const totalCost = line.quantity * line.costBasis;
-    text += `  ${line.date} (${F.saleDate.line}) | ${line.origin} (${F.designation.line}) | ${line.quantity} actions (${F.quantity.line}) | PU vente ${fmt(line.salePrice)} (${F.unitSalePrice.line}) | Montant vente ${fmt(totalSale)} (${F.totalSale.line}) | PU acquisition ${fmt(line.costBasis)} (${F.unitAcqPrice.line}) | Prix revient ${fmt(totalCost)} (${F.costBasis.line}) | ${line.gainLoss >= 0 ? 'PV' : 'MV'} ${fmt(Math.abs(line.gainLoss))} (${F.result.line})\n`;
+    text += `  ${line.date} (${F.saleDate.line}) | ${line.origin} (${F.designation.line}) | ${line.quantity} actions (${F.quantity.line}) | PU vente ${fmt(line.salePrice)} (${F.unitSalePrice.line}) | Montant vente ${fmt(totalSale)} (${F.totalSale.line}) | PU acquisition ${fmt(line.costBasis)} (${F.unitAcqPrice.line}) | Prix acquisition global ${fmt(totalCost)} (${F.totalAcqPrice.line}) | ${line.gainLoss >= 0 ? 'PV' : 'MV'} ${fmt(Math.abs(line.gainLoss))} (${F.result.line})\n`;
   }
   if (data.case3SG > 0) {
     text += `\n  ⚠️ Abattement durée de détention de ${fmt(data.case3SG)} appliqué (titres acquis avant le 01/01/2018, option barème).\n`;
