@@ -8,7 +8,7 @@ import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight, Arr
 import { Treemap, ResponsiveContainer } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
-import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel, qualificationReasonLabel, isDripQualifiedInconsistent } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
 import { UnvestedView } from './UnvestedView';
 import { DividendsView } from './DividendsView';
@@ -656,10 +656,11 @@ function PortfolioTableAndCards({
                         </span>
                       </td>
                       <td className="px-2.5 py-2 text-center">
-                        <div className="inline-flex items-center gap-1">
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <div className="inline-flex items-center gap-1">
                           <Badge
                             variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}
-                            title={qualificationReasonLabel(lot.qualificationReason)}
+                            title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
                           >
                             {originLabel(lot.origin)}
                           </Badge>
@@ -680,6 +681,15 @@ function PortfolioTableAndCards({
                               className="text-amber-600"
                             >
                               ⚠
+                            </span>
+                          )}
+                          </div>
+                          {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                            <span
+                              className="text-[10px] leading-tight text-gray-500 italic max-w-[160px] truncate"
+                              title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                            >
+                              {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
                             </span>
                           )}
                         </div>
@@ -777,7 +787,7 @@ function MobileLotCard({
               <div className="flex items-center gap-1">
                 <Badge
                   variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}
-                  title={qualificationReasonLabel(lot.qualificationReason)}
+                  title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
                 >
                   {originLabel(lot.origin)}
                 </Badge>
@@ -797,6 +807,14 @@ function MobileLotCard({
                   </span>
                 )}
               </div>
+              {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                <span
+                  className="text-[10px] leading-tight text-gray-500 italic text-right max-w-[180px] truncate"
+                  title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                >
+                  {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
+                </span>
+              )}
               {hasMultipleBrokers && (
                 <BrokerLogo broker={lot.broker} className="h-5" />
               )}

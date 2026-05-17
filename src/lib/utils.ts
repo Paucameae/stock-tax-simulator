@@ -30,27 +30,69 @@ export function isLikelyReinvestedDividend(origin: StockOrigin, quantity: number
  * Human-readable explanation of why a lot carries its current
  * (origin, planType). Used as the title of the origin badge so users can
  * understand a classification at a glance.
+ *
+ * When `awardType` is supplied AND the reason comes from a StockExport
+ * reconciliation, the grant's award type is appended so users know which
+ * Microsoft plan was matched.
  */
-export function qualificationReasonLabel(reason: QualificationReason | undefined): string {
+export function qualificationReasonLabel(
+  reason: QualificationReason | undefined,
+  awardType?: string,
+): string {
+  const base = (() => {
+    switch (reason) {
+      case 'broker_default':
+        return 'Valeur par défaut du courtier (aucune information de plan dans le relevé).';
+      case 'broker_plan_name':
+        return 'Origine déduite du libellé du plan transmis par le courtier.';
+      case 'reconciled_unique':
+        return 'Rapproché avec un grant Microsoft StockExport identifié sans ambiguïté (un seul plan vestait à cette date).';
+      case 'reconciled_by_quantity':
+        return 'Rapproché avec un grant Microsoft StockExport ; ambiguïté de date levée par le nombre net d\u2019actions livrées.';
+      case 'reconciled_by_agreement':
+        return 'Rapproché avec plusieurs grants Microsoft StockExport candidats partageant la même classification fiscale.';
+      case 'nq_via_withholding':
+        return 'Reclassé en plan non qualifié grâce à la retenue d\u2019actions pour impôt observée sur l\u2019export Microsoft (signature d\u2019un Stock Award).';
+      case 'manual':
+        return 'Choix manuel via le menu déroulant sur cette ligne.';
+      case 'bulk_qualify':
+        return 'Choix appliqué via le panneau de qualification en lot.';
+      case undefined:
+        return 'Origine et régime non documentés (importation antérieure à la traçabilité, ou source inconnue).';
+    }
+  })();
+  if (awardType && reason && reason.startsWith('reconciled')) {
+    return `${base}\nPlan Microsoft : ${awardType}.`;
+  }
+  if (awardType && reason === 'nq_via_withholding') {
+    return `${base}\nPlan Microsoft : ${awardType}.`;
+  }
+  return base;
+}
+
+/**
+ * Short tag rendered just under the origin badge so the user immediately
+ * sees a meaningful classification has happened (rapprochement StockExport,
+ * reclassement NQ, choix manuel...). Returns `null` when no compact label
+ * is worth showing (broker defaults).
+ */
+export function qualificationReasonShort(
+  reason: QualificationReason | undefined,
+  awardType?: string,
+): string | null {
   switch (reason) {
-    case 'broker_default':
-      return 'Valeur par défaut du courtier (aucune information de plan dans le relevé).';
-    case 'broker_plan_name':
-      return 'Origine déduite du libellé du plan transmis par le courtier.';
     case 'reconciled_unique':
-      return 'Rapproché avec un grant Microsoft StockExport identifié sans ambiguïté (un seul plan vestait à cette date).';
     case 'reconciled_by_quantity':
-      return 'Rapproché avec un grant Microsoft StockExport ; ambiguïté de date levée par le nombre net d\u2019actions livrées.';
     case 'reconciled_by_agreement':
-      return 'Rapproché avec plusieurs grants Microsoft StockExport candidats partageant la même classification fiscale.';
+      return awardType ? `via StockExport · ${awardType}` : 'via StockExport';
     case 'nq_via_withholding':
-      return 'Reclassé en plan non qualifié grâce à la retenue d\u2019actions pour impôt observée sur l\u2019export Microsoft (signature d\u2019un Stock Award).';
+      return awardType ? `Reclassé NQ · ${awardType}` : 'Reclassé NQ';
     case 'manual':
-      return 'Choix manuel via le menu déroulant sur cette ligne.';
+      return 'Manuel';
     case 'bulk_qualify':
-      return 'Choix appliqué via le panneau de qualification en lot.';
-    case undefined:
-      return 'Origine et régime non documentés (importation antérieure à la traçabilité, ou source inconnue).';
+      return 'En lot';
+    default:
+      return null;
   }
 }
 

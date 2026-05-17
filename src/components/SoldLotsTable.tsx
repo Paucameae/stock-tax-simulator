@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Select } from './ui/select';
 import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar, CheckCircle2 } from 'lucide-react';
 import type { Broker, SoldLot, StockOrigin, PlanType } from '../lib/types';
-import { brokerLabel, formatEUR, formatUSD, formatDate, qualificationReasonLabel, isDripQualifiedInconsistent } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent } from '../lib/utils';
 import { BrokerLogo } from './BrokerLogo';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
 import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
@@ -270,7 +270,7 @@ export function SoldLotsTable({
                     <Select
                       value={lot.origin}
                       aria-label={`Origine du lot acquis le ${formatDate(lot.acquisitionDate)}`}
-                      title={qualificationReasonLabel(lot.qualificationReason)}
+                      title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
                       onChange={(e) => handleOriginChange(lot.id, e.target.value as StockOrigin)}
                     >
                       <option value="DO">Stock Award</option>
@@ -278,6 +278,14 @@ export function SoldLotsTable({
                       <option value="FQ">AGA pré-Macron</option>
                       <option value="SP">ESPP</option>
                     </Select>
+                    {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                      <div
+                        className="text-[10px] leading-tight text-gray-500 italic mt-0.5 max-w-[180px] truncate"
+                        title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                      >
+                        {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
+                      </div>
+                    )}
                   </td>
                   <td className="py-2">
                     {lot.origin === 'SP' ? (
@@ -370,10 +378,11 @@ export function SoldLotsTable({
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                <div>
                 <Select
                   value={lot.origin}
                   aria-label={`Origine du lot acquis le ${formatDate(lot.acquisitionDate)}`}
-                  title={qualificationReasonLabel(lot.qualificationReason)}
+                  title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
                   onChange={(e) => handleOriginChange(lot.id, e.target.value as StockOrigin)}
                   className="text-xs h-8"
                 >
@@ -382,6 +391,15 @@ export function SoldLotsTable({
                   <option value="FQ">AGA pré-Macron</option>
                   <option value="SP">ESPP</option>
                 </Select>
+                {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                  <div
+                    className="text-[10px] leading-tight text-gray-500 italic mt-0.5 truncate"
+                    title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                  >
+                    {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
+                  </div>
+                )}
+                </div>
                 {lot.origin === 'SP' ? (
                   <Badge variant="outline" className="justify-center">ESPP</Badge>
                 ) : (
