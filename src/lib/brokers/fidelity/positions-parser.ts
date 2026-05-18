@@ -136,12 +136,35 @@ function reassembleAmounts(
   return best;
 }
 
-function getDefaultPlanType(origin: StockOrigin): PlanType {
+/** Macron law takes effect for awards granted on/after 2015-08-07 (JO 2015-08-07). */
+const MACRON_START = new Date('2015-08-07T00:00:00Z');
+
+/**
+ * Default origin/planType inferred from a Fidelity CSV origin code.
+ *
+ * Notes (per KPMG "Stock Awards – Déclaration des revenus 2025"):
+ *  - "FQ" in Microsoft labels only signals that shares are France-qualified;
+ *    whether they fall under the Macron or pre-Macron regime depends on the
+ *    grant date (cutoff: 2015-08-07).
+ *  - "DO" (US Stock Awards / RSU) are non-qualified by default. The user can
+ *    still mark them as qualified manually or via StockExport reconciliation.
+ */
+function getDefaultPlanType(
+  origin: StockOrigin,
+  classificationDate: Date | undefined,
+): { origin: StockOrigin; planType: PlanType } {
   switch (origin) {
-    case 'FM': return 'qualified_macron';
-    case 'FQ': return 'qualified_pre_macron';
-    case 'DO': return 'qualified_macron'; // default, user can change
-    case 'SP': return 'non_qualified'; // not applicable for ESPP
+    case 'FM':
+      return { origin: 'FM', planType: 'qualified_macron' };
+    case 'FQ':
+      if (classificationDate && classificationDate.getTime() >= MACRON_START.getTime()) {
+        return { origin: 'FM', planType: 'qualified_macron' };
+      }
+      return { origin: 'FQ', planType: 'qualified_pre_macron' };
+    case 'DO':
+      return { origin: 'DO', planType: 'non_qualified' };
+    case 'SP':
+      return { origin: 'SP', planType: 'non_qualified' };
   }
 }
 
@@ -200,7 +223,8 @@ export function parseCsvFile(csvText: string): StockLot[] {
 
     id++;
 
-    const isDrip = isLikelyReinvestedDividend(origin, quantity);
+    const { origin: resolvedOrigin, planType } = getDefaultPlanType(origin, grantDate ?? acquisitionDate);
+    const isDrip = isLikelyReinvestedDividend(resolvedOrigin, quantity);
 
     lots.push({
       id: `lot-${id}`,
@@ -213,7 +237,7 @@ export function parseCsvFile(csvText: string): StockLot[] {
       currentValue: 0,
       unrealizedGainLoss: 0,
       // ESPP: FMV = cost basis before 10% discount
-      esppFmvPerShareUsd: origin === 'SP' ? costBasisPerShare / 0.90 : undefined,
+      esppFmvPerShareUsd: resolvedOrigin === 'SP' ? costBasisPerShare / 0.90 : undefined,
       // Store raw USD values
       costBasisPerShareUsd: costBasisPerShare,
       totalCostBasisUsd: totalCostBasis,
@@ -222,9 +246,9 @@ export function parseCsvFile(csvText: string): StockLot[] {
       availableForSaleDate,
       availableForTransferDate,
       grantDate,
-      origin,
+      origin: resolvedOrigin,
       holdingPeriod,
-      planType: getDefaultPlanType(origin),
+      planType,
       qualificationReason: 'broker_default',
       ...(isDrip && { isReinvestedDividend: true }),
     });
@@ -351,7 +375,8 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
       costBasisUsd: costBasis,
       holdingPeriod,
       origin,
-      planType: 'qualified_macron',
+      // DO = US Stock Award (RSU), non-qualified by default. User can override.
+      planType: 'non_qualified',
       importCurrency: 'USD',
       qualificationReason: 'broker_default',
       ...(isDrip && { isReinvestedDividend: true }),
