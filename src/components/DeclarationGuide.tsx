@@ -140,7 +140,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                   <span className="font-medium">Regrouper les lignes identiques</span>
                 </label>
                 <span className="text-xs text-gray-600">
-                  (même date de vente, même PU vente, même PU acquisition)
+                  (même date de vente, même PU vente, même PU acquisition, même origine)
                 </span>
                 <span className="ml-auto text-xs">
                   {groupLines ? (
