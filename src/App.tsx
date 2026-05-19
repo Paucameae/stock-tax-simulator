@@ -68,6 +68,48 @@ function isSettingsConfigured(s: AppSettings, defaults: AppSettings): boolean {
     || s.numberOfChildren !== defaults.numberOfChildren;
 }
 
+/**
+ * Recompute the declaration view state from a list of sold lots.
+ *
+ * Single source of truth for the bootstrap pattern used after every mutation
+ * that affects sold lots: sales import, backup restore, grant reconciliation,
+ * year switch, qualification toggle. Picking the most recent sale year by
+ * default matches what the user is most likely declaring (N-1).
+ *
+ * Returns the year that was selected, the SaleLotEntry projection used by the
+ * UI, and the TaxSimulationResult — so callers can wire all three into state
+ * with a single helper instead of duplicating the runSimulation block.
+ */
+function computeDeclarationFor(
+  soldLotsList: SoldLot[],
+  settings: AppSettings,
+  taxMode: TaxMode,
+  preferredYear?: number | null,
+): { saleYear: number | null; entries: SaleLotEntry[]; result: TaxSimulationResult | null } {
+  if (soldLotsList.length === 0) {
+    return { saleYear: null, entries: [], result: null };
+  }
+  const availableYears = getSaleYears(soldLotsList);
+  // If the caller has a preferred year (e.g. the year currently selected by the
+  // user) and that year still has at least one sold lot, keep it. Otherwise
+  // fall back to the most recent year present in the data.
+  const year = preferredYear != null && availableYears.includes(preferredYear)
+    ? preferredYear
+    : (availableYears[0] ?? new Date().getFullYear());
+  const yearLots = soldLotsList.filter((sl) => sl.saleDate.getFullYear() === year);
+  const entries = soldLotsToSaleEntries(yearLots);
+  const result = runSimulation({
+    lots: entries,
+    taxMode,
+    otherTaxableIncome: settings.otherTaxableIncome,
+    taxShares: settings.taxShares,
+    familyStatus: settings.familyStatus,
+    priorLosses: settings.priorLosses,
+    fiscalYear: year,
+  });
+  return { saleYear: year, entries, result };
+}
+
 function soldLotsToSaleEntries(soldLots: SoldLot[]): SaleLotEntry[] {
   return soldLots.map((sl) => {
     const costBasisPerShare = sl.quantity > 0 ? sl.costBasis / sl.quantity : 0;
@@ -262,8 +304,15 @@ function App() {
     if (soldLots.length > 0 && nextGrants.length > 0) {
       const reconciledSold = reconcileSoldLots(soldLots, nextGrants).lots;
       setSoldLots(reconciledSold);
+      // The reclassification changes the tax basis (qualified vs not), so the
+      // current declResult is now stale. Recompute it in place, keeping the
+      // user's currently-selected sale year if it still has lots.
+      const decl = computeDeclarationFor(reconciledSold, settings, declTaxMode, saleYear);
+      setSaleYear(decl.saleYear);
+      setDeclEntries(decl.entries);
+      setDeclResult(decl.result);
     }
-  }, [lots, soldLots]);
+  }, [lots, soldLots, settings, declTaxMode, saleYear]);
 
   const handleDividendsChange = React.useCallback(
     (payload: { dividends: DividendEvent[]; cashInterest: CashInterestEvent[] }) => {
@@ -625,13 +674,20 @@ function App() {
       setGrants(imported.grants);
       saveGrants(imported.grants);
     }
-    // Reset derived/session state — results will be re-computed from imported data on demand
+    // Reset simulation state — SaleSimulator's lot selection isn't persisted,
+    // so the user re-picks lots and clicks "Simuler" again.
     setSimEntries([]);
     setSimResult(null);
-    setDeclEntries([]);
-    setDeclResult(null);
-    setSaleYear(null);
-  }, []);
+    // Bootstrap the declaration view from the imported sold lots so that the
+    // tax detail panel is populated without requiring the user to toggle a
+    // qualification combo to trigger a recompute. Use imported.settings (not
+    // the current `settings` state, which won't be updated until the next
+    // render) so the simulation reflects the restored tax parameters.
+    const decl = computeDeclarationFor(imported.soldLots, imported.settings, declTaxMode);
+    setSaleYear(decl.saleYear);
+    setDeclEntries(decl.entries);
+    setDeclResult(decl.result);
+  }, [declTaxMode]);
 
   const settingsDone = isSettingsConfigured(settings, DEFAULT_SETTINGS);
   const portfolioDone = lots.length > 0;
