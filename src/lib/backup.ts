@@ -4,8 +4,25 @@
 // Dates are stored as ISO strings and re-hydrated on import. Unknown/invalid
 // fields are rejected to keep the runtime state consistent.
 
-import type { AppSettings, Broker, GrantInfo, StockLot, SoldLot, SavedSimulation } from './types';
+import type { AppSettings, Broker, GrantInfo, QualificationReason, StockLot, SoldLot, SavedSimulation } from './types';
 import { validateGrant, validateSettings } from './storage';
+
+const KNOWN_QUALIFICATION_REASONS: QualificationReason[] = [
+  'broker_default',
+  'broker_plan_name',
+  'reconciled_unique',
+  'reconciled_by_quantity',
+  'reconciled_by_agreement',
+  'nq_via_withholding',
+  'manual',
+  'bulk_qualify',
+];
+
+function validateQualificationReason(raw: unknown): QualificationReason | undefined {
+  return typeof raw === 'string' && (KNOWN_QUALIFICATION_REASONS as string[]).includes(raw)
+    ? (raw as QualificationReason)
+    : undefined;
+}
 
 // v1: original schema (Fidelity-only, no `broker` field).
 // v2: added `broker` on every StockLot and SoldLot. v1 backups are still
@@ -132,6 +149,8 @@ function validateLot(raw: unknown): StockLot | null {
     reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
     grantIdHash: typeof raw.grantIdHash === 'string' ? raw.grantIdHash : undefined,
     awardType: typeof raw.awardType === 'string' ? raw.awardType : undefined,
+    isReinvestedDividend: typeof raw.isReinvestedDividend === 'boolean' ? raw.isReinvestedDividend : undefined,
+    qualificationReason: validateQualificationReason(raw.qualificationReason),
   };
 }
 
@@ -163,6 +182,8 @@ function validateSoldLot(raw: unknown): SoldLot | null {
     reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
     grantIdHash: typeof raw.grantIdHash === 'string' ? raw.grantIdHash : undefined,
     awardType: typeof raw.awardType === 'string' ? raw.awardType : undefined,
+    isReinvestedDividend: typeof raw.isReinvestedDividend === 'boolean' ? raw.isReinvestedDividend : undefined,
+    qualificationReason: validateQualificationReason(raw.qualificationReason),
   };
 }
 

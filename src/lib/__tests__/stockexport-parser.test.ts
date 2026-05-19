@@ -100,3 +100,77 @@ describe('buildGrantsForTest', () => {
     expect(dates).toEqual([...dates].sort((a, b) => a - b));
   });
 });
+
+describe('buildGrantsForTest — Transactions sheet (NQ detection + net shares)', () => {
+  const awardHeader = row(1, { D: 'Award ID', E: 'Award Date', F: 'Award Type' });
+  const vestHeader = row(1, { D: 'Award ID', H: 'Vest Date', I: 'Vest Shares' });
+  const txHeader = row(1, {
+    D: 'Transaction Date', G: 'Transaction Type', H: 'Award ID', I: 'Award Date',
+    BA: 'Shares For Taxes', BB: 'Net Shares',
+  });
+
+  it('annotates vest events with netShares / sharesForTaxes from the Transactions sheet', () => {
+    const awardRows = [awardHeader, row(2, { D: 'A-1', E: '2022-05-15', F: 'On-Hire FQ' })];
+    const vestRows = [vestHeader, row(2, { D: 'A-1', H: '2023-05-15', I: '9' })];
+    const txRows = [
+      txHeader,
+      row(2, { D: '2023-05-15', G: 'Stock Award Vest', H: 'A-1', I: '2022-05-15', BA: '0', BB: '9' }),
+    ];
+    const { grants } = buildGrantsForTest(awardRows, vestRows, txRows);
+    expect(grants[0].vestSchedule[0]).toMatchObject({ shares: 9, netShares: 9, sharesForTaxes: 0 });
+    expect(grants[0].nqDetected).toBeUndefined();
+  });
+
+  it('reclassifies a grant to non_qualified when any vest withheld shares for tax', () => {
+    // Award label suggests qualified (FQ) but the broker withheld shares for tax →
+    // the actual plan is non-qualified, the parser must override and warn.
+    const awardRows = [awardHeader, row(2, { D: 'A-1', E: '2023-08-31', F: 'FY23 FQ Annual' })];
+    const vestRows = [vestHeader, row(2, { D: 'A-1', H: '2024-08-15', I: '10' })];
+    const txRows = [
+      txHeader,
+      row(2, { D: '2024-08-15', G: 'Stock Award Vest', H: 'A-1', I: '2023-08-31', BA: '4', BB: '6' }),
+    ];
+    const { grants, warnings } = buildGrantsForTest(awardRows, vestRows, txRows);
+    expect(grants[0].nqDetected).toBe(true);
+    expect(grants[0].origin).toBe('DO');
+    expect(grants[0].planType).toBe('non_qualified');
+    expect(warnings.some((w) => w.includes('reclassé en non qualifié'))).toBe(true);
+    expect(grants[0].vestSchedule[0].sharesForTaxes).toBe(4);
+    expect(grants[0].vestSchedule[0].netShares).toBe(6);
+  });
+
+  it('keeps origin/planType from the label when no withholding is observed', () => {
+    const awardRows = [awardHeader, row(2, { D: 'A-1', E: '2022-05-15', F: 'On-Hire FQ' })];
+    const vestRows = [vestHeader, row(2, { D: 'A-1', H: '2023-05-15', I: '9' })];
+    const txRows = [
+      txHeader,
+      row(2, { D: '2023-05-15', G: 'Stock Award Vest', H: 'A-1', I: '2022-05-15', BA: '0', BB: '9' }),
+    ];
+    const { grants, warnings } = buildGrantsForTest(awardRows, vestRows, txRows);
+    expect(grants[0].origin).toBe('FM');
+    expect(grants[0].planType).toBe('qualified_macron');
+    expect(warnings).toEqual([]);
+  });
+
+  it('aggregates multiple transaction rows on the same vest day', () => {
+    const awardRows = [awardHeader, row(2, { D: 'A-1', E: '2023-08-31', F: 'FY23 SA Annual' })];
+    const vestRows = [vestHeader, row(2, { D: 'A-1', H: '2024-08-15', I: '20' })];
+    const txRows = [
+      txHeader,
+      row(2, { D: '2024-08-15', G: 'Stock Award Vest', H: 'A-1', I: '2023-08-31', BA: '3', BB: '7' }),
+      row(3, { D: '2024-08-15', G: 'Stock Award Vest', H: 'A-1', I: '2023-08-31', BA: '4', BB: '6' }),
+    ];
+    const { grants } = buildGrantsForTest(awardRows, vestRows, txRows);
+    expect(grants[0].vestSchedule[0].sharesForTaxes).toBe(7);
+    expect(grants[0].vestSchedule[0].netShares).toBe(13);
+    expect(grants[0].nqDetected).toBe(true);
+  });
+
+  it('works without a Transactions sheet (backwards compatible)', () => {
+    const awardRows = [awardHeader, row(2, { D: 'A-1', E: '2022-05-15', F: 'On-Hire FQ' })];
+    const vestRows = [vestHeader, row(2, { D: 'A-1', H: '2023-05-15', I: '9' })];
+    const { grants } = buildGrantsForTest(awardRows, vestRows);
+    expect(grants[0].vestSchedule[0].netShares).toBeUndefined();
+    expect(grants[0].nqDetected).toBeUndefined();
+  });
+});

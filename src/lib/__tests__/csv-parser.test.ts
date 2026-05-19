@@ -108,14 +108,27 @@ describe('parseCsvFile', () => {
 
   it('assigns correct default plan type per origin', () => {
     const csvFM = [HEADER, makeCsvRow({ origin: 'FM' })].join('\n');
-    const csvFQ = [HEADER, makeCsvRow({ origin: 'FQ' })].join('\n');
+    // FQ with a post-Macron grant date is reclassified to FM / qualified_macron
+    // (per KPMG: "FQ" only flags France-qualified, Macron status comes from grant date).
+    const csvFqPostMacron = [HEADER, makeCsvRow({ origin: 'FQ', grantDate: 'Jan-01-2022' })].join('\n');
+    // FQ with a pre-Macron grant date stays FQ / qualified_pre_macron.
+    const csvFqPreMacron = [HEADER, makeCsvRow({ origin: 'FQ', grantDate: 'Jan-01-2014' })].join('\n');
     const csvSP = [HEADER, makeCsvRow({ origin: 'SP' })].join('\n');
+    // DO (US Stock Award / RSU) defaults to non_qualified — user can override.
     const csvDO = [HEADER, makeCsvRow({ origin: 'DO' })].join('\n');
 
     expect(parseCsvFile(csvFM)[0].planType).toBe('qualified_macron');
-    expect(parseCsvFile(csvFQ)[0].planType).toBe('qualified_pre_macron');
+
+    const fqPost = parseCsvFile(csvFqPostMacron)[0];
+    expect(fqPost.origin).toBe('FM');
+    expect(fqPost.planType).toBe('qualified_macron');
+
+    const fqPre = parseCsvFile(csvFqPreMacron)[0];
+    expect(fqPre.origin).toBe('FQ');
+    expect(fqPre.planType).toBe('qualified_pre_macron');
+
     expect(parseCsvFile(csvSP)[0].planType).toBe('non_qualified');
-    expect(parseCsvFile(csvDO)[0].planType).toBe('qualified_macron');
+    expect(parseCsvFile(csvDO)[0].planType).toBe('non_qualified');
   });
 
   it('handles empty input', () => {
@@ -293,11 +306,11 @@ describe('parseSalesCsvFile', () => {
     expect(parseSalesCsvFile(SALES_HEADER)).toEqual([]);
   });
 
-  it('defaults origin to DO and planType to qualified_macron', () => {
+  it('defaults origin to DO and planType to non_qualified', () => {
     const csv = [SALES_HEADER, makeSalesRow()].join('\n');
     const lots = parseSalesCsvFile(csv);
     expect(lots[0].origin).toBe('DO');
-    expect(lots[0].planType).toBe('qualified_macron');
+    expect(lots[0].planType).toBe('non_qualified');
   });
 
   it('parses negative gain/loss row', () => {

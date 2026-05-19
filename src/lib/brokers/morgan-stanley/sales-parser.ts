@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import type { SoldLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
+import { isLikelyReinvestedDividend } from '../../utils';
 import { parseWorksheet, parseSharedStrings, readXlsx } from '../../xlsx-reader';
 
 const MAX_ROWS = 5000;
@@ -67,7 +68,10 @@ function defaultPlanTypeFor(origin: StockOrigin): PlanType {
   switch (origin) {
     case 'FM': return 'qualified_macron';
     case 'FQ': return 'qualified_pre_macron';
-    case 'DO': return 'qualified_macron';
+    // "Microsoft Stock Awards" is a fourre-tout (per KPMG): all non-qualified
+    // shares, plus qualified shares vested before 2023-11-30. Default to
+    // non_qualified — users can override via reconciliation or manually.
+    case 'DO': return 'non_qualified';
     case 'SP': return 'non_qualified';
   }
 }
@@ -137,6 +141,7 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
 
   const proceedsUsd = quantity * salePrice;
   const holdingPeriod = computeHoldingPeriod(acquisitionDate, saleDate);
+  const isDrip = isLikelyReinvestedDividend(origin, quantity);
 
   idCounter.n++;
   return {
@@ -154,6 +159,8 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
     origin,
     planType: defaultPlanTypeFor(origin),
     importCurrency: 'USD' as ImportCurrency,
+    qualificationReason: 'broker_plan_name',
+    ...(isDrip && { isReinvestedDividend: true }),
   };
 }
 

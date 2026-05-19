@@ -262,3 +262,87 @@ describe('reconcileSoldLots', () => {
     expect(lots[0].planType).toBe('qualified_macron');
   });
 });
+
+describe('reconciliation — quantity-based tie-breaker', () => {
+  it('picks the right grant when two plans vest the same day but only one matches the lot quantity', () => {
+    // Two grants vest on the same day with different classifications. Without
+    // a tie-breaker the previous behaviour was to give up. The Transactions
+    // sheet exposes the *net* shares actually deposited per vest, which the
+    // broker's lot quantity must equal — so the unique match wins.
+    const lot = makeLot({
+      id: 'lot-1',
+      acquisitionDate: new Date(2024, 7, 15),
+      origin: 'DO',
+      quantity: 6,
+    });
+    const qualified = makeGrant({
+      grantIdHash: 'hash-q',
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [{ date: new Date(2024, 7, 15), shares: 9, netShares: 9, sharesForTaxes: 0 }],
+    });
+    const nonQualified = makeGrant({
+      grantIdHash: 'hash-nq',
+      awardType: 'FY24 SA Annual',
+      planType: 'non_qualified',
+      origin: 'DO',
+      vestSchedule: [{ date: new Date(2024, 7, 15), shares: 10, netShares: 6, sharesForTaxes: 4 }],
+    });
+    const { lots, stats } = reconcileLots([lot], [qualified, nonQualified]);
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].grantIdHash).toBe('hash-nq');
+    expect(lots[0].planType).toBe('non_qualified');
+    expect(lots[0].origin).toBe('DO');
+  });
+
+  it('falls back to ambiguous when no quantity matches uniquely', () => {
+    const lot = makeLot({
+      id: 'lot-1',
+      acquisitionDate: new Date(2024, 7, 15),
+      origin: 'DO',
+      quantity: 7, // matches neither
+    });
+    const qualified = makeGrant({
+      grantIdHash: 'hash-q',
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [{ date: new Date(2024, 7, 15), shares: 9, netShares: 9, sharesForTaxes: 0 }],
+    });
+    const nonQualified = makeGrant({
+      grantIdHash: 'hash-nq',
+      awardType: 'FY24 SA Annual',
+      planType: 'non_qualified',
+      origin: 'DO',
+      vestSchedule: [{ date: new Date(2024, 7, 15), shares: 10, netShares: 6, sharesForTaxes: 4 }],
+    });
+    const { lots, stats } = reconcileLots([lot], [qualified, nonQualified]);
+    expect(stats.ambiguous).toBe(1);
+    expect(lots[0].reconciled).toBeUndefined();
+  });
+
+  it('also disambiguates sold lots by quantity', () => {
+    const sl = makeSoldLot({
+      id: 'sold-1',
+      acquisitionDate: new Date(2024, 7, 15),
+      origin: 'DO',
+      quantity: 6,
+    });
+    const qualified = makeGrant({
+      grantIdHash: 'hash-q',
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [{ date: new Date(2024, 7, 15), shares: 9, netShares: 9, sharesForTaxes: 0 }],
+    });
+    const nonQualified = makeGrant({
+      grantIdHash: 'hash-nq',
+      awardType: 'FY24 SA Annual',
+      planType: 'non_qualified',
+      origin: 'DO',
+      vestSchedule: [{ date: new Date(2024, 7, 15), shares: 10, netShares: 6, sharesForTaxes: 4 }],
+    });
+    const { lots, stats } = reconcileSoldLots([sl], [qualified, nonQualified]);
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].grantIdHash).toBe('hash-nq');
+    expect(lots[0].planType).toBe('non_qualified');
+  });
+});

@@ -42,16 +42,61 @@ export interface StockLot {
   grantIdHash?: string;
   awardType?: string;
   reconciled?: boolean;
+  /**
+   * True when this lot is recognised as shares received from a reinvested
+   * dividend (DRIP). Auto-detected when the lot has a fractional quantity AND
+   * its declared origin is a vest-only origin (DO / FM / FQ — vests always
+   * come in whole shares, so any fractional quantity is the signature of a
+   * DRIP). ESPP-tagged lots (origin SP) can also be fractional, so we don't
+   * auto-flag them here.
+   * Display-only flag at the moment: surfaced in the UI so the user knows why
+   * a lot is showing up out of the usual vest schedule.
+   */
+  isReinvestedDividend?: boolean;
+  /**
+   * Provenance of the current (origin, planType) on this lot — used to
+   * surface a tooltip explaining *why* the lot is classified as it is.
+   * Set everywhere the classification is established or changed: parsers,
+   * StockExport reconciliation, manual edits and bulk-qualify.
+   */
+  qualificationReason?: QualificationReason;
 }
+
+/**
+ * Why a lot carries its current (origin, planType). Populated as the lot
+ * moves through parsing → reconciliation → user edits. Display-only;
+ * never affects the tax computation.
+ */
+export type QualificationReason =
+  | 'broker_default'           // value chosen by the broker parser without external info
+  | 'broker_plan_name'         // origin derived from the broker's plan label (Morgan Stanley)
+  | 'reconciled_unique'        // single StockExport grant matched on vest date
+  | 'reconciled_by_quantity'   // multiple grants — disambiguated by net-share count
+  | 'reconciled_by_agreement'  // multiple grants but identical (origin, planType)
+  | 'nq_via_withholding'       // grant reclassified as NQ thanks to the StockExport Transactions sheet
+  | 'manual'                   // user changed the value via a Select on the lot row
+  | 'bulk_qualify';            // user used the bulk-qualify panel
 
 /**
  * A single vesting event from the StockExport Vest Schedules sheet.
  * For qualified plans, this is the legal acquisition date (date d'acquisition
  * définitive) which triggers the gain d'acquisition for French tax purposes.
+ *
+ * `shares` is the *gross* number of shares awarded by the vest. For qualified
+ * (FQ/FM) and ESPP grants it equals the number of shares actually deposited
+ * to the broker. For non-qualified Stock Awards (DO), the broker withholds a
+ * portion of shares to cover income tax, so the deposit equals
+ * `shares - sharesForTaxes` (= `netShares`). When the StockExport Transactions
+ * sheet is available, we capture both so the reconciliation can match against
+ * either gross or net quantity.
  */
 export interface VestEvent {
   date: Date;
   shares: number;
+  /** Net shares actually deposited to the broker (gross − withheld). Optional: only filled when the Transactions sheet was parsed. */
+  netShares?: number;
+  /** Shares withheld for tax. > 0 ⇒ non-qualified Stock Award. Optional: only filled when the Transactions sheet was parsed. */
+  sharesForTaxes?: number;
 }
 
 /**
@@ -76,6 +121,14 @@ export interface GrantInfo {
   totalAwarded: number;
   totalVested: number;
   totalUnvested: number;
+  /**
+   * True when at least one vest of this grant withheld shares for tax (i.e.
+   * `sharesForTaxes > 0` on the Transactions sheet). This is the unambiguous
+   * signature of a non-qualified Stock Award (DO / non_qualified) and
+   * overrides any classification derived from the award label alone.
+   * Only set when the Transactions sheet was parsed.
+   */
+  nqDetected?: boolean;
 }
 
 export interface SoldLot {
@@ -99,6 +152,10 @@ export interface SoldLot {
   grantIdHash?: string;
   awardType?: string;
   reconciled?: boolean;
+  /** See StockLot.isReinvestedDividend. Carried through to sold lots so the table can flag historical DRIP sales. */
+  isReinvestedDividend?: boolean;
+  /** See StockLot.qualificationReason. */
+  qualificationReason?: QualificationReason;
 }
 
 export interface SaleLotEntry {

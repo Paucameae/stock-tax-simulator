@@ -1,7 +1,8 @@
 import React from 'react';
 import { Select } from './ui/select';
 import { Button } from './ui/button';
-import type { BulkQualifyChoice } from '../lib/bulk-qualify';
+import { Alert } from './ui/alert';
+import type { BulkQualifyChoice, BulkQualifyOptions } from '../lib/bulk-qualify';
 import type { PlanType, StockOrigin } from '../lib/types';
 
 /**
@@ -18,7 +19,13 @@ import type { PlanType, StockOrigin } from '../lib/types';
  */
 export interface BulkQualifyPanelProps {
   eligibleCount: number;
-  onApply: (choice: BulkQualifyChoice) => void;
+  onApply: (choice: BulkQualifyChoice, options: BulkQualifyOptions) => void;
+  /**
+   * Number of additional lots that would become eligible if the user opts
+   * in to requalifying ESPP-tagged lots. When > 0, the panel surfaces a
+   * checkbox + warning to opt in. Omit (or 0) to hide the toggle.
+   */
+  esppEligibleCount?: number;
   /** Optional secondary action shown alongside the primary button (e.g. "Importer StockExport"). */
   secondaryAction?: React.ReactNode;
   /** Compact rendering for inline banners. */
@@ -51,30 +58,37 @@ function pairFor(planType: PlanType): { origin: StockOrigin; planType: PlanType 
   return { origin: 'FM', planType: 'qualified_macron' };
 }
 
-export function BulkQualifyPanel({ eligibleCount, onApply, secondaryAction, compact = false }: BulkQualifyPanelProps) {
+export function BulkQualifyPanel({ eligibleCount, onApply, esppEligibleCount = 0, secondaryAction, compact = false }: BulkQualifyPanelProps) {
   const [mode, setMode] = React.useState<Mode>('uniform');
   const [uniformPlanType, setUniformPlanType] = React.useState<PlanType>('qualified_macron');
   const [pivotDate, setPivotDate] = React.useState<string>(DEFAULT_PIVOT_ISO);
   const [beforePlanType, setBeforePlanType] = React.useState<PlanType>('qualified_pre_macron');
   const [afterPlanType, setAfterPlanType] = React.useState<PlanType>('qualified_macron');
+  const [includeEspp, setIncludeEspp] = React.useState(false);
+
+  const effectiveCount = eligibleCount + (includeEspp ? esppEligibleCount : 0);
 
   const handleApply = () => {
+    const options: BulkQualifyOptions = { includeEspp };
     if (mode === 'uniform') {
       const { origin, planType } = pairFor(uniformPlanType);
-      onApply({ kind: 'uniform', origin, planType });
+      onApply({ kind: 'uniform', origin, planType }, options);
       return;
     }
     const [y, m, d] = pivotDate.split('-').map((s) => parseInt(s, 10));
     const pivot = new Date(y, (m || 1) - 1, d || 1);
-    onApply({
-      kind: 'byDate',
-      pivotDate: pivot,
-      before: pairFor(beforePlanType),
-      after: pairFor(afterPlanType),
-    });
+    onApply(
+      {
+        kind: 'byDate',
+        pivotDate: pivot,
+        before: pairFor(beforePlanType),
+        after: pairFor(afterPlanType),
+      },
+      options,
+    );
   };
 
-  if (eligibleCount === 0) return null;
+  if (eligibleCount === 0 && esppEligibleCount === 0) return null;
 
   return (
     <div className={compact ? 'space-y-3' : 'space-y-4'}>
@@ -184,9 +198,32 @@ export function BulkQualifyPanel({ eligibleCount, onApply, secondaryAction, comp
         </div>
       )}
 
+      {esppEligibleCount > 0 && (
+        <div className="space-y-2">
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeEspp}
+              onChange={(e) => setIncludeEspp(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Inclure aussi {esppEligibleCount} lot{esppEligibleCount > 1 ? 's' : ''} étiqueté{esppEligibleCount > 1 ? 's' : ''} <strong>ESPP</strong> dans la requalification
+            </span>
+          </label>
+          {includeEspp && (
+            <Alert variant="warning">
+              Les lots ESPP ont normalement un régime fiscal spécifique (décote 10 %, base de coût particulière).
+              Ne requalifiez ces lots que si vous êtes sûr qu'ils ont été mal classés par votre courtier
+              (par exemple : actions issues d'un dividende réinvesti, mais exportées sous le code ESPP).
+            </Alert>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 pt-1">
-        <Button onClick={handleApply}>
-          Appliquer à {eligibleCount} lot{eligibleCount > 1 ? 's' : ''}
+        <Button onClick={handleApply} disabled={effectiveCount === 0}>
+          Appliquer à {effectiveCount} lot{effectiveCount > 1 ? 's' : ''}
         </Button>
         {secondaryAction}
       </div>

@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import type { StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
+import { isLikelyReinvestedDividend } from '../../utils';
 
 const MAX_ROWS = 5000;
 
@@ -41,7 +42,12 @@ function defaultPlanTypeFor(origin: StockOrigin): PlanType {
   switch (origin) {
     case 'FM': return 'qualified_macron';
     case 'FQ': return 'qualified_pre_macron';
-    case 'DO': return 'qualified_macron';
+    // "Microsoft Stock Awards" is a fourre-tout (per KPMG): all non-qualified
+    // shares, plus qualified shares vested before 2023-11-30. Default to
+    // non_qualified — the prudent choice for the majority case. Users with
+    // qualified shares under this label should reconcile via StockExport or
+    // mark them manually.
+    case 'DO': return 'non_qualified';
     case 'SP': return 'non_qualified';
   }
 }
@@ -118,6 +124,7 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
     const costBasisPerShareUsd = acquisitionValue / quantity;
 
     id++;
+    const isDrip = isLikelyReinvestedDividend(origin, quantity);
     lots.push({
       id: `ms-lot-${id}`,
       broker: 'morgan_stanley',
@@ -139,6 +146,8 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
       origin,
       holdingPeriod: 'Long' as HoldingPeriod,
       planType: defaultPlanTypeFor(origin),
+      qualificationReason: 'broker_plan_name',
+      ...(isDrip && { isReinvestedDividend: true }),
     });
   }
 

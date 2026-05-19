@@ -5,10 +5,10 @@ import { Badge } from './ui/badge';
 import { Select } from './ui/select';
 import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar, CheckCircle2 } from 'lucide-react';
 import type { Broker, SoldLot, StockOrigin, PlanType } from '../lib/types';
-import { brokerLabel, formatEUR, formatUSD, formatDate } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent } from '../lib/utils';
 import { BrokerLogo } from './BrokerLogo';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
-import { countEligible, type BulkQualifyChoice } from '../lib/bulk-qualify';
+import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
 
 interface SoldLotsTableProps {
   soldLots: SoldLot[];
@@ -17,7 +17,7 @@ interface SoldLotsTableProps {
   saleYear: number | null;
   onSaleYearChange: (year: number) => void;
   /** Optional: opens a bulk-qualify panel when there are non-reconciled lots. */
-  onBulkQualify?: (choice: BulkQualifyChoice) => void;
+  onBulkQualify?: (choice: BulkQualifyChoice, options: BulkQualifyOptions) => void;
   /** Whether the user has imported a StockExport file — drives the wording of the banner. */
   hasGrants?: boolean;
 }
@@ -63,14 +63,14 @@ export function SoldLotsTable({
     };
     onSoldLotsChange(
       soldLots.map((l) =>
-        l.id === lotId ? { ...l, origin, planType: planMap[origin] } : l
+        l.id === lotId ? { ...l, origin, planType: planMap[origin], qualificationReason: 'manual' } : l
       )
     );
   };
 
   const handlePlanTypeChange = (lotId: string, planType: PlanType) => {
     onSoldLotsChange(
-      soldLots.map((l) => (l.id === lotId ? { ...l, planType } : l))
+      soldLots.map((l) => (l.id === lotId ? { ...l, planType, qualificationReason: 'manual' } : l))
     );
   };
 
@@ -82,6 +82,7 @@ export function SoldLotsTable({
   // *sees*, not what gets requalified.
   const [bulkOpen, setBulkOpen] = React.useState(false);
   const totalEligible = countEligible(soldLots);
+  const esppEligible = countEligible(soldLots, { includeEspp: true }) - totalEligible;
 
   return (
     <Card>
@@ -164,12 +165,13 @@ export function SoldLotsTable({
               Tous les lots affichés ont été <strong>reconciliés automatiquement</strong> avec votre StockExport.
             </Alert>
           )}
-          {onBulkQualify && bulkOpen && totalEligible > 0 && (
+          {onBulkQualify && bulkOpen && (totalEligible > 0 || esppEligible > 0) && (
             <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <BulkQualifyPanel
                 eligibleCount={totalEligible}
-                onApply={(choice) => {
-                  onBulkQualify(choice);
+                esppEligibleCount={esppEligible}
+                onApply={(choice, options) => {
+                  onBulkQualify(choice, options);
                   setBulkOpen(false);
                 }}
                 compact
@@ -223,6 +225,21 @@ export function SoldLotsTable({
                           aria-label="Lot reconcilié avec StockExport"
                         />
                       )}
+                      {lot.isReinvestedDividend && (
+                        <Badge variant="outline" className="text-[10px] font-normal py-0 px-1" title="Dividende réinvesti">
+                          DRIP
+                        </Badge>
+                      )}
+                      {isDripQualifiedInconsistent(lot) && (
+                        <span
+                          role="img"
+                          aria-label="Incohérence DRIP / qualifié"
+                          title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français. Reclassez ce lot en non qualifié."
+                          className="text-amber-600"
+                        >
+                          ⚠
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="py-2 pr-3">{formatDate(lot.saleDate)}</td>
@@ -253,6 +270,7 @@ export function SoldLotsTable({
                     <Select
                       value={lot.origin}
                       aria-label={`Origine du lot acquis le ${formatDate(lot.acquisitionDate)}`}
+                      title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
                       onChange={(e) => handleOriginChange(lot.id, e.target.value as StockOrigin)}
                     >
                       <option value="DO">Stock Award</option>
@@ -260,6 +278,14 @@ export function SoldLotsTable({
                       <option value="FQ">AGA pré-Macron</option>
                       <option value="SP">ESPP</option>
                     </Select>
+                    {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                      <div
+                        className="text-[10px] leading-tight text-gray-500 italic mt-0.5 max-w-[180px] truncate"
+                        title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                      >
+                        {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
+                      </div>
+                    )}
                   </td>
                   <td className="py-2">
                     {lot.origin === 'SP' ? (
@@ -307,6 +333,21 @@ export function SoldLotsTable({
                         aria-label="Lot reconcilié avec StockExport"
                       />
                     )}
+                    {lot.isReinvestedDividend && (
+                      <Badge variant="outline" className="text-[10px] font-normal py-0 px-1" title="Dividende réinvesti">
+                        DRIP
+                      </Badge>
+                    )}
+                    {isDripQualifiedInconsistent(lot) && (
+                      <span
+                        role="img"
+                        aria-label="Incohérence DRIP / qualifié"
+                        title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français."
+                        className="text-amber-600"
+                      >
+                        ⚠
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
@@ -337,9 +378,11 @@ export function SoldLotsTable({
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                <div>
                 <Select
                   value={lot.origin}
                   aria-label={`Origine du lot acquis le ${formatDate(lot.acquisitionDate)}`}
+                  title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
                   onChange={(e) => handleOriginChange(lot.id, e.target.value as StockOrigin)}
                   className="text-xs h-8"
                 >
@@ -348,6 +391,15 @@ export function SoldLotsTable({
                   <option value="FQ">AGA pré-Macron</option>
                   <option value="SP">ESPP</option>
                 </Select>
+                {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                  <div
+                    className="text-[10px] leading-tight text-gray-500 italic mt-0.5 truncate"
+                    title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                  >
+                    {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
+                  </div>
+                )}
+                </div>
                 {lot.origin === 'SP' ? (
                   <Badge variant="outline" className="justify-center">ESPP</Badge>
                 ) : (

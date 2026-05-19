@@ -1,8 +1,113 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import type { QualificationReason, StockOrigin } from './types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/**
+ * True when the lot looks like shares received from a reinvested dividend
+ * (DRIP). Vests of any plan (DO / FM / FQ) always come in whole shares, so
+ * a fractional quantity on a vest-origin lot is the unambiguous signature
+ * of a DRIP.
+ *
+ * ESPP-tagged lots (origin SP) can legitimately be fractional too (the
+ * quantity = contribution / discounted price), so we don't auto-detect on
+ * SP — the user can opt in via the bulk-qualify panel if a particular SP
+ * lot is actually a mislabelled DRIP.
+ *
+ * Tolerance: treat anything within 1e-6 of an integer as a whole share to
+ * absorb floating-point rounding from CSV/XLSX parsers.
+ */
+export function isLikelyReinvestedDividend(origin: StockOrigin, quantity: number): boolean {
+  if (origin === 'SP') return false;
+  if (!Number.isFinite(quantity) || quantity <= 0) return false;
+  return Math.abs(quantity - Math.round(quantity)) > 1e-6;
+}
+
+/**
+ * Human-readable explanation of why a lot carries its current
+ * (origin, planType). Used as the title of the origin badge so users can
+ * understand a classification at a glance.
+ *
+ * When `awardType` is supplied AND the reason comes from a StockExport
+ * reconciliation, the grant's award type is appended so users know which
+ * Microsoft plan was matched.
+ */
+export function qualificationReasonLabel(
+  reason: QualificationReason | undefined,
+  awardType?: string,
+): string {
+  const base = (() => {
+    switch (reason) {
+      case 'broker_default':
+        return 'Valeur par défaut du courtier (aucune information de plan dans le relevé).';
+      case 'broker_plan_name':
+        return 'Origine déduite du libellé du plan transmis par le courtier.';
+      case 'reconciled_unique':
+        return 'Rapproché avec un grant Microsoft StockExport identifié sans ambiguïté (un seul plan vestait à cette date).';
+      case 'reconciled_by_quantity':
+        return 'Rapproché avec un grant Microsoft StockExport ; ambiguïté de date levée par le nombre net d\u2019actions livrées.';
+      case 'reconciled_by_agreement':
+        return 'Rapproché avec plusieurs grants Microsoft StockExport candidats partageant la même classification fiscale.';
+      case 'nq_via_withholding':
+        return 'Reclassé en plan non qualifié grâce à la retenue d\u2019actions pour impôt observée sur l\u2019export Microsoft (signature d\u2019un Stock Award).';
+      case 'manual':
+        return 'Choix manuel via le menu déroulant sur cette ligne.';
+      case 'bulk_qualify':
+        return 'Choix appliqué via le panneau de qualification en lot.';
+      case undefined:
+        return 'Origine et régime non documentés (importation antérieure à la traçabilité, ou source inconnue).';
+    }
+  })();
+  if (awardType && reason && reason.startsWith('reconciled')) {
+    return `${base}\nPlan Microsoft : ${awardType}.`;
+  }
+  if (awardType && reason === 'nq_via_withholding') {
+    return `${base}\nPlan Microsoft : ${awardType}.`;
+  }
+  return base;
+}
+
+/**
+ * Short tag rendered just under the origin badge so the user immediately
+ * sees a meaningful classification has happened (rapprochement StockExport,
+ * reclassement NQ, choix manuel...). Returns `null` when no compact label
+ * is worth showing (broker defaults).
+ */
+export function qualificationReasonShort(
+  reason: QualificationReason | undefined,
+  awardType?: string,
+): string | null {
+  switch (reason) {
+    case 'reconciled_unique':
+    case 'reconciled_by_quantity':
+    case 'reconciled_by_agreement':
+      return awardType ? `via StockExport · ${awardType}` : 'via StockExport';
+    case 'nq_via_withholding':
+      return awardType ? `Reclassé NQ · ${awardType}` : 'Reclassé NQ';
+    case 'manual':
+      return 'Manuel';
+    case 'bulk_qualify':
+      return 'En lot';
+    default:
+      return null;
+  }
+}
+
+/**
+ * True when a lot is marked as a reinvested dividend (DRIP) but carries a
+ * qualified plan type — fiscally inconsistent (a DRIP cannot bénéficier of
+ * the AGA Macron / pré-Macron favorable regime). Pure check; surfaced as a
+ * UI warning by the lot tables.
+ */
+export function isDripQualifiedInconsistent(lot: {
+  isReinvestedDividend?: boolean;
+  planType: string;
+}): boolean {
+  if (!lot.isReinvestedDividend) return false;
+  return lot.planType === 'qualified_macron' || lot.planType === 'qualified_pre_macron';
 }
 
 export function formatEUR(value: number): string {

@@ -8,7 +8,7 @@ import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight, Arr
 import { Treemap, ResponsiveContainer } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
-import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
 import { UnvestedView } from './UnvestedView';
 import { DividendsView } from './DividendsView';
@@ -16,7 +16,7 @@ import { BrokerLogo } from './BrokerLogo';
 import { Dialog, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
-import { countEligible, type BulkQualifyChoice } from '../lib/bulk-qualify';
+import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
 
 interface PortfolioProps {
   lots: StockLot[];
@@ -25,7 +25,7 @@ interface PortfolioProps {
   dividends?: DividendEvent[];
   cashInterest?: CashInterestEvent[];
   /** Optional: opens a bulk-qualify panel when there are non-reconciled lots. */
-  onBulkQualify?: (choice: BulkQualifyChoice) => void;
+  onBulkQualify?: (choice: BulkQualifyChoice, options: BulkQualifyOptions) => void;
   /** Whether the user has imported a StockExport file — drives the wording of the banner. */
   hasGrants?: boolean;
 }
@@ -191,7 +191,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const handlePlanTypeChange = (lotId: string, planType: string) => {
     const updated = lots.map((l) => {
       if (l.id === lotId && l.origin === 'DO') {
-        const newLot = { ...l, planType: planType as StockLot['planType'] };
+        const newLot: StockLot = { ...l, planType: planType as StockLot['planType'], qualificationReason: 'manual' };
         // Persist in localStorage
         const overrides = JSON.parse(localStorage.getItem('planTypeOverrides') || '{}');
         overrides[lotId] = planType;
@@ -207,6 +207,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const hasUsdImport = lots.some((l) => l.importCurrency === 'USD');
   const hasEsppLots = lots.some((l) => l.origin === 'SP');
   const totalEligibleForBulk = countEligible(lots);
+  const esppEligibleForBulk = countEligible(lots, { includeEspp: true }) - totalEligibleForBulk;
   const [bulkOpen, setBulkOpen] = React.useState(false);
 
   const isFiltered = filterOrigin !== 'all' || filterHolding !== 'all' || filterBroker !== 'all';
@@ -371,12 +372,13 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                 </div>
               </Alert>
             )}
-            {onBulkQualify && bulkOpen && totalEligibleForBulk > 0 && (
+            {onBulkQualify && bulkOpen && (totalEligibleForBulk > 0 || esppEligibleForBulk > 0) && (
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                 <BulkQualifyPanel
                   eligibleCount={totalEligibleForBulk}
-                  onApply={(choice) => {
-                    onBulkQualify(choice);
+                  esppEligibleCount={esppEligibleForBulk}
+                  onApply={(choice, options) => {
+                    onBulkQualify(choice, options);
                     setBulkOpen(false);
                   }}
                   compact
@@ -654,9 +656,43 @@ function PortfolioTableAndCards({
                         </span>
                       </td>
                       <td className="px-2.5 py-2 text-center">
-                        <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
-                          {originLabel(lot.origin)}
-                        </Badge>
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <div className="inline-flex items-center gap-1">
+                          <Badge
+                            variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}
+                            title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                          >
+                            {originLabel(lot.origin)}
+                          </Badge>
+                          {lot.isReinvestedDividend && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-normal"
+                              title="Actions issues d'un dividende réinvesti (quantité fractionnaire)"
+                            >
+                              DRIP
+                            </Badge>
+                          )}
+                          {isDripQualifiedInconsistent(lot) && (
+                            <span
+                              role="img"
+                              aria-label="Incohérence : un dividende réinvesti ne peut pas bénéficier d'un régime qualifié"
+                              title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français. Reclassez ce lot en non qualifié."
+                              className="text-amber-600"
+                            >
+                              ⚠
+                            </span>
+                          )}
+                          </div>
+                          {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                            <span
+                              className="text-[10px] leading-tight text-gray-500 italic max-w-[160px] truncate"
+                              title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                            >
+                              {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-2.5 py-2 text-center">
                         {lot.origin === 'DO' ? (
@@ -748,9 +784,37 @@ function MobileLotCard({
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">
-              <Badge variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}>
-                {originLabel(lot.origin)}
-              </Badge>
+              <div className="flex items-center gap-1">
+                <Badge
+                  variant={lot.origin === 'SP' ? 'secondary' : lot.origin === 'FM' ? 'success' : 'default'}
+                  title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                >
+                  {originLabel(lot.origin)}
+                </Badge>
+                {lot.isReinvestedDividend && (
+                  <Badge variant="outline" className="text-[10px] font-normal" title="Dividende réinvesti">
+                    DRIP
+                  </Badge>
+                )}
+                {isDripQualifiedInconsistent(lot) && (
+                  <span
+                    role="img"
+                    aria-label="Incohérence DRIP / qualifié"
+                    title="Incohérence : un dividende réinvesti ne peut pas bénéficier du régime qualifié français."
+                    className="text-amber-600"
+                  >
+                    ⚠
+                  </span>
+                )}
+              </div>
+              {qualificationReasonShort(lot.qualificationReason, lot.awardType) && (
+                <span
+                  className="text-[10px] leading-tight text-gray-500 italic text-right max-w-[180px] truncate"
+                  title={qualificationReasonLabel(lot.qualificationReason, lot.awardType)}
+                >
+                  {qualificationReasonShort(lot.qualificationReason, lot.awardType)}
+                </span>
+              )}
               {hasMultipleBrokers && (
                 <BrokerLogo broker={lot.broker} className="h-5" />
               )}
