@@ -382,6 +382,103 @@ describe('runSimulation', () => {
     const result = runSimulation(makeSimulation(entries));
     expect(result.effectiveTaxRate).toBe(0);
   });
+
+  it('uses the per-lot saleDate (not today) to assess the holding-period abatement', () => {
+    // Régression: la durée de détention pour l'abattement durée de détention
+    // (titres pré-2018, option barème) doit être appréciée entre la date
+    // d'acquisition et la date de cession EFFECTIVE du lot, pas la date du
+    // jour (notice 2074-NOT, cadre 11).
+    //
+    // Lot acquis le 1er mars 2010, vendu le 1er juin 2017 (≈ 7,25 ans de
+    // détention) → abattement 50 % (≥ 2 ans, < 8 ans).
+    // Sans correction, l'app calculerait la durée jusqu'à `new Date()`
+    // (≈ 16 ans en 2026) et appliquerait 65 % à tort.
+    const lot = makeLot({
+      origin: 'SP',
+      planType: 'non_qualified',
+      acquisitionDate: new Date(2010, 2, 1),
+      costBasisPerShare: 100,
+      esppFmvPerShare: 100,
+    });
+    const entry: SaleLotEntry = {
+      lot,
+      quantitySold: 10,
+      salePricePerShare: 200,
+      saleDate: new Date(2017, 5, 1),
+    };
+    const sim = makeSimulation([entry], { taxMode: 'bareme', priorLosses: 0 });
+    const result = runSimulation(sim);
+    // PV brute = 10 × (200 - 100) = 1000 €. Abattement attendu = 50 % = 500 €.
+    expect(result.capitalGainTax.holdingAbatement).toBeCloseTo(500, 2);
+  });
+
+  it('applies the 65 % abatement only when the per-lot saleDate is ≥ 8 years after acquisition', () => {
+    const lot = makeLot({
+      origin: 'SP',
+      planType: 'non_qualified',
+      acquisitionDate: new Date(2010, 2, 1),
+      costBasisPerShare: 100,
+      esppFmvPerShare: 100,
+    });
+    const entry: SaleLotEntry = {
+      lot,
+      quantitySold: 10,
+      salePricePerShare: 200,
+      saleDate: new Date(2020, 5, 1), // ≈ 10,25 ans de détention
+    };
+    const sim = makeSimulation([entry], { taxMode: 'bareme', priorLosses: 0 });
+    const result = runSimulation(sim);
+    // PV brute = 1000 €. Abattement attendu = 65 % = 650 €.
+    expect(result.capitalGainTax.holdingAbatement).toBeCloseTo(650, 2);
+  });
+
+  it('imputes year MV / prior losses on non-eligible PV first to maximise the holding-period abatement', () => {
+    // Cas mixte : 1 lot pré-2018 (PV 10k, taux 50 %) + 1 lot post-2018
+    // (PV 5k, pas d'abattement) − 3 000 € MV antérieures.
+    // Avant la refactorisation : abattement calculé sur PV brute = 5 000 €
+    // mais cappé à netGain = (10k + 5k − 3k) = 12k → 5 000 € (résultat correct
+    // ici par hasard car netGain ≥ abattement brut).
+    // Avec MV antérieures plus élevées (ex. 8k), l'ancien code laissait
+    // l'abattement à 5k alors que la notice 2074-NOT cadre 11 autorise
+    // l'imputation prioritaire sur les PV non éligibles.
+    const lotPre = makeLot({
+      id: 'pre-2018',
+      origin: 'SP',
+      planType: 'non_qualified',
+      acquisitionDate: new Date(2010, 0, 1),
+      costBasisPerShare: 100,
+      esppFmvPerShare: 100,
+    });
+    const lotPost = makeLot({
+      id: 'post-2018',
+      origin: 'SP',
+      planType: 'non_qualified',
+      acquisitionDate: new Date(2020, 0, 1),
+      costBasisPerShare: 100,
+      esppFmvPerShare: 100,
+    });
+    const entries: SaleLotEntry[] = [
+      {
+        lot: lotPre,
+        quantitySold: 100,
+        salePricePerShare: 200,
+        saleDate: new Date(2024, 0, 1), // ≈ 14 ans → 65 %
+      },
+      {
+        lot: lotPost,
+        quantitySold: 50,
+        salePricePerShare: 200,
+        saleDate: new Date(2024, 0, 1), // 4 ans, pas d'abattement
+      },
+    ];
+    // PV pré = 10 000 (65 %), PV post = 5 000 (0 %), MV antérieures = 8 000.
+    // Imputation optimale : 5 000 sur post, 3 000 sur pré (taux 65 %)
+    // → reste 7 000 pré × 65 % = 4 550 €.
+    const sim = makeSimulation(entries, { taxMode: 'bareme', priorLosses: 8000 });
+    const result = runSimulation(sim);
+    expect(result.capitalGainTax.holdingAbatement).toBeCloseTo(4550, 2);
+    expect(result.capitalGainTax.netGain).toBeCloseTo(7000, 2); // 15000 − 8000
+  });
 });
 
 // ---------- rankLotsForSale ----------

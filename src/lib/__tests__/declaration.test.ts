@@ -246,13 +246,13 @@ describe('declaration anti-regression guards', () => {
     expect(text).toMatch(/durée de détention/i);
   });
 
-  it('mentions cadre 12 of 2074 for 10-year loss carry-forward when 3VH > 0', () => {
+  it('mentions cadre 11 of 2074 for 10-year loss carry-forward when 3VH > 0', () => {
     const lossResult = makeResult({
       capitalGainTax: { ...result.capitalGainTax, netGain: 0, netLoss: 2500 },
     });
     const decl = generateDeclaration(lossResult, [entry], 2025);
     const text = formatDeclarationText(decl);
-    expect(text).toMatch(/cadre 12/);
+    expect(text).toMatch(/cadre 11/);
     expect(text).toMatch(/2025/); // fiscal year line
     expect(text).toMatch(/reportable/i);
   });

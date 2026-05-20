@@ -18,7 +18,11 @@ import {
   calculateAcquisitionGainTax,
   macronAbatementRateFromHoldingYears,
 } from './acquisition-tax';
-import { calculateCapitalGainTax } from './capital-gain-tax';
+import {
+  calculateCapitalGainTax,
+  allocateHoldingAbatement,
+  type LotAbatementContext,
+} from './capital-gain-tax';
 
 // Re-export sub-modules for backward compatibility
 export { calculateAcquisitionGainTax } from './acquisition-tax';
@@ -201,18 +205,32 @@ export function runSimulation(simulation: SaleSimulation): TaxSimulationResult {
   // FQ below300k carries no abatement, so its full value is taxable income.
   const acqTaxableIncome = macronTaxableContribution + fqTax.below300k;
 
-  // Compute holding abatement for pre-2018 lots (applies only in barème mode)
-  const saleDate = new Date();
+  // Holding-period abatement (pre-2018 lots, barème mode).
+  // Notice 2074-NOT cadre 11 : l'abattement s'applique sur le solde des PV
+  // APRÈS imputation des MV de l'année et des MV antérieures, lot par lot,
+  // avec choix d'imputation favorable au contribuable. La logique détaillée
+  // est dans `allocateHoldingAbatement`.
   let totalHoldingAbatement = 0;
   if (safeSimulation.taxMode === 'bareme') {
-    for (let i = 0; i < safeSimulation.lots.length; i++) {
-      const entry = safeSimulation.lots[i];
-      const lotResult = lotResults[i];
-      if (lotResult.capitalGain > 0 && entry.lot.acquisitionDate.getFullYear() < 2018) {
-        const rate = getHoldingAbatementRate(entry.lot.acquisitionDate, saleDate);
-        totalHoldingAbatement += lotResult.capitalGain * rate;
+    const lotAbatementContext: LotAbatementContext[] = safeSimulation.lots.map(
+      (entry, i) => {
+        const lotResult = lotResults[i];
+        const pv = lotResult.capitalGain;
+        // Lot non éligible à abattement → rate = 0 (sera prioritairement
+        // utilisé pour absorber les MV).
+        if (pv <= 0) return { pv, rate: 0 };
+        if (entry.lot.acquisitionDate.getFullYear() >= 2018) {
+          return { pv, rate: 0 };
+        }
+        const lotSaleDate = entry.saleDate ?? new Date();
+        const rate = getHoldingAbatementRate(entry.lot.acquisitionDate, lotSaleDate);
+        return { pv, rate };
       }
-    }
+    );
+    totalHoldingAbatement = allocateHoldingAbatement(
+      lotAbatementContext,
+      safeSimulation.priorLosses
+    );
   }
 
   const capitalGainTax = calculateCapitalGainTax(

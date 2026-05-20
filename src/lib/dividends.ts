@@ -76,18 +76,31 @@ export function groupDividendsByYear(events: DividendEventEur[]): DividendYearSu
 /**
  * Cases de la déclaration française pour les dividendes de l'année.
  *
- * Codes officiels — cf. `src/lib/tax-forms.ts` (FORM_2042_DIVIDENDS) et KPMG Avocats
- * « Obligations fiscales Microsoft » (mai 2026, slides 38–44).
+ * Codes officiels — cf. `src/lib/tax-forms.ts` (FORM_2042_DIVIDENDS), notice 2047
+ * (revenus de source étrangère, p. 3 et 5) et KPMG Avocats « Obligations fiscales
+ * Microsoft » (mai 2026, slides 38–44).
  *
  *   2DC = montant brut des dividendes (avant retenue à la source US).
  *   2CG = SI PFU → même montant que 2DC (ces revenus ont déjà supporté les PS via PFNL).
  *   2BH = SI option barème (case 2OP) → même montant que 2DC.
  *         ⚠️ 2BH et 2CG sont mutuellement exclusifs : on ne renseigne que l'un des deux.
- *   2AB = crédit d'impôt sur valeurs étrangères (= retenue US, 15 %).
+ *   2AB = crédit d'impôt sur valeurs étrangères. ⚠️ Réservé aux revenus
+ *         **encaissés en France** via un dépositaire français qui a calculé
+ *         le crédit (notice 2047, p. 3). Pour des dividendes encaissés à
+ *         l'étranger (Fidelity US, Morgan Stanley US), on passe par la 2047
+ *         et le crédit est porté en **8VL** : laisser 2AB à 0 pour éviter
+ *         la double imputation du crédit d'impôt.
  *   2CK = PFNL trimestriel déjà versé via formulaires 2778-DIV (s'impute sur l'IR).
  *         0 si l'utilisateur a bénéficié de la dispense (RFR N-2 < 50k€ / 75k€).
- *   8VL = impôt payé à l'étranger sur ces revenus (= 2AB, déclaré aussi sur la 2042).
- *   8PL = revenus nets de source étrangère ouvrant droit au crédit d'impôt.
+ *   8VL = impôt payé à l'étranger ouvrant droit à crédit d'impôt, **plafonné
+ *         à 15 % du montant brut** (taux conventionnel France–USA, notice 2047
+ *         p. 5). Si le broker a retenu davantage (ex. W-8BEN non transmis →
+ *         30 %), seuls 15 % sont récupérables côté français.
+ *   8PL = revenus nets imposables étrangers **après abattement éventuel mais
+ *         SANS déduction de l'impôt étranger** (libellé officiel cadre 2047).
+ *         → PFU : 8PL = brut (pas d'abattement).
+ *         → Barème : 8PL = brut × 60 % (abattement 40 % art. 158-3-2° CGI).
+ *         ⚠️ NE PAS soustraire la retenue à la source US.
  */
 export interface DividendDeclarationLines {
   year: number;
@@ -124,17 +137,41 @@ export function buildDeclarationLines(
   const pfnl = round2(options.pfnlAlreadyPaidEur ?? 0);
   const gross = summary.grossEur;
   const tax = summary.taxWithheldEur;
-  const net = summary.netEur;
+  // Plafond conventionnel France–USA : crédit d'impôt limité à 15 % du brut
+  // (notice 2047 p. 5, art. 24 §1 de la convention fiscale du 31/08/1994).
+  // Si le broker a retenu plus (W-8BEN non transmis → 30 %), seul 15 %
+  // est récupérable côté français.
+  const FRANCE_US_DIVIDEND_CREDIT_CAP = 0.15;
+  const creditCap = round2(gross * FRANCE_US_DIVIDEND_CREDIT_CAP);
+  const cappedCredit = Math.min(tax, creditCap);
+  // 8PL — libellé officiel DGFiP (cadre 2047 « Revenus de source étrangère
+  // ouvrant droit à un crédit d'impôt », ligne « revenus de capitaux mobiliers
+  // et plus-values ») : « revenus nets imposables étrangers APRÈS ABATTEMENT
+  // éventuel MAIS SANS DÉDUCTION de l'impôt étranger ».
+  //   - En PFU (par défaut) : aucun abattement → 8PL = brut.
+  //   - En option barème (case 2OP cochée) : abattement 40 % de l'art.
+  //     158-3-2° CGI s'applique (société conventionnée soumise à un impôt
+  //     équivalent à l'IS) → 8PL = 60 % × brut.
+  // ⚠️ NE PAS confondre avec le bloc « Revenus autres que valeurs mobilières »
+  // (8VM/8WM/8UM/8PM) qui a un libellé proche mais distinct.
+  const DIVIDEND_BAREME_ABATEMENT = 0.4;
+  const box8PL = taxMode === 'bareme'
+    ? round2(gross * (1 - DIVIDEND_BAREME_ABATEMENT))
+    : gross;
   return {
     year: summary.year,
     taxMode,
     box2DC: gross,
     box2CG: taxMode === 'pfu' ? gross : 0,
     box2BH: taxMode === 'bareme' ? gross : 0,
-    box2AB: tax,
+    // 2AB est réservé aux dividendes encaissés en France via un dépositaire
+    // français. Pour Fidelity US / Morgan Stanley US, le crédit est déclaré
+    // via la 2047 → case 8VL. Renseigner les deux conduirait à imputer
+    // deux fois le crédit d'impôt.
+    box2AB: 0,
     box2CK: pfnl,
-    box8VL: tax,
-    box8PL: net,
+    box8VL: cappedCredit,
+    box8PL,
   };
 }
 

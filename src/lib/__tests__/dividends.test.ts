@@ -66,18 +66,25 @@ describe('buildDeclarationLines', () => {
       box2DC: 270,
       box2CG: 270,
       box2BH: 0,
-      box2AB: 40.5,
+      // 2AB = 0 : pour les dividendes encaissés à l'étranger (Fidelity US /
+      // Morgan Stanley US), le crédit d'impôt est porté en 8VL via la 2047,
+      // jamais en 2AB. Voir notice 2047 p. 3 et 5.
+      box2AB: 0,
       box2CK: 0,
+      // 40,50 € = retenue effective ; plafond conventionnel 15 % × 270 = 40,50 €.
       box8VL: 40.5,
-      box8PL: 229.5,
+      // 8PL = brut (PFU = pas d'abattement), SANS déduction de l'impôt étranger.
+      box8PL: 270,
     });
   });
 
-  it('barème option: 2BH filled, 2CG = 0', () => {
+  it('barème option: 2BH filled, 2CG = 0, 8PL = brut × 60 %', () => {
     const lines = buildDeclarationLines(summary, { taxMode: 'bareme' });
     expect(lines.taxMode).toBe('bareme');
     expect(lines.box2BH).toBe(270);
     expect(lines.box2CG).toBe(0);
+    // Abattement 40 % art. 158-3-2° CGI → 8PL = 270 × 0,60 = 162 €.
+    expect(lines.box8PL).toBe(162);
   });
 
   it('PFNL already paid is reported on 2CK only when provided', () => {
@@ -85,11 +92,41 @@ describe('buildDeclarationLines', () => {
     expect(lines.box2CK).toBe(34.56);
   });
 
-  it('2AB and 8VL both reflect the foreign withholding (US 15 %)', () => {
+  it('2AB is always 0 (foreign-broker path uses 8VL via 2047)', () => {
+    // Régression: ne JAMAIS remplir 2AB et 8VL avec le même montant — ce
+    // serait imputer deux fois le crédit d'impôt étranger.
     const lines = buildDeclarationLines(summary);
-    expect(lines.box2AB).toBe(summary.taxWithheldEur);
-    expect(lines.box8VL).toBe(summary.taxWithheldEur);
-    expect(lines.box8PL).toBe(summary.netEur);
+    expect(lines.box2AB).toBe(0);
+    expect(lines.box8VL).toBeGreaterThan(0);
+  });
+
+  it('8PL is the GROSS dividend, NOT net of foreign tax (notice 2047)', () => {
+    // Régression: l'app a longtemps reporté `netEur` (= brut − retenue) en 8PL,
+    // mais la notice 2047 dit explicitement « sans déduction de l'impôt étranger ».
+    // En PFU : 8PL = brut.
+    const lines = buildDeclarationLines(summary, { taxMode: 'pfu' });
+    expect(lines.box8PL).toBe(summary.grossEur);
+    expect(lines.box8PL).not.toBe(summary.netEur);
+  });
+
+  it('8VL is capped at 15 % of the gross dividend (France–USA treaty)', () => {
+    // Cas pathologique : broker a retenu 30 % (W-8BEN non transmis).
+    const overWithheldSummary = {
+      ...summary,
+      taxWithheldEur: 81, // 30 % × 270
+    };
+    const lines = buildDeclarationLines(overWithheldSummary);
+    // Plafond = 15 % × 270 = 40,50 €.
+    expect(lines.box8VL).toBe(40.5);
+  });
+
+  it('8VL equals the actual withholding when it is below the 15 % cap', () => {
+    const underWithheldSummary = {
+      ...summary,
+      taxWithheldEur: 27, // 10 % × 270, sous le plafond
+    };
+    const lines = buildDeclarationLines(underWithheldSummary);
+    expect(lines.box8VL).toBe(27);
   });
 });
 
