@@ -167,15 +167,19 @@ export function formatDeclarationText(data: DeclarationData): string {
     text += `- La CSG déductible de ${fmt(data.deductibleCSGNextYear)} sera à reporter en case 6DE de la déclaration N+1.\n`;
   if (data.case3VH > 0)
     text += `- La moins-value de ${fmt(data.case3VH)} est reportable pendant 10 ans.\n`;
-  // Optimisation KPMG slide 48 : pour les Stock Awards qualifiés (AGA Macron),
-  // une MV de cession peut être impuée sur le gain d'acquisition afférent aux
-  // MÊMES actions, au lieu d'être reportée 10 ans. C'est une option du contribuable.
+  // Imputation MV → gain d'acquisition AGA : l'app le fait DÉJÀ automatiquement
+  // au niveau du lot (art. 80 quaterdecies I bis CGI, « mêmes actions »,
+  // KPMG slides 24, 47-48). La MV restante dans 3VH provient par construction
+  // de lots non qualifiés (NQ/SP) et ne peut PAS être imputée sur 1TZ/1TT.
+  // On affiche une note d'information pour éviter une double imputation manuelle.
   if (data.case3VH > 0 && (data.case1TZ > 0 || data.case1TT > 0)) {
-    text += `\n⚠️ OPTIMISATION POSSIBLE (AGA qualifiées) :\n`;
-    text += `  Pour les Stock Awards qualifiés, la moins-value de cession peut être\n`;
-    text += `  IMPUTÉE sur le gain d'acquisition afférent aux MÊMES actions (au lieu d'être\n`;
-    text += `  reportée 10 ans). À évaluer manuellement : impacter le 1TZ à la baisse et\n`;
-    text += `  retirer le 3VH si vous n'avez pas d'autres PV à venir.\n`;
+    text += `\nℹ️ INFO (AGA qualifiées + MV résiduelle) :\n`;
+    text += `  La moins-value sur les actions AGA qualifiées a déjà été imputée\n`;
+    text += `  automatiquement sur le gain d'acquisition des MÊMES actions (art. 80\n`;
+    text += `  quaterdecies I bis CGI). La MV restante de ${fmt(data.case3VH)} en case 3VH\n`;
+    text += `  provient d'autres lots (non qualifiés / ESPP) et n'est PAS imputable sur\n`;
+    text += `  1TZ/1TT (jurisprudence « mêmes actions »). Elle se reporte 10 ans sur\n`;
+    text += `  vos futures PV de cession.\n`;
     text += `  Référence : KPMG « Obligations fiscales Microsoft » (mai 2026, slides 24, 47-48).\n`;
   }
 

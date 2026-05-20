@@ -479,6 +479,78 @@ describe('runSimulation', () => {
     expect(result.capitalGainTax.holdingAbatement).toBeCloseTo(4550, 2);
     expect(result.capitalGainTax.netGain).toBeCloseTo(7000, 2); // 15000 − 8000
   });
+
+  // ---------- Imputation MV → gain d'acquisition AGA (art. 80 quaterdecies CGI) ----------
+  // Mécanisme intra-lot automatique : sur un même lot AGA, la MV de cession
+  // (price < cost basis) absorbe le gain d'acquisition. Vérifications end-to-end.
+  it('AGA loss: the MV is absorbed by the acquisition gain of the SAME lot (intra-lot)', () => {
+    // Lot AGA Macron cédé à perte : raw acq = 2500, raw cap = -500.
+    // Net acq doit être 2000 ; net cap doit être 0.
+    const lot = makeLot({
+      origin: 'FM',
+      planType: 'qualified_macron',
+      costBasisPerShare: 250,
+      acquisitionDate: new Date(2020, 0, 1),
+    });
+    const sim = makeSimulation([
+      { lot, quantitySold: 10, salePricePerShare: 200, saleDate: new Date(2024, 0, 1) },
+    ]);
+    const result = runSimulation(sim);
+    expect(result.totalAcquisitionGain).toBe(2000);
+    expect(result.totalCapitalGain).toBe(0);
+    // Donc pas de MV reportable côté PV mobilières.
+    expect(result.capitalGainTax.netLoss).toBe(0);
+  });
+
+  it('AGA total loss: both acquisition gain and capital gain net to 0', () => {
+    const lot = makeLot({
+      origin: 'FM',
+      planType: 'qualified_macron',
+      costBasisPerShare: 250,
+      acquisitionDate: new Date(2020, 0, 1),
+    });
+    const sim = makeSimulation([
+      { lot, quantitySold: 10, salePricePerShare: 0, saleDate: new Date(2024, 0, 1) },
+    ]);
+    const result = runSimulation(sim);
+    expect(result.totalAcquisitionGain).toBe(0);
+    expect(result.totalCapitalGain).toBe(0);
+    expect(result.capitalGainTax.netLoss).toBe(0);
+    expect(result.acquisitionGainTax.total).toBe(0);
+  });
+
+  it('AGA + NQ mixed: NQ loss is NOT absorbed by AGA acquisition gain (different shares)', () => {
+    // Jurisprudence : l'imputation MV → gain d'acquisition est strictement
+    // limitée aux MÊMES actions. Une MV sur un lot non qualifié (DO non_qualified)
+    // reste en MV de cession et NE PEUT PAS réduire le gain d'acquisition d'un
+    // autre lot AGA Macron.
+    const agaLot = makeLot({
+      id: 'aga',
+      origin: 'FM',
+      planType: 'qualified_macron',
+      costBasisPerShare: 200,
+      acquisitionDate: new Date(2020, 0, 1),
+    });
+    const nqLot = makeLot({
+      id: 'nq',
+      origin: 'DO',
+      planType: 'non_qualified',
+      costBasisPerShare: 400,
+      acquisitionDate: new Date(2020, 0, 1),
+    });
+    const sim = makeSimulation([
+      // AGA en PV : raw acq = 2000, raw cap = +1000 → net acq = 2000, net cap = 1000
+      { lot: agaLot, quantitySold: 10, salePricePerShare: 300, saleDate: new Date(2024, 0, 1) },
+      // NQ en MV : cap = 10*(300-400) = -1000 (pas d'acq gain)
+      { lot: nqLot, quantitySold: 10, salePricePerShare: 300, saleDate: new Date(2024, 0, 1) },
+    ]);
+    const result = runSimulation(sim);
+    // Gain d'acquisition AGA INTACT (pas absorbé par la MV NQ)
+    expect(result.totalAcquisitionGain).toBe(2000);
+    // PV de cession nette : +1000 (AGA) - 1000 (NQ) = 0
+    expect(result.totalCapitalGain).toBe(0);
+    expect(result.capitalGainTax.netLoss).toBe(0);
+  });
 });
 
 // ---------- rankLotsForSale ----------

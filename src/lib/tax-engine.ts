@@ -74,6 +74,24 @@ export function calculateLotTax(entry: SaleLotEntry): LotTaxResult {
     let netAcquisitionGain = rawAcquisitionGain;
     let netCapitalGain = rawCapitalGain;
 
+    // Imputation MV de cession → gain d'acquisition (« mêmes actions »).
+    // Pour les Stock Awards qualifiés (AGA Macron / pré-Macron / DO
+    // qualifié), lorsque le prix de cession est inférieur à la valeur
+    // d'acquisition, la moins-value de cession s'impute sur le gain
+    // d'acquisition AFFÉRENT AUX MÊMES ACTIONS — art. 80 quaterdecies I bis
+    // CGI, confirmé par CE 5 février 2014 et BOI-RSA-ES-20-20-20 §200,
+    // synthétisé KPMG « Obligations fiscales Microsoft » slides 24, 47-48.
+    //
+    // Cette imputation est :
+    //   - obligatoire et automatique (pas une option),
+    //   - limitée au gain d'acquisition du MÊME lot (« mêmes actions »),
+    //   - donc la MV d'un lot AGA ne peut PAS être reportée 10 ans si elle
+    //     est entièrement absorbée par son propre gain d'acquisition.
+    //
+    // Conséquence : la MV résiduelle déclarée en case 3VH ne contient
+    // jamais de MV provenant d'un lot AGA (toujours absorbée) et provient
+    // uniquement des lots non qualifiés (NQ / SP). Elle n'est donc pas
+    // imputable sur 1TZ/1TT (autres actions).
     if (rawCapitalGain < 0) {
       netAcquisitionGain = Math.max(0, rawAcquisitionGain + rawCapitalGain);
       netCapitalGain = Math.min(0, rawCapitalGain + rawAcquisitionGain);
