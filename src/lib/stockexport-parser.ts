@@ -114,7 +114,7 @@ function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[], txRows: SheetR
   //   - whether ANY vest withheld shares for tax (⇒ non-qualified Stock Award)
   interface TxAggregate {
     nq: boolean;
-    byDay: Map<string, { netShares: number; sharesForTaxes: number }>;
+    byDay: Map<string, { date: Date; netShares: number; sharesForTaxes: number }>;
   }
   const txByAward = new Map<string, TxAggregate>();
   for (const row of txRows) {
@@ -132,10 +132,11 @@ function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[], txRows: SheetR
     const agg = txByAward.get(awardId) ?? { nq: false, byDay: new Map() };
     if (sft > 0) agg.nq = true;
     const key = dayKey(date);
-    const prev = agg.byDay.get(key) ?? { netShares: 0, sharesForTaxes: 0 };
+    const prev = agg.byDay.get(key);
     agg.byDay.set(key, {
-      netShares: prev.netShares + net,
-      sharesForTaxes: prev.sharesForTaxes + sft,
+      date: prev?.date ?? date,
+      netShares: (prev?.netShares ?? 0) + net,
+      sharesForTaxes: (prev?.sharesForTaxes ?? 0) + sft,
     });
     txByAward.set(awardId, agg);
   }
@@ -195,8 +196,25 @@ function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[], txRows: SheetR
 
     const vestSchedule = (vestByAward.get(awardIdRaw) ?? []).slice().sort((a, b) => a.date.getTime() - b.date.getTime());
 
+    // Build the list of actual deposit events from the Transactions sheet:
+    // one entry per (awardId, transaction day). The *transaction date* is what
+    // the broker (Fidelity / Morgan Stanley) reports as acquisition date, so
+    // reconciliation prefers this list over the planned `vestSchedule` whose
+    // dates can lag by a few business days.
+    const txAgg = txByAward.get(awardIdRaw);
+    const transactions: VestEvent[] = txAgg
+      ? Array.from(txAgg.byDay.values())
+          .map((agg) => ({
+            date: agg.date,
+            shares: agg.netShares + agg.sharesForTaxes,
+            netShares: agg.netShares,
+            sharesForTaxes: agg.sharesForTaxes,
+          }))
+          .sort((a, b) => a.date.getTime() - b.date.getTime())
+      : [];
+
     let { origin, planType } = classifyAward(awardType, awardDate);
-    const nqDetected = txByAward.get(awardIdRaw)?.nq === true;
+    const nqDetected = txAgg?.nq === true;
 
     // The Transactions sheet is authoritative: a vest that withheld shares for
     // tax is unambiguously a Stock Award US (non-qualified). Override any
@@ -230,6 +248,7 @@ function buildGrants(awardRows: SheetRow[], vestRows: SheetRow[], txRows: SheetR
       totalUnvested,
     };
     if (nqDetected) grant.nqDetected = true;
+    if (transactions.length > 0) grant.transactions = transactions;
     grants.push(grant);
 
     // Stash the plaintext ID on a side channel for the async hash pass.
