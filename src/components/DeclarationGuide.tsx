@@ -277,23 +277,25 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
               </ul>
             </div>
 
-            {/* Optimisation possible : MV qualifiée imputable sur gain d'acquisition (KPMG slide 48) */}
+            {/* Info : MV AGA déjà auto-imputée, MV résiduelle 3VH non imputable sur 1TZ */}
             {declaration.case3VH > 0 && (declaration.case1TZ > 0 || declaration.case1TT > 0) && (
-              <div className="p-4 bg-orange-50 border border-orange-300 rounded-lg">
-                <h4 className="font-semibold text-orange-900 mb-2">⚠️ Optimisation possible (AGA qualifiées)</h4>
-                <p className="text-sm text-orange-800">
+              <div className="p-4 bg-blue-50 border border-blue-300 rounded-lg">
+                <h4 className="font-semibold text-blue-900 mb-2">ℹ️ MV résiduelle et AGA qualifiées</h4>
+                <p className="text-sm text-blue-800">
                   Vous avez à la fois un <strong>gain d'acquisition AGA</strong> ({formatEUR(declaration.case1TZ + declaration.case1TT)})
-                  et une <strong>moins-value de cession</strong> ({formatEUR(declaration.case3VH)}).
+                  et une <strong>moins-value de cession résiduelle</strong> ({formatEUR(declaration.case3VH)}).
                 </p>
-                <p className="text-sm text-orange-800 mt-2">
-                  Pour les Stock Awards qualifiés, la moins-value de cession peut être
-                  <strong> imputée sur le gain d'acquisition afférent aux mêmes actions</strong>
-                  (au lieu d'être reportée 10 ans). Cela réduit immédiatement le 1TZ taxable
-                  au barème et évite un report potentiellement inutilisable.
+                <p className="text-sm text-blue-800 mt-2">
+                  L'outil a <strong>déjà imputé automatiquement</strong> les éventuelles moins-values sur
+                  les actions AGA qualifiées contre le gain d'acquisition des <em>mêmes actions</em>
+                  (art. 80 quaterdecies I bis CGI). La MV de {formatEUR(declaration.case3VH)} affichée en
+                  case <strong>3VH</strong> provient donc d'<em>autres</em> lots (non qualifiés, ESPP) et&nbsp;
+                  <strong>ne peut pas</strong> être imputée sur 1TZ/1TT — la jurisprudence limite cette
+                  imputation aux <em>mêmes actions</em>.
                 </p>
-                <p className="text-xs text-orange-700 mt-2">
-                  Cette optimisation n'est pas calculée automatiquement par l'outil. À évaluer manuellement
-                  selon vos PV à venir. Référence : KPMG « Obligations fiscales Microsoft » (mai 2026, slides 24, 47-48).
+                <p className="text-xs text-blue-700 mt-2">
+                  Cette MV reste reportable 10 ans sur vos futures plus-values de cession.
+                  Référence : KPMG « Obligations fiscales Microsoft » (mai 2026, slides 24, 47-48).
                 </p>
               </div>
             )}

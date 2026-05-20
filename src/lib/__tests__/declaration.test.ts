@@ -263,7 +263,7 @@ describe('declaration anti-regression guards', () => {
     expect(text).not.toMatch(/2074-ABT/);
   });
 
-  it('warns about MV imputable on AGA acquisition gain when both coexist (KPMG slide 48)', () => {
+  it('shows the AGA + residual MV info note when both coexist (auto-imputation already applied)', () => {
     const mixed = makeResult({
       acquisitionGainTax: {
         ...result.acquisitionGainTax,
@@ -276,11 +276,15 @@ describe('declaration anti-regression guards', () => {
     expect(decl.case1TZ).toBeGreaterThan(0);
     expect(decl.case3VH).toBeGreaterThan(0);
     const text = formatDeclarationText(decl);
-    expect(text).toMatch(/OPTIMISATION POSSIBLE/);
-    expect(text).toMatch(/imput[ée]/i);
+    expect(text).toMatch(/INFO.*AGA/i);
+    expect(text).toMatch(/déjà été imputée/i);
+    // Doit explicitement avertir que 3VH n'est PAS imputable sur 1TZ/1TT
+    expect(text).toMatch(/mêmes actions/i);
+    // Ne doit plus présenter cela comme une « optimisation » à faire manuellement.
+    expect(text).not.toMatch(/OPTIMISATION POSSIBLE/);
   });
 
-  it('does NOT show the AGA imputation warning when there is no AGA acquisition gain', () => {
+  it('does NOT show the AGA imputation info when there is no AGA acquisition gain', () => {
     const lossOnly = makeResult({
       acquisitionGainTax: { ...result.acquisitionGainTax, below300k: 0, abatement50: 0 },
       capitalGainTax: { ...result.capitalGainTax, netGain: 0, netLoss: 1_000 },
@@ -288,6 +292,7 @@ describe('declaration anti-regression guards', () => {
     const decl = generateDeclaration(lossOnly, [entry], 2025);
     const text = formatDeclarationText(decl);
     expect(text).not.toMatch(/OPTIMISATION POSSIBLE/);
+    expect(text).not.toMatch(/INFO.*AGA/i);
   });
 });
 
