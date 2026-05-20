@@ -148,7 +148,7 @@ export function formatDeclarationText(data: DeclarationData): string {
     text += `     → Compléter l'annexe 2074-ABT « Fiche de calcul de l'abattement pour durée de détention » et reporter le montant en case 3SG.\n`;
   }
   if (data.case3VH > 0) {
-    text += `\n  ⚠️ Moins-value globale de ${fmt(data.case3VH)} : à inscrire également au cadre 12 de la 2074 « Suivi de vos moins-values antérieures reportables sur 10 ans », ligne ${data.fiscalYear}.\n`;
+    text += `\n  ⚠️ Moins-value globale de ${fmt(data.case3VH)} : à inscrire également au cadre 11 de la 2074 « Suivi de vos moins-values antérieures reportables sur 10 ans » (ligne ${data.fiscalYear}, à reporter sur la ligne « moins-value subie au cours de l'année »).\n`;
   }
   text += '\n';
 
@@ -164,7 +164,7 @@ export function formatDeclarationText(data: DeclarationData): string {
   text += `💡 RAPPELS :\n`;
   text += `- Le gain d'acquisition n'est imposé que l'année de la VENTE des actions, pas au vesting.\n`;
   if (data.deductibleCSGNextYear > 0)
-    text += `- La CSG déductible de ${fmt(data.deductibleCSGNextYear)} sera à déduire sur la déclaration de l'année suivante.\n`;
+    text += `- La CSG déductible de ${fmt(data.deductibleCSGNextYear)} sera à reporter en case 6DE de la déclaration N+1.\n`;
   if (data.case3VH > 0)
     text += `- La moins-value de ${fmt(data.case3VH)} est reportable pendant 10 ans.\n`;
   // Optimisation KPMG slide 48 : pour les Stock Awards qualifiés (AGA Macron),

@@ -90,3 +90,26 @@ export const FORM_2074_CADRE_510 = {
   costBasis:      { line: '523', label: 'Prix de revient', formula: '521 + 522' },
   result:         { line: '524', label: 'Résultat (PV/MV)', formula: '518 − 523' },
 } as const satisfies Record<string, Form2074Line>;
+
+/**
+ * Régimes d'abattement HORS SCOPE de cet outil (RSU/ESPP Microsoft).
+ * Listés ici uniquement pour mémoire afin d'éviter toute confusion avec
+ * l'abattement durée de détention de droit commun (3SG) et les abattements
+ * Macron sur gain d'acquisition (1UZ / 1WZ).
+ *
+ * - **Abattement renforcé PME** (CGI 150-0 D 1 quater) : 50 % / 65 % / 85 %
+ *   selon durée de détention. Réservé aux titres de PME européennes acquis
+ *   dans les 10 ans de leur création. ⇒ Microsoft NON éligible.
+ * - **Abattement fixe dirigeant retraite** (CGI 150-0 D ter, case 3VA / 1WZ
+ *   selon contexte) : 500 000 € de PV exonérée pour le dirigeant de PME
+ *   partant à la retraite. ⇒ Hors scope salarié Microsoft.
+ * - **Abattement fixe 600 000 € jeunes agriculteurs** (LF 2025, applicable
+ *   aux cessions à compter du 01/01/2025) : variante du 150-0 D ter pour
+ *   les cessions à de jeunes agriculteurs. ⇒ Hors scope.
+ * - **Sursis d'imposition apport-cession** (CGI 150-0 B ter, case 3WI / 3WH) :
+ *   plus-values placées en report d'imposition lors d'un apport à une
+ *   holding contrôlée. ⇒ Hors scope.
+ *
+ * Réf. : BOI-RPPM-PVBMI-20-30 (abattements pour durée de détention),
+ *        BOI-RPPM-PVBMI-30 (régimes de différé d'imposition).
+ */

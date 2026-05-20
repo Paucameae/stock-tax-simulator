@@ -186,6 +186,15 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
           copied={copied === '2DC'}
           onCopy={() => copyValue('2DC', lines.box2DC)}
         />
+        {taxMode === 'bareme' && (
+          <div className="ml-12 p-2 rounded-md border border-amber-200 bg-amber-50 text-xs text-amber-900">
+            <span className="font-medium">Info :</span> en option barème, la DGFiP
+            applique automatiquement un <span className="font-semibold">abattement de 40 %</span>
+            {' '}sur 2DC (art. 158-3-2° CGI). Assiette imposable IR ≈{' '}
+            <span className="font-semibold tabular-nums">{formatEUR(lines.box2DC * 0.6)}</span>
+            {' '}(= 60 % × 2DC). Cet abattement est aussi répercuté sur 8PL ci-dessous.
+          </div>
+        )}
         {taxMode === 'pfu' ? (
           <DeclarationLine
             code={FORM_2042_DIVIDENDS.case2CG.code}
@@ -207,14 +216,6 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
           />
         )}
         <DeclarationLine
-          code={FORM_2042_DIVIDENDS.case2AB.code}
-          label="Crédit d'impôt sur valeurs étrangères (retenue US 15 %)"
-          amount={lines.box2AB}
-          note="Convention fiscale France–USA : crédit d'impôt récupérable contre l'IR français."
-          copied={copied === '2AB'}
-          onCopy={() => copyValue('2AB', lines.box2AB)}
-        />
-        <DeclarationLine
           code={FORM_2042_DIVIDENDS.case2CK.code}
           label="Prélèvement forfaitaire non libératoire déjà versé (PFNL via 2778-DIV)"
           amount={lines.box2CK}
@@ -227,15 +228,19 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
           code={FORM_2042_DIVIDENDS.case8VL.code}
           label="Impôt payé à l'étranger ouvrant droit à crédit d'impôt"
           amount={lines.box8VL}
-          note="Section 7 « Revenus de source étrangère » — même montant qu'en 2AB."
+          note="Section 7 « Revenus de source étrangère ». Plafonné à 15 % du brut (convention France–USA, notice 2047). Ne PAS remplir aussi la case 2AB pour éviter une double imputation."
           copied={copied === '8VL'}
           onCopy={() => copyValue('8VL', lines.box8VL)}
         />
         <DeclarationLine
           code={FORM_2042_DIVIDENDS.case8PL.code}
-          label="Revenus nets de source étrangère"
+          label="Revenus nets imposables étrangers (sans déduction de l'impôt étranger)"
           amount={lines.box8PL}
-          note="Montant net des dividendes (après retenue US) ouvrant droit au crédit d'impôt."
+          note={
+            taxMode === 'bareme'
+              ? "Brut × 60 % (abattement 40 % en mode barème). Ne PAS déduire la retenue US — la notice 2047 précise « sans déduction de l'impôt étranger »."
+              : "Montant brut des dividendes (mode PFU, aucun abattement). Ne PAS déduire la retenue US — la notice 2047 précise « sans déduction de l'impôt étranger »."
+          }
           copied={copied === '8PL'}
           onCopy={() => copyValue('8PL', lines.box8PL)}
         />

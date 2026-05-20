@@ -123,6 +123,13 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 À remplir avec le détail de chaque opération de cession (les numéros entre parenthèses
                 renvoient aux lignes du <strong>cadre 510</strong> du formulaire 2074).
               </p>
+              <p className="text-xs text-gray-500 mb-2">
+                <strong>Dispense possible ?</strong> Non dans votre cas : le broker (Fidelity / Morgan Stanley)
+                étant établi à l'étranger, vous devez calculer vous-même la PV/MV et déposer la 2074.
+                La dispense de 2074 prévue par la notice ne concerne que les contribuables dont l'établissement
+                payeur français a déjà calculé l'intégralité des PV/MV et qui ne demandent aucun abattement
+                durée de détention.
+              </p>
               <p className="text-xs text-gray-500 mb-3">
                 <strong>NB :</strong> sur impots.gouv.fr, la ligne <strong>521</strong> (prix d'acquisition global)
                 est celle que vous saisissez. La ligne <strong>523</strong> (prix de revient) = 521 + 522 est calculée
@@ -252,7 +259,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 <li>Le gain d'acquisition n'est imposé que l'année de la <strong>VENTE</strong> des actions, pas au vesting.</li>
                 {declaration.deductibleCSGNextYear > 0 && (
                   <li>
-                    La CSG déductible de <strong>{formatEUR(declaration.deductibleCSGNextYear)}</strong> sera à déduire sur la déclaration de l'année suivante.
+                    La CSG déductible de <strong>{formatEUR(declaration.deductibleCSGNextYear)}</strong> sera à reporter en <strong>case 6DE</strong> de la déclaration N+1.
                   </li>
                 )}
                 {declaration.case3SG > 0 && (
@@ -264,7 +271,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 {declaration.case3VH > 0 && (
                   <li>
                     La moins-value de <strong>{formatEUR(declaration.case3VH)}</strong> est reportable pendant 10 ans.
-                    À inscrire également au <strong>cadre 12 de la 2074</strong> « Suivi de vos moins-values antérieures reportables sur 10 ans », ligne {declaration.fiscalYear}.
+                    À inscrire également au <strong>cadre 11 de la 2074</strong> « Suivi de vos moins-values antérieures reportables sur 10 ans » (ligne {declaration.fiscalYear}, sur la ligne « moins-value subie au cours de l'année »).
                   </li>
                 )}
               </ul>
