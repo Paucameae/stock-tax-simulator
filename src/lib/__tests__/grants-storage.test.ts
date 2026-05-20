@@ -64,4 +64,27 @@ describe('grants persistence', () => {
     clearGrants();
     expect(loadGrants()).toEqual([]);
   });
+
+  it('round-trips transactions, netShares, sharesForTaxes and nqDetected', () => {
+    const enriched: GrantInfo = {
+      ...GRANT,
+      grantIdHash: 'enriched',
+      nqDetected: true,
+      vestSchedule: [
+        { date: new Date(2023, 7, 15), shares: 9, netShares: 6, sharesForTaxes: 3 },
+      ],
+      transactions: [
+        { date: new Date(2023, 7, 18), shares: 9, netShares: 6, sharesForTaxes: 3 },
+      ],
+    };
+    saveGrants([enriched]);
+    const [loaded] = loadGrants();
+    expect(loaded.nqDetected).toBe(true);
+    expect(loaded.vestSchedule[0].netShares).toBe(6);
+    expect(loaded.vestSchedule[0].sharesForTaxes).toBe(3);
+    expect(loaded.transactions).toHaveLength(1);
+    expect(loaded.transactions?.[0].date.toISOString()).toBe(new Date(2023, 7, 18).toISOString());
+    expect(loaded.transactions?.[0].netShares).toBe(6);
+    expect(loaded.transactions?.[0].sharesForTaxes).toBe(3);
+  });
 });

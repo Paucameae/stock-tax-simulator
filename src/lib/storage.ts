@@ -135,13 +135,24 @@ export function saveGrants(grants: GrantInfo[]): boolean {
       awardDate: g.awardDate.toISOString(),
       planType: g.planType,
       origin: g.origin,
-      vestSchedule: g.vestSchedule.map((v) => ({ date: v.date.toISOString(), shares: v.shares })),
+      vestSchedule: g.vestSchedule.map(serializeEvent),
       totalAwarded: g.totalAwarded,
       totalVested: g.totalVested,
       totalUnvested: g.totalUnvested,
+      ...(g.nqDetected ? { nqDetected: true } : {}),
+      ...(g.transactions ? { transactions: g.transactions.map(serializeEvent) } : {}),
     })),
   };
   return safeSetItem(GRANTS_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function serializeEvent(v: { date: Date; shares: number; netShares?: number; sharesForTaxes?: number }) {
+  return {
+    date: v.date.toISOString(),
+    shares: v.shares,
+    ...(v.netShares !== undefined ? { netShares: v.netShares } : {}),
+    ...(v.sharesForTaxes !== undefined ? { sharesForTaxes: v.sharesForTaxes } : {}),
+  };
 }
 
 export function loadGrants(): GrantInfo[] {
@@ -187,15 +198,13 @@ export function validateGrant(raw: unknown): GrantInfo | null {
 
   const vestRaw = Array.isArray(obj.vestSchedule) ? obj.vestSchedule : [];
   const vestSchedule = vestRaw
-    .map((v) => {
-      if (!v || typeof v !== 'object') return null;
-      const vo = v as Record<string, unknown>;
-      const date = typeof vo.date === 'string' ? new Date(vo.date) : null;
-      const shares = typeof vo.shares === 'number' ? vo.shares : NaN;
-      if (!date || isNaN(date.getTime()) || !Number.isFinite(shares) || shares <= 0) return null;
-      return { date, shares };
-    })
+    .map(parseEvent)
     .filter((v): v is NonNullable<typeof v> => v !== null);
+
+  const txRaw = Array.isArray(obj.transactions) ? obj.transactions : null;
+  const transactions = txRaw
+    ? txRaw.map(parseEvent).filter((v): v is NonNullable<typeof v> => v !== null)
+    : undefined;
 
   return {
     grantIdHash,
@@ -207,7 +216,25 @@ export function validateGrant(raw: unknown): GrantInfo | null {
     totalAwarded: isNonNegativeNumber(obj.totalAwarded) ? (obj.totalAwarded as number) : 0,
     totalVested: isNonNegativeNumber(obj.totalVested) ? (obj.totalVested as number) : 0,
     totalUnvested: isNonNegativeNumber(obj.totalUnvested) ? (obj.totalUnvested as number) : 0,
+    ...(obj.nqDetected === true ? { nqDetected: true } : {}),
+    ...(transactions && transactions.length > 0 ? { transactions } : {}),
   };
+}
+
+function parseEvent(v: unknown): { date: Date; shares: number; netShares?: number; sharesForTaxes?: number } | null {
+  if (!v || typeof v !== 'object') return null;
+  const vo = v as Record<string, unknown>;
+  const date = typeof vo.date === 'string' ? new Date(vo.date) : null;
+  const shares = typeof vo.shares === 'number' ? vo.shares : NaN;
+  if (!date || isNaN(date.getTime()) || !Number.isFinite(shares) || shares <= 0) return null;
+  const out: { date: Date; shares: number; netShares?: number; sharesForTaxes?: number } = { date, shares };
+  if (typeof vo.netShares === 'number' && Number.isFinite(vo.netShares) && vo.netShares >= 0) {
+    out.netShares = vo.netShares;
+  }
+  if (typeof vo.sharesForTaxes === 'number' && Number.isFinite(vo.sharesForTaxes) && vo.sharesForTaxes >= 0) {
+    out.sharesForTaxes = vo.sharesForTaxes;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

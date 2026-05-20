@@ -36,33 +36,63 @@ export type ReconciliationDecision =
   | { kind: 'reconciled'; grant: GrantInfo; via: 'unique' | 'by_quantity' | 'by_agreement' };
 
 /**
+ * Two-tier index used by `decideReconciliation`. Transactions carry the *real*
+ * deposit dates the broker reports, so we try them first; Vest Schedules are
+ * the planned (sometimes lagging) dates and act as a fallback for grants where
+ * the Transactions sheet was not parsed.
+ */
+export interface GrantIndex {
+  byTxDay: Map<string, GrantInfo[]>;
+  byVestDay: Map<string, GrantInfo[]>;
+}
+
+/** Which event list of a grant to read from when computing tiebreakers. */
+type EventSource = 'transactions' | 'vestSchedule';
+
+/**
  * Single source of truth for the matching logic. Given a lot's
  * (acquisitionDate, origin, quantity) and the pre-indexed grants, decides
  * which grant — if any — should be applied. Exported for the symmetry test.
+ *
+ * Matching strategy: try Transactions first (broker-aligned dates, populated
+ * net shares for quantity tiebreaker). Only if no candidate is found via the
+ * tx index do we fall back to the Vest Schedules index — that's the path used
+ * by grants imported before this file was parsed against Transactions, and by
+ * StockExport files where the Transactions sheet is missing or empty.
  */
 export function decideReconciliation(
   acquisitionDate: Date,
   origin: StockOrigin,
   quantity: number,
-  byDay: Map<string, GrantInfo[]>,
+  index: GrantIndex,
 ): ReconciliationDecision {
   // ESPP lots are self-describing (Fidelity encodes them as SP with correct metadata).
   if (origin === 'SP') return { kind: 'notApplicable' };
 
+  const viaTx = tryMatch(acquisitionDate, quantity, index.byTxDay, 'transactions');
+  if (viaTx.kind !== 'unmatched') return viaTx;
+
+  return tryMatch(acquisitionDate, quantity, index.byVestDay, 'vestSchedule');
+}
+
+function tryMatch(
+  acquisitionDate: Date,
+  quantity: number,
+  byDay: Map<string, GrantInfo[]>,
+  source: EventSource,
+): ReconciliationDecision {
   const candidates = findCandidateGrantsByDate(acquisitionDate, byDay);
   if (candidates.length === 0) return { kind: 'unmatched' };
 
-  // De-duplicate by grantIdHash (a grant could have several vest events on the same day).
+  // De-duplicate by grantIdHash (a grant could have several events on the same day).
   const uniqueGrants = Array.from(new Map(candidates.map((g) => [g.grantIdHash, g])).values());
 
   if (uniqueGrants.length === 1) {
     return { kind: 'reconciled', grant: uniqueGrants[0], via: 'unique' };
   }
 
-  // Multiple grants — first try to disambiguate by net-share quantity (the
-  // Transactions sheet exposes the *net* shares actually deposited at each
-  // vest, which is what brokers report).
-  const byQuantity = pickByQuantity(uniqueGrants, acquisitionDate, quantity);
+  // Multiple grants — first try to disambiguate by net-share quantity.
+  const byQuantity = pickByQuantity(uniqueGrants, acquisitionDate, quantity, source);
   if (byQuantity) {
     return { kind: 'reconciled', grant: byQuantity, via: 'by_quantity' };
   }
@@ -112,10 +142,10 @@ export function reconcileLots(lots: StockLot[], grants: GrantInfo[]): Reconcilia
   const stats: ReconciliationStats = { reconciled: 0, ambiguous: 0, unmatched: 0, notApplicable: 0 };
   const warnings: string[] = [];
 
-  const byDay = indexGrantsByVestDay(grants);
+  const index = indexGrants(grants);
 
   const out = lots.map((lot) => {
-    const decision = decideReconciliation(lot.acquisitionDate, lot.origin, lot.quantity, byDay);
+    const decision = decideReconciliation(lot.acquisitionDate, lot.origin, lot.quantity, index);
     switch (decision.kind) {
       case 'notApplicable':
         stats.notApplicable++;
@@ -150,10 +180,10 @@ export function reconcileSoldLots(soldLots: SoldLot[], grants: GrantInfo[]): {
   const stats: ReconciliationStats = { reconciled: 0, ambiguous: 0, unmatched: 0, notApplicable: 0 };
   const warnings: string[] = [];
 
-  const byDay = indexGrantsByVestDay(grants);
+  const index = indexGrants(grants);
 
   const out = soldLots.map((sl) => {
-    const decision = decideReconciliation(sl.acquisitionDate, sl.origin, sl.quantity, byDay);
+    const decision = decideReconciliation(sl.acquisitionDate, sl.origin, sl.quantity, index);
     switch (decision.kind) {
       case 'notApplicable':
         stats.notApplicable++;
@@ -176,17 +206,24 @@ export function reconcileSoldLots(soldLots: SoldLot[], grants: GrantInfo[]): {
   return { lots: out, stats, warnings };
 }
 
-function indexGrantsByVestDay(grants: GrantInfo[]): Map<string, GrantInfo[]> {
-  const byDay = new Map<string, GrantInfo[]>();
+function indexGrants(grants: GrantInfo[]): GrantIndex {
+  const byTxDay = new Map<string, GrantInfo[]>();
+  const byVestDay = new Map<string, GrantInfo[]>();
   for (const grant of grants) {
+    for (const tx of grant.transactions ?? []) {
+      const key = dayKey(tx.date);
+      const list = byTxDay.get(key) ?? [];
+      list.push(grant);
+      byTxDay.set(key, list);
+    }
     for (const vest of grant.vestSchedule) {
       const key = dayKey(vest.date);
-      const list = byDay.get(key) ?? [];
+      const list = byVestDay.get(key) ?? [];
       list.push(grant);
-      byDay.set(key, list);
+      byVestDay.set(key, list);
     }
   }
-  return byDay;
+  return { byTxDay, byVestDay };
 }
 
 function findCandidateGrantsByDate(date: Date, byDay: Map<string, GrantInfo[]>): GrantInfo[] {
@@ -218,28 +255,34 @@ function applyGrantToSoldLot(sl: SoldLot, grant: GrantInfo, reason: Qualificatio
 }
 
 /**
- * Tie-breaker used when multiple distinct grants have a vest near the lot's
- * acquisition date. Returns the unique grant whose vest event on (or nearest
- * to) `date` has `netShares` equal to `quantity`. Returns null if zero or
- * more than one candidate matches — in that case the caller falls back to
- * the classification-agreement check.
+ * Tie-breaker used when multiple distinct grants have an event near the lot's
+ * acquisition date. Returns the unique grant whose event on (or nearest to)
+ * `date` has `netShares` equal to `quantity`. Returns null if zero or more
+ * than one candidate matches — in that case the caller falls back to the
+ * classification-agreement check.
  *
- * Only meaningful when the StockExport Transactions sheet was parsed (i.e.
- * `vest.netShares` is populated). When it isn't, every comparison fails and
- * this helper returns null — leaving prior behaviour unchanged.
+ * Reads from `grant.transactions` when matching via the Transactions index
+ * (where `netShares` is always populated) and from `grant.vestSchedule`
+ * otherwise. The vest path may not have `netShares` populated at all, in
+ * which case this helper returns null and the agreement check takes over.
  */
-function pickByQuantity(grants: GrantInfo[], date: Date, quantity: number): GrantInfo | null {
+function pickByQuantity(
+  grants: GrantInfo[],
+  date: Date,
+  quantity: number,
+  source: EventSource,
+): GrantInfo | null {
   if (!Number.isFinite(quantity) || quantity <= 0) return null;
   const t = date.getTime();
   const matches: GrantInfo[] = [];
   for (const grant of grants) {
-    // Find the vest event closest to `date` within the tolerance window.
+    const events = source === 'transactions' ? (grant.transactions ?? []) : grant.vestSchedule;
     let best: VestEvent | null = null;
     let bestDelta = Infinity;
-    for (const vest of grant.vestSchedule) {
-      const delta = Math.abs(vest.date.getTime() - t);
+    for (const ev of events) {
+      const delta = Math.abs(ev.date.getTime() - t);
       if (delta <= DATE_MATCH_TOLERANCE_MS && delta < bestDelta) {
-        best = vest;
+        best = ev;
         bestDelta = delta;
       }
     }

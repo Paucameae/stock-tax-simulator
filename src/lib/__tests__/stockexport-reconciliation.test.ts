@@ -346,3 +346,83 @@ describe('reconciliation — quantity-based tie-breaker', () => {
     expect(lots[0].planType).toBe('non_qualified');
   });
 });
+
+describe('reconcileLots — Transactions vs Vest Schedules', () => {
+  // Reproduces a real user case: Microsoft vests on 2019-08-31, but the
+  // shares are deposited at the broker on 2019-09-03 (settlement lag). The
+  // StockExport "Transactions" sheet reports 2019-09-03; the broker lot is
+  // dated 2019-09-03. We must match via the tx date — and use tx-side
+  // netShares for the quantity tiebreaker — not the vest date.
+  it('reconciles by Transactions date when vest schedule is on a different day', () => {
+    const lot = makeLot({
+      id: 'lot-1',
+      acquisitionDate: new Date(2019, 8, 3), // 2019-09-03 (broker deposit)
+      origin: 'DO',
+      quantity: 15,
+    });
+    const grantA = makeGrant({
+      grantIdHash: 'hash-A',
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [{ date: new Date(2019, 7, 31), shares: 20 }], // 2019-08-31
+      transactions: [{ date: new Date(2019, 8, 3), shares: 20, netShares: 15, sharesForTaxes: 5 }],
+    });
+    const grantB = makeGrant({
+      grantIdHash: 'hash-B',
+      planType: 'non_qualified',
+      origin: 'DO',
+      vestSchedule: [{ date: new Date(2019, 7, 31), shares: 35 }],
+      transactions: [{ date: new Date(2019, 8, 3), shares: 35, netShares: 27, sharesForTaxes: 8 }],
+    });
+
+    const { lots, stats } = reconcileLots([lot], [grantA, grantB]);
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].grantIdHash).toBe('hash-A');
+  });
+
+  it('still falls back to vest schedule when grants lack a transactions array', () => {
+    // Pre-existing behavior for grants imported before transactions were
+    // captured: the byVestDay index drives matching.
+    const lot = makeLot({
+      id: 'lot-1',
+      acquisitionDate: new Date(2024, 1, 15),
+      origin: 'DO',
+    });
+    const grant = makeGrant({
+      grantIdHash: 'hash-a',
+      vestSchedule: [{ date: new Date(2024, 1, 15), shares: 3 }],
+    });
+    const { lots, stats } = reconcileLots([lot], [grant]);
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].grantIdHash).toBe('hash-a');
+  });
+
+  it('prefers Transactions over Vest Schedules when both could match', () => {
+    // Lot date aligns with both the vest day (a different grant) and the tx
+    // day (the actual grant). The tx index must win.
+    const lot = makeLot({
+      id: 'lot-1',
+      acquisitionDate: new Date(2019, 8, 3),
+      origin: 'DO',
+      quantity: 27,
+    });
+    const grantVested = makeGrant({
+      grantIdHash: 'hash-vested',
+      planType: 'non_qualified',
+      origin: 'DO',
+      // Vests on the same day as the *other* grant's deposit — would be a
+      // false positive without tx-first matching.
+      vestSchedule: [{ date: new Date(2019, 8, 3), shares: 99, netShares: 99, sharesForTaxes: 0 }],
+    });
+    const grantDeposited = makeGrant({
+      grantIdHash: 'hash-deposited',
+      planType: 'non_qualified',
+      origin: 'DO',
+      vestSchedule: [{ date: new Date(2019, 7, 31), shares: 35 }],
+      transactions: [{ date: new Date(2019, 8, 3), shares: 35, netShares: 27, sharesForTaxes: 8 }],
+    });
+    const { lots, stats } = reconcileLots([lot], [grantVested, grantDeposited]);
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].grantIdHash).toBe('hash-deposited');
+  });
+});

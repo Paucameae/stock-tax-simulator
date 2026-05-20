@@ -129,6 +129,18 @@ export interface GrantInfo {
    * Only set when the Transactions sheet was parsed.
    */
   nqDetected?: boolean;
+  /**
+   * Actual deposit events extracted from the Transactions sheet — one entry
+   * per real deposit day, with `date` set to the *transaction date* (= the
+   * date the broker received the shares), and `netShares` / `sharesForTaxes`
+   * always populated. Distinct from `vestSchedule` which carries the
+   * *promised* dates from the Vest Schedules sheet: when both disagree (3-day
+   * settlement lag is common at Microsoft), the transaction date is the one
+   * the broker reports, so reconciliation prefers it. Absent when the
+   * Transactions sheet was not parsed; in that case reconciliation falls back
+   * to `vestSchedule`.
+   */
+  transactions?: VestEvent[];
 }
 
 export interface SoldLot {
