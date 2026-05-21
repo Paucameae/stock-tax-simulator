@@ -58,6 +58,23 @@ describe('parseMsHoldingsCsv', () => {
     expect(drip.isReinvestedDividend).toBe(true);
     expect(drip.qualificationReason).toBe('broker_drip_marker');
   });
+
+  it('reclassifies fractional Macron qualified lots as DO/non_qualified DRIP', () => {
+    // A fractional Macron-qualified vest is impossible (vests come in whole
+    // shares); it can only be a DRIP accrual. The parser must override
+    // the Savings Plan label and re-classify as a non-qualified Stock Award.
+    const csv = [
+      'Holdings by Lot',
+      'Acquisition Date,Savings Plan Name,Lot Number,Current Share Quantity,Current Value',
+      '15-May-2024,Microsoft Qualified Stock Awards - Macron,99,0.128000,$45.00',
+    ].join('\n');
+    const lots = parseMsHoldingsCsv(csv);
+    expect(lots).toHaveLength(1);
+    expect(lots[0].origin).toBe('DO');
+    expect(lots[0].planType).toBe('non_qualified');
+    expect(lots[0].isReinvestedDividend).toBe(true);
+    expect(lots[0].qualificationReason).toBe('broker_drip_marker');
+  });
 });
 
 describe('parseMsSalesCsv', () => {
@@ -144,5 +161,18 @@ describe('parseMsSalesCsv', () => {
       '21-janv.-2025,Microsoft Stock Awards,MSFT,Ad hoc,Complet,€365.99,EUR,3,"€4,387.52",EUR,31-août-2022,€671.47,EUR',
     ].join('\n');
     expect(() => parseMsSalesCsv(frEuro)).toThrow(/anglais.*USD/);
+  });
+
+  it('reclassifies fractional Macron qualified sales as DO/non_qualified DRIP', () => {
+    const csv = [
+      'Date,Plan Name,Fund Name,Type,Order Status,Sale Price,Quantity,Net Cash Proceeds,Acquisition Date,Acquisition Value',
+      '10-Mar-2025,Microsoft Qualified Stock Awards - Macron,MSFT,Ad Hoc,Complete,$390.00,0.128,$49.92,15-May-2024,$45.00',
+    ].join('\n');
+    const sales = parseMsSalesCsv(csv);
+    expect(sales).toHaveLength(1);
+    expect(sales[0].origin).toBe('DO');
+    expect(sales[0].planType).toBe('non_qualified');
+    expect(sales[0].isReinvestedDividend).toBe(true);
+    expect(sales[0].qualificationReason).toBe('broker_drip_marker');
   });
 });

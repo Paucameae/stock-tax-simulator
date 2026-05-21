@@ -358,7 +358,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
         {tableOpen && (
           <CardContent id="portfolio-lot-detail" className="pt-0 space-y-4">
             {/* DO lots info */}
-            {hasDOLots && (
+            {hasDOLots && totalEligibleForBulk > 0 && (
               <Alert>
                 <div className="flex flex-col gap-2">
                   <div>

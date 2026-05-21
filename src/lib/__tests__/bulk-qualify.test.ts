@@ -66,6 +66,56 @@ describe('isEligibleForBulk', () => {
       ),
     ).toBe(false);
   });
+
+  it('excludes lots already classified authoritatively by the parser', () => {
+    // Broker plan name (Morgan Stanley exports the Savings Plan label) → trusted
+    expect(
+      isEligibleForBulk({
+        acquisitionDate: new Date(),
+        origin: 'FM',
+        planType: 'qualified_macron',
+        qualificationReason: 'broker_plan_name',
+      }),
+    ).toBe(false);
+    // DRIP detected by the broker or parser → trusted
+    expect(
+      isEligibleForBulk({
+        acquisitionDate: new Date(),
+        origin: 'DO',
+        planType: 'non_qualified',
+        qualificationReason: 'broker_drip_marker',
+      }),
+    ).toBe(false);
+    // Previous manual edit → user has spoken
+    expect(
+      isEligibleForBulk({
+        acquisitionDate: new Date(),
+        origin: 'DO',
+        planType: 'qualified_macron',
+        qualificationReason: 'manual',
+      }),
+    ).toBe(false);
+    // Previous bulk pass → don't loop
+    expect(
+      isEligibleForBulk({
+        acquisitionDate: new Date(),
+        origin: 'FM',
+        planType: 'qualified_macron',
+        qualificationReason: 'bulk_qualify',
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps broker_default lots eligible (typical of Fidelity sales — no origin info)', () => {
+    expect(
+      isEligibleForBulk({
+        acquisitionDate: new Date(),
+        origin: 'DO',
+        planType: 'non_qualified',
+        qualificationReason: 'broker_default',
+      }),
+    ).toBe(true);
+  });
 });
 
 describe('applyBulkChoice — uniform', () => {

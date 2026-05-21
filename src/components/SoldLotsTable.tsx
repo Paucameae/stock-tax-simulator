@@ -142,7 +142,7 @@ export function SoldLotsTable({
         </div>
 
         <div className="mb-4">
-          {filteredLots.some((l) => !l.reconciled) ? (
+          {totalEligible > 0 ? (
             <Alert>
               <div className="flex flex-col gap-2">
                 <div>
@@ -166,9 +166,14 @@ export function SoldLotsTable({
                 )}
               </div>
             </Alert>
-          ) : (
+          ) : filteredLots.some((l) => l.reconciled) ? (
             <Alert>
               Tous les lots affichés ont été <strong>reconciliés automatiquement</strong> avec votre StockExport.
+            </Alert>
+          ) : (
+            <Alert>
+              Tous les lots affichés ont été <strong>classifiés automatiquement</strong> à partir des informations
+              fournies par votre courtier (régime du plan, dividendes réinvestis…).
             </Alert>
           )}
           {onBulkQualify && bulkOpen && (totalEligible > 0 || esppEligible > 0) && (

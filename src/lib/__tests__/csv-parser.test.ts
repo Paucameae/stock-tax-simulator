@@ -258,6 +258,31 @@ describe('parseCsvFile', () => {
     expect(lots[0].origin).toBe('DO');
     expect(lots[0].planType).toBe('non_qualified');
   });
+
+  it('reclassifies fractional vest-origin lots as DO/non_qualified DRIP (no marker)', () => {
+    // Fractional quantity on FM/FQ/DO origin is the unambiguous signature of
+    // a DRIP — the source plan is irrelevant fiscally because the shares
+    // were bought on the market with the cash dividend. The parser must
+    // override the broker's Origin column.
+    const csv = [
+      HEADER,
+      makeCsvRow({ qty: '0.1280', origin: 'FM' }),
+    ].join('\n');
+    const lots = parseCsvFile(csv);
+    expect(lots).toHaveLength(1);
+    expect(lots[0].origin).toBe('DO');
+    expect(lots[0].planType).toBe('non_qualified');
+    expect(lots[0].isReinvestedDividend).toBe(true);
+    expect(lots[0].qualificationReason).toBe('broker_drip_marker');
+  });
+
+  it('keeps whole-share FM lots as AGA Macron (no DRIP false positive)', () => {
+    const csv = [HEADER, makeCsvRow({ qty: '10', origin: 'FM' })].join('\n');
+    const lots = parseCsvFile(csv);
+    expect(lots[0].origin).toBe('FM');
+    expect(lots[0].planType).toBe('qualified_macron');
+    expect(lots[0].isReinvestedDividend).toBeUndefined();
+  });
 });
 
 // --- Sales CSV tests ---

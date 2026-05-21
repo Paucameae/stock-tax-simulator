@@ -144,7 +144,13 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
 
   const proceedsUsd = quantity * salePrice;
   const holdingPeriod = computeHoldingPeriod(acquisitionDate, saleDate);
-  const isDrip = isLikelyReinvestedDividend(origin, quantity);
+  const rawOrigin = origin;
+  const isDrip = isLikelyReinvestedDividend(rawOrigin, quantity);
+  // DRIP shares are bought on the open market with the cash dividend and
+  // are no longer attached to the source plan — classify them as
+  // non-qualified Stock Award regardless of the Savings Plan label.
+  const resolvedOrigin: StockOrigin = isDrip ? 'DO' : rawOrigin;
+  const planType = isDrip ? 'non_qualified' : defaultPlanTypeFor(rawOrigin);
 
   idCounter.n++;
   return {
@@ -159,8 +165,8 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
     proceedsUsd,
     costBasisUsd: acquisitionValue,
     holdingPeriod,
-    origin,
-    planType: defaultPlanTypeFor(origin),
+    origin: resolvedOrigin,
+    planType,
     importCurrency: 'USD' as ImportCurrency,
     qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
     ...(isDrip && { isReinvestedDividend: true }),

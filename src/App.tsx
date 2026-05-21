@@ -250,12 +250,26 @@ function App() {
     const reconciled = grants.length > 0 ? reconcileLots(importedLots, grants).lots : importedLots;
 
     // 2. Then apply user overrides and defaults for any DO lots that are still not
-    //    reconciled (no grant matched or StockExport not imported).
+    //    reconciled (no grant matched or StockExport not imported). Lots already
+    //    authoritatively classified by the broker (DRIP detection, reliable plan
+    //    label, previous manual / bulk pass) keep their parser-derived planType
+    //    untouched — overwriting them with the user's default would silently
+    //    downgrade a known-good classification (e.g. DRIP shares correctly
+    //    marked as non_qualified would become qualified_macron).
     let prepared: StockLot[];
     try {
       const overrides = JSON.parse(localStorage.getItem('planTypeOverrides') || '{}');
       prepared = reconciled.map((lot) => {
         if (lot.reconciled) return lot; // StockExport wins over overrides/defaults
+        const reason = lot.qualificationReason;
+        if (
+          reason === 'broker_plan_name' ||
+          reason === 'broker_drip_marker' ||
+          reason === 'manual' ||
+          reason === 'bulk_qualify'
+        ) {
+          return lot;
+        }
         if (lot.origin === 'DO' && overrides[lot.id]) {
           return { ...lot, planType: overrides[lot.id] };
         }
@@ -378,9 +392,22 @@ function App() {
 
     // 2. For lots that did NOT reconcile, fall back to the user's default
     //    planType (Macron / pré-Macron). Reconciled lots keep the planType
-    //    derived from their grant — never overwrite it.
+    //    derived from their grant — never overwrite it. Lots already
+    //    authoritatively classified by the broker (Morgan Stanley plan
+    //    label, DRIP detection, …) also keep their parser-derived planType:
+    //    overwriting them with the user's default would silently downgrade
+    //    a known-good classification.
     const withPlanType = reconciled.map((sl) => {
       if (sl.reconciled) return sl;
+      const reason = sl.qualificationReason;
+      if (
+        reason === 'broker_plan_name' ||
+        reason === 'broker_drip_marker' ||
+        reason === 'manual' ||
+        reason === 'bulk_qualify'
+      ) {
+        return sl;
+      }
       return {
         ...sl,
         planType: settings.defaultPlanType === 'non_qualified' ? 'non_qualified' as const : 'qualified_macron' as const,
