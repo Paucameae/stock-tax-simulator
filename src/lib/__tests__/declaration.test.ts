@@ -109,9 +109,13 @@ describe('generateDeclaration', () => {
     };
     const decl = generateDeclaration(result, [entry, entry2], 2024);
     expect(decl.form2074Lines).toHaveLength(2);
-    expect(decl.form2074Lines[0].origin).toBe('Stock Award');
-    expect(decl.form2074Lines[1].origin).toBe('ESPP');
-    expect(decl.form2074Lines[1].gainLoss).toBe(20 * (350 - 300));
+    // Les lignes sont triées (date asc, puis origine FR) — pour des ventes
+    // sans saleDate (timestamp 0 commun), ESPP < Stock Award alphabétiquement.
+    const espp = decl.form2074Lines.find((l) => l.origin === 'ESPP');
+    const stockAward = decl.form2074Lines.find((l) => l.origin === 'Stock Award');
+    expect(espp).toBeDefined();
+    expect(stockAward).toBeDefined();
+    expect(espp!.gainLoss).toBe(20 * (350 - 300));
   });
 
   it('sums PS details', () => {

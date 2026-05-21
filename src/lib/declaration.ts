@@ -64,18 +64,40 @@ export function generateDeclaration(
   const deductibleCSGNextYear =
     acquisitionGainTax.deductibleCSG + capitalGainTax.deductibleCSG;
 
-  // Form 2074 lines
-  const form2074Lines: Form2074Line[] = lots.map((entry) => {
+  // Form 2074 lines.
+  // Tri déterministe pour que l'affichage soit stable indépendamment de
+  // l'ordre d'import / de fusion multi-broker :
+  //   1. date de vente croissante (chronologique) ;
+  //   2. origine (ESPP, Stock Award, AGA Macron, AGA pré-Macron) ;
+  //   3. PU vente croissant ;
+  //   4. PU acquisition croissant.
+  const originLabels: Record<string, string> = {
+    SP: 'ESPP',
+    DO: 'Stock Award',
+    FM: 'AGA Macron',
+    FQ: 'AGA pré-Macron',
+  };
+  const sortedEntries = [...lots].sort((a, b) => {
+    const da = (a.saleDate ?? new Date(0)).getTime();
+    const db = (b.saleDate ?? new Date(0)).getTime();
+    if (da !== db) return da - db;
+    const oa = originLabels[a.lot.origin] || a.lot.origin;
+    const ob = originLabels[b.lot.origin] || b.lot.origin;
+    if (oa !== ob) return oa.localeCompare(ob, 'fr');
+    if (a.salePricePerShare !== b.salePricePerShare) return a.salePricePerShare - b.salePricePerShare;
+    const cba = a.lot.origin === 'SP'
+      ? (a.lot.esppFmvPerShare ?? a.lot.costBasisPerShare)
+      : a.lot.costBasisPerShare;
+    const cbb = b.lot.origin === 'SP'
+      ? (b.lot.esppFmvPerShare ?? b.lot.costBasisPerShare)
+      : b.lot.costBasisPerShare;
+    return cba - cbb;
+  });
+  const form2074Lines: Form2074Line[] = sortedEntries.map((entry) => {
     const effectiveCostBasis = entry.lot.origin === 'SP'
       ? (entry.lot.esppFmvPerShare ?? entry.lot.costBasisPerShare)
       : entry.lot.costBasisPerShare;
     const gainLoss = entry.quantitySold * (entry.salePricePerShare - effectiveCostBasis);
-    const originLabels: Record<string, string> = {
-      SP: 'ESPP',
-      DO: 'Stock Award',
-      FM: 'AGA Macron',
-      FQ: 'AGA pré-Macron',
-    };
     return {
       date: (entry.saleDate ?? new Date()).toLocaleDateString('fr-FR'),
       quantity: entry.quantitySold,
