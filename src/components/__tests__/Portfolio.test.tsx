@@ -95,4 +95,26 @@ describe('Portfolio', () => {
     render(<Portfolio lots={lots} onLotsChange={vi.fn()} />);
     expect(screen.getByText(/PV\/MV latente/)).toBeDefined();
   });
+
+  it('hides DRIP filter when no lot is flagged as reinvested dividend', () => {
+    render(<Portfolio lots={[makeLot()]} onLotsChange={vi.fn()} />);
+    expect(screen.queryByLabelText(/dividendes réinvestis/i)).toBeNull();
+  });
+
+  it('filters by DRIP flag', () => {
+    const lots = [
+      makeLot({ id: 'plain', origin: 'FM', isReinvestedDividend: false }),
+      makeLot({ id: 'drip', origin: 'DO', planType: 'non_qualified', isReinvestedDividend: true }),
+    ];
+    render(<Portfolio lots={lots} onLotsChange={vi.fn()} />);
+    const dripSelect = screen.getByLabelText(/dividendes réinvestis/i) as HTMLSelectElement;
+    // Default: both visible
+    expect(screen.getAllByRole('row').length).toBeGreaterThan(2); // header + 2 rows (×2 for mobile possibly)
+    fireEvent.change(dripSelect, { target: { value: 'drip' } });
+    // Only DRIP lot remains: AGA Macron label should disappear
+    expect(screen.queryAllByText('AGA Macron').length).toBe(0);
+    fireEvent.change(dripSelect, { target: { value: 'noDrip' } });
+    // Only plain lot remains: Stock Award label should disappear
+    expect(screen.queryAllByText('Stock Award').length).toBe(0);
+  });
 });

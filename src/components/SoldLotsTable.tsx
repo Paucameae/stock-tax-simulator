@@ -32,6 +32,9 @@ export function SoldLotsTable({
   hasGrants = false,
 }: SoldLotsTableProps) {
   const [filterBroker, setFilterBroker] = React.useState<Broker | 'all'>('all');
+  // 'all' (default), 'drip' (DRIP only) or 'noDrip' (hide DRIP). Surfaced only
+  // when at least one sold lot in the dataset is flagged as a reinvested dividend.
+  const [filterDrip, setFilterDrip] = React.useState<'all' | 'drip' | 'noDrip'>('all');
 
   // Compute available years
   const saleYears = [...new Set(soldLots.map((l) => l.saleDate.getFullYear()))].sort((a, b) => b - a);
@@ -39,11 +42,14 @@ export function SoldLotsTable({
 
   const presentBrokers = Array.from(new Set(soldLots.map((l) => l.broker))) as Broker[];
   const hasMultipleBrokers = presentBrokers.length > 1;
+  const hasDripLots = soldLots.some((l) => l.isReinvestedDividend === true);
 
   // Filter lots by selected year and broker
   const filteredLots = soldLots.filter((l) => {
     if (saleYear != null && l.saleDate.getFullYear() !== saleYear) return false;
     if (filterBroker !== 'all' && l.broker !== filterBroker) return false;
+    if (filterDrip === 'drip' && l.isReinvestedDividend !== true) return false;
+    if (filterDrip === 'noDrip' && l.isReinvestedDividend === true) return false;
     return true;
   });
   const hiddenCount = soldLots.length - filteredLots.length;
@@ -180,19 +186,33 @@ export function SoldLotsTable({
           )}
         </div>
 
-        {hasMultipleBrokers && (
-          <div className="mb-4">
-            <Select
-              value={filterBroker}
-              onChange={(e) => setFilterBroker(e.target.value as Broker | 'all')}
-              aria-label="Filtrer par courtier"
-              className="w-48"
-            >
-              <option value="all">Tous courtiers</option>
-              {presentBrokers.map((b) => (
-                <option key={b} value={b}>{brokerLabel(b)}</option>
-              ))}
-            </Select>
+        {(hasMultipleBrokers || hasDripLots) && (
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            {hasMultipleBrokers && (
+              <Select
+                value={filterBroker}
+                onChange={(e) => setFilterBroker(e.target.value as Broker | 'all')}
+                aria-label="Filtrer par courtier"
+                className="w-48"
+              >
+                <option value="all">Tous courtiers</option>
+                {presentBrokers.map((b) => (
+                  <option key={b} value={b}>{brokerLabel(b)}</option>
+                ))}
+              </Select>
+            )}
+            {hasDripLots && (
+              <Select
+                value={filterDrip}
+                onChange={(e) => setFilterDrip(e.target.value as 'all' | 'drip' | 'noDrip')}
+                aria-label="Filtrer les dividendes réinvestis (DRIP)"
+                className="w-48"
+              >
+                <option value="all">DRIP : tous</option>
+                <option value="drip">DRIP uniquement</option>
+                <option value="noDrip">Masquer les DRIP</option>
+              </Select>
+            )}
           </div>
         )}
 

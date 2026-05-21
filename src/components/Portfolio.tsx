@@ -58,6 +58,9 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
   const [filterHolding, setFilterHolding] = React.useState<'all' | 'Short' | 'Long'>('all');
   const [filterBroker, setFilterBroker] = React.useState<Broker | 'all'>('all');
+  // 'all' (default), 'drip' (DRIP only) or 'noDrip' (hide DRIP). Surfaced only
+  // when at least one lot in the dataset is flagged as a reinvested dividend.
+  const [filterDrip, setFilterDrip] = React.useState<'all' | 'drip' | 'noDrip'>('all');
   // Sortable columns: clicking a header cycles direction (desc → asc), clicking
   // another column resets to the column's natural default direction.
   const [sortKey, setSortKey] = React.useState<PortfolioSortKey>('date');
@@ -86,6 +89,8 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
     if (filterOrigin !== 'all') result = result.filter((l) => l.origin === filterOrigin);
     if (filterHolding !== 'all') result = result.filter((l) => l.holdingPeriod === filterHolding);
     if (filterBroker !== 'all') result = result.filter((l) => l.broker === filterBroker);
+    if (filterDrip === 'drip') result = result.filter((l) => l.isReinvestedDividend === true);
+    else if (filterDrip === 'noDrip') result = result.filter((l) => l.isReinvestedDividend !== true);
 
     const dir = sortDir === 'asc' ? 1 : -1;
     result.sort((a, b) => {
@@ -118,7 +123,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
     });
 
     return result;
-  }, [lots, filterOrigin, filterHolding, filterBroker, sortKey, sortDir]);
+  }, [lots, filterOrigin, filterHolding, filterBroker, filterDrip, sortKey, sortDir]);
 
   const totalQuantity = lots.reduce((sum, l) => sum + l.quantity, 0);
   const totalValue = lots.reduce((sum, l) => sum + l.currentValue, 0);
@@ -210,12 +215,14 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const esppEligibleForBulk = countEligible(lots, { includeEspp: true }) - totalEligibleForBulk;
   const [bulkOpen, setBulkOpen] = React.useState(false);
 
-  const isFiltered = filterOrigin !== 'all' || filterHolding !== 'all' || filterBroker !== 'all';
+  const isFiltered = filterOrigin !== 'all' || filterHolding !== 'all' || filterBroker !== 'all' || filterDrip !== 'all';
   const resetFilters = () => {
     setFilterOrigin('all');
     setFilterHolding('all');
     setFilterBroker('all');
+    setFilterDrip('all');
   };
+  const hasDripLots = lots.some((l) => l.isReinvestedDividend === true);
 
   // Collapsible lot detail: persist user choice in localStorage; auto-open
   // for small portfolios where collapsing has no real benefit.
@@ -408,6 +415,18 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                 <option value="Short">Court terme</option>
                 <option value="Long">Long terme</option>
               </Select>
+              {hasDripLots && (
+                <Select
+                  value={filterDrip}
+                  onChange={(e) => setFilterDrip(e.target.value as 'all' | 'drip' | 'noDrip')}
+                  className="w-40"
+                  aria-label="Filtrer les dividendes réinvestis (DRIP)"
+                >
+                  <option value="all">DRIP : tous</option>
+                  <option value="drip">DRIP uniquement</option>
+                  <option value="noDrip">Masquer les DRIP</option>
+                </Select>
+              )}
               {isFiltered && (
                 <button
                   type="button"
