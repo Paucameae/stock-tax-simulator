@@ -214,6 +214,50 @@ describe('parseCsvFile', () => {
     expect(lots[1].totalCostBasisUsd).toBe(2135);
     expect(lots[1].costBasisPerShareUsd).toBe(435);
   });
+
+  it('treats Fidelity "-" origin marker as a DRIP lot (broker_drip_marker)', () => {
+    // Fidelity uses "-" in the Origin column for shares accrued from
+    // reinvested dividends, not attached to any source plan.
+    const csv = [
+      HEADER,
+      'Mar-11-2024,0.0670,18000,27000,18000,0,-,-,-,-,Short',
+    ].join('\n');
+    const lots = parseCsvFile(csv);
+
+    expect(lots).toHaveLength(1);
+    expect(lots[0].origin).toBe('DO');
+    expect(lots[0].planType).toBe('non_qualified');
+    expect(lots[0].isReinvestedDividend).toBe(true);
+    expect(lots[0].qualificationReason).toBe('broker_drip_marker');
+    // No FMV reconstruction (DRIP isn't ESPP)
+    expect(lots[0].esppFmvPerShareUsd).toBeUndefined();
+  });
+
+  it('parses a mix of regular SP and "-" DRIP lots in the same file without crashing', () => {
+    const csv = [
+      HEADER,
+      'Mar-31-2024,6.4936,216300,33300,274500,58200,-,-,Jan-02-2024,SP,Short',
+      'Mar-11-2024,0.0670,18000,27000,18000,0,-,-,-,-,Short',
+    ].join('\n');
+    const lots = parseCsvFile(csv);
+    expect(lots).toHaveLength(2);
+    expect(lots[0].origin).toBe('SP');
+    expect(lots[0].qualificationReason).toBe('broker_default');
+    expect(lots[1].origin).toBe('DO');
+    expect(lots[1].qualificationReason).toBe('broker_drip_marker');
+    expect(lots[1].isReinvestedDividend).toBe(true);
+  });
+
+  it('does not crash on an unknown origin code (defensive default)', () => {
+    // Any unrecognised origin label (not SP/DO/FM/FQ/"-") must fall back to
+    // a safe default rather than throwing.
+    const csv = [HEADER, makeCsvRow({ origin: 'XX' })].join('\n');
+    expect(() => parseCsvFile(csv)).not.toThrow();
+    const lots = parseCsvFile(csv);
+    expect(lots).toHaveLength(1);
+    expect(lots[0].origin).toBe('DO');
+    expect(lots[0].planType).toBe('non_qualified');
+  });
 });
 
 // --- Sales CSV tests ---

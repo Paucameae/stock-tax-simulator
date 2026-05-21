@@ -70,6 +70,7 @@ export interface StockLot {
 export type QualificationReason =
   | 'broker_default'           // value chosen by the broker parser without external info
   | 'broker_plan_name'         // origin derived from the broker's plan label (Morgan Stanley)
+  | 'broker_drip_marker'       // broker explicitly flagged the lot as a reinvested dividend (e.g. Fidelity "-" origin)
   | 'reconciled_unique'        // single StockExport grant matched on vest date
   | 'reconciled_by_quantity'   // multiple grants — disambiguated by net-share count
   | 'reconciled_by_agreement'  // multiple grants but identical (origin, planType)

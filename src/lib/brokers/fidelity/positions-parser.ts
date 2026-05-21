@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { StockLot, StockOrigin, HoldingPeriod, PlanType, SoldLot } from '../../types';
+import type { StockLot, StockOrigin, HoldingPeriod, PlanType, SoldLot, QualificationReason } from '../../types';
 import { isLikelyReinvestedDividend } from '../../utils';
 
 // Safety guard: reject CSV files with absurd row counts to prevent DoS.
@@ -165,8 +165,24 @@ function getDefaultPlanType(
       return { origin: 'DO', planType: 'non_qualified' };
     case 'SP':
       return { origin: 'SP', planType: 'non_qualified' };
+    default:
+      // Defensive fallback: any unrecognised origin code (e.g. a future
+      // Fidelity label we do not yet map) falls back to the safest
+      // classification — non-qualified Stock Award — rather than crashing
+      // the whole import. The DRIP "-" marker is intercepted upstream so it
+      // never reaches this switch.
+      return { origin: 'DO', planType: 'non_qualified' };
   }
 }
+
+/**
+ * Fidelity writes a literal "-" in the Origin column for shares that are
+ * not attached to any source plan — in practice, fractional shares received
+ * from reinvested dividends (DRIP) accrued on top of vested grants. The
+ * neighbouring grant-date / availability columns are also dashes on these
+ * rows. We treat the dash as an unambiguous broker-side DRIP signal.
+ */
+const FIDELITY_DRIP_MARKER = '-';
 
 export function parseCsvFile(csvText: string): StockLot[] {
   // Detect non-USD files via the footer line
@@ -208,7 +224,9 @@ export function parseCsvFile(csvText: string): StockLot[] {
 
     // Parse fixed fields from the end of the row (unaffected by thousand-separator splits)
     const holdingPeriod = (row[n - 1]?.trim() || 'Short') as HoldingPeriod;
-    const origin = (row[n - 2]?.trim() || 'DO') as StockOrigin;
+    const originRaw = row[n - 2]?.trim() ?? '';
+    const isDripMarker = originRaw === FIDELITY_DRIP_MARKER;
+    const origin = (originRaw || 'DO') as StockOrigin;
     const grantDate = parseFidelityDate(row[n - 3]);
     const availableForTransferDate = parseFidelityDate(row[n - 4]);
     const availableForSaleDate = parseFidelityDate(row[n - 5]);
@@ -223,8 +241,23 @@ export function parseCsvFile(csvText: string): StockLot[] {
 
     id++;
 
-    const { origin: resolvedOrigin, planType } = getDefaultPlanType(origin, grantDate ?? acquisitionDate);
-    const isDrip = isLikelyReinvestedDividend(resolvedOrigin, quantity);
+    // DRIP marker (origin "-"): broker-strong signal. Treat as non-qualified
+    // Stock Award holding the DRIP shares; never run the FQ→FM date remapping
+    // (no source plan to remap from) nor the ESPP FMV reconstruction.
+    let resolvedOrigin: StockOrigin;
+    let planType: PlanType;
+    let qualificationReason: QualificationReason;
+    let isDrip: boolean;
+    if (isDripMarker) {
+      resolvedOrigin = 'DO';
+      planType = 'non_qualified';
+      qualificationReason = 'broker_drip_marker';
+      isDrip = true;
+    } else {
+      ({ origin: resolvedOrigin, planType } = getDefaultPlanType(origin, grantDate ?? acquisitionDate));
+      qualificationReason = 'broker_default';
+      isDrip = isLikelyReinvestedDividend(resolvedOrigin, quantity);
+    }
 
     lots.push({
       id: `lot-${id}`,
@@ -249,7 +282,7 @@ export function parseCsvFile(csvText: string): StockLot[] {
       origin: resolvedOrigin,
       holdingPeriod,
       planType,
-      qualificationReason: 'broker_default',
+      qualificationReason,
       ...(isDrip && { isReinvestedDividend: true }),
     });
   }
