@@ -1,6 +1,7 @@
 import type { SoldLot, StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
 import type { DividendEvent } from '../fidelity/transactions-parser';
 import { parseWorksheet, parseSharedStrings, readXlsx } from '../../xlsx-reader';
+import { isLikelyReinvestedDividend } from '../../utils';
 import { MS_MISSING_LOT_DETAIL_MESSAGE, MS_NON_ENGLISH_EXPORT_MESSAGE } from './sales-parser';
 
 /**
@@ -88,7 +89,10 @@ function parseMsAmount(raw: string): number {
 
 function planNameToOrigin(planName: string): StockOrigin | null {
   const n = planName.trim();
-  if (n === 'Microsoft Corporation Long Share Savings Plan') return 'SP';
+  // See positions-parser.ts for the rationale: no active ESPP at Microsoft
+  // France, so Long Share Savings Plan is treated as DO (DRIP detection via
+  // fractional quantity at the call site).
+  if (n === 'Microsoft Corporation Long Share Savings Plan') return 'DO';
   if (n === 'Microsoft Qualified Stock Awards - Macron') return 'FM';
   if (n === 'Microsoft Stock Awards') return 'DO';
   return null;
@@ -346,6 +350,7 @@ function parseHoldingsSection(
     if (!Number.isFinite(acquisitionValue) || acquisitionValue < 0) continue;
 
     const costBasisPerShareUsd = acquisitionValue / quantity;
+    const isDrip = isLikelyReinvestedDividend(origin, quantity);
 
     idCounter.n++;
     out.push({
@@ -357,7 +362,6 @@ function parseHoldingsSection(
       totalCostBasis: 0,
       currentValue: 0,
       unrealizedGainLoss: 0,
-      esppFmvPerShareUsd: origin === 'SP' ? costBasisPerShareUsd / 0.90 : undefined,
       costBasisPerShareUsd,
       totalCostBasisUsd: acquisitionValue,
       currentValueUsd: acquisitionValue,
@@ -365,6 +369,8 @@ function parseHoldingsSection(
       origin,
       holdingPeriod: 'Long' as HoldingPeriod,
       planType: defaultPlanTypeFor(origin),
+      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
+      ...(isDrip && { isReinvestedDividend: true }),
     });
   }
   return out;
