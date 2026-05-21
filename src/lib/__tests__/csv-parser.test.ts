@@ -242,7 +242,8 @@ describe('parseCsvFile', () => {
     const lots = parseCsvFile(csv);
     expect(lots).toHaveLength(2);
     expect(lots[0].origin).toBe('SP');
-    expect(lots[0].qualificationReason).toBe('broker_default');
+    // SP comes from Fidelity's Origin column and is fully self-describing — treat as authoritative.
+    expect(lots[0].qualificationReason).toBe('broker_plan_name');
     expect(lots[1].origin).toBe('DO');
     expect(lots[1].qualificationReason).toBe('broker_drip_marker');
     expect(lots[1].isReinvestedDividend).toBe(true);
@@ -282,6 +283,50 @@ describe('parseCsvFile', () => {
     expect(lots[0].origin).toBe('FM');
     expect(lots[0].planType).toBe('qualified_macron');
     expect(lots[0].isReinvestedDividend).toBeUndefined();
+  });
+
+  describe('qualificationReason for Fidelity positions', () => {
+    // FM/FQ/SP come from the Fidelity Origin column and fully determine the
+    // fiscal regime (qualified Macron, qualified pre/post 2015-08-07, ESPP).
+    // They must be tagged broker_plan_name so bulk-qualify doesn't surface
+    // them for manual review. DO is genuinely ambiguous and must remain
+    // broker_default so users can disambiguate via bulk-qualify.
+
+    it('tags FM whole-share lots as broker_plan_name (authoritative Macron)', () => {
+      const csv = [HEADER, makeCsvRow({ qty: '10', origin: 'FM' })].join('\n');
+      const lots = parseCsvFile(csv);
+      expect(lots[0].qualificationReason).toBe('broker_plan_name');
+    });
+
+    it('tags FQ lots as broker_plan_name (Macron or pre-Macron is deterministic)', () => {
+      // Note: FQ post-2015-08-07 cutoff is remapped to FM by the parser, but
+      // the input was still an authoritative broker code — qualificationReason
+      // must reflect that.
+      const csv = [HEADER, makeCsvRow({ qty: '5', origin: 'FQ' })].join('\n');
+      const lots = parseCsvFile(csv);
+      expect(lots[0].qualificationReason).toBe('broker_plan_name');
+    });
+
+    it('tags SP lots as broker_plan_name (ESPP is self-describing)', () => {
+      const csv = [HEADER, makeCsvRow({ qty: '7', origin: 'SP' })].join('\n');
+      const lots = parseCsvFile(csv);
+      expect(lots[0].origin).toBe('SP');
+      expect(lots[0].qualificationReason).toBe('broker_plan_name');
+    });
+
+    it('keeps DO lots as broker_default (Stock Award regime is ambiguous)', () => {
+      const csv = [HEADER, makeCsvRow({ qty: '3', origin: 'DO' })].join('\n');
+      const lots = parseCsvFile(csv);
+      expect(lots[0].origin).toBe('DO');
+      expect(lots[0].qualificationReason).toBe('broker_default');
+    });
+
+    it('keeps unknown-origin fallback as broker_default (origin was not authoritative)', () => {
+      const csv = [HEADER, makeCsvRow({ qty: '4', origin: 'XX' })].join('\n');
+      const lots = parseCsvFile(csv);
+      expect(lots[0].origin).toBe('DO');
+      expect(lots[0].qualificationReason).toBe('broker_default');
+    });
   });
 });
 
