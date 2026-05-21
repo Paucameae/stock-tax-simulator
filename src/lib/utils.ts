@@ -45,6 +45,8 @@ export function qualificationReasonLabel(
         return 'Valeur par défaut du courtier (aucune information de plan dans le relevé).';
       case 'broker_plan_name':
         return 'Origine déduite du libellé du plan transmis par le courtier.';
+      case 'broker_drip_marker':
+        return 'Dividende réinvesti identifié par le courtier (aucun plan source rattaché).';
       case 'reconciled_unique':
         return 'Rapproché avec un grant Microsoft StockExport identifié sans ambiguïté (un seul plan vestait à cette date).';
       case 'reconciled_by_quantity':
@@ -87,6 +89,8 @@ export function qualificationReasonShort(
       return awardType ? `via StockExport · ${awardType}` : 'via StockExport';
     case 'nq_via_withholding':
       return awardType ? `Reclassé NQ · ${awardType}` : 'Reclassé NQ';
+    case 'broker_drip_marker':
+      return 'DRIP courtier';
     case 'manual':
       return 'Manuel';
     case 'bulk_qualify':
