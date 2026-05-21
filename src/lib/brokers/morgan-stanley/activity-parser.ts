@@ -350,7 +350,13 @@ function parseHoldingsSection(
     if (!Number.isFinite(acquisitionValue) || acquisitionValue < 0) continue;
 
     const costBasisPerShareUsd = acquisitionValue / quantity;
-    const isDrip = isLikelyReinvestedDividend(origin, quantity);
+    const rawOrigin = origin;
+    const isDrip = isLikelyReinvestedDividend(rawOrigin, quantity);
+    // DRIP shares are bought on the open market with the cash dividend and
+    // are no longer attached to the source plan — classify them as
+    // non-qualified Stock Award regardless of the Savings Plan label.
+    const resolvedOrigin: StockOrigin = isDrip ? 'DO' : rawOrigin;
+    const planType = isDrip ? 'non_qualified' : defaultPlanTypeFor(rawOrigin);
 
     idCounter.n++;
     out.push({
@@ -366,9 +372,9 @@ function parseHoldingsSection(
       totalCostBasisUsd: acquisitionValue,
       currentValueUsd: acquisitionValue,
       importCurrency: 'USD' as ImportCurrency,
-      origin,
+      origin: resolvedOrigin,
       holdingPeriod: 'Long' as HoldingPeriod,
-      planType: defaultPlanTypeFor(origin),
+      planType,
       qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
       ...(isDrip && { isReinvestedDividend: true }),
     });

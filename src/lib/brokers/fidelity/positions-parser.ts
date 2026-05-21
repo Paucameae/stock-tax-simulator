@@ -257,6 +257,16 @@ export function parseCsvFile(csvText: string): StockLot[] {
       ({ origin: resolvedOrigin, planType } = getDefaultPlanType(origin, grantDate ?? acquisitionDate));
       qualificationReason = 'broker_default';
       isDrip = isLikelyReinvestedDividend(resolvedOrigin, quantity);
+      // Fractional quantity on a vest-origin lot is the unambiguous signature
+      // of a DRIP. DRIP shares are bought on the open market with the cash
+      // dividend and are no longer attached to the source plan — they must
+      // be classified as a non-qualified Stock Award regardless of the
+      // broker's grant column.
+      if (isDrip) {
+        resolvedOrigin = 'DO';
+        planType = 'non_qualified';
+        qualificationReason = 'broker_drip_marker';
+      }
     }
 
     lots.push({
@@ -411,7 +421,7 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
       // DO = US Stock Award (RSU), non-qualified by default. User can override.
       planType: 'non_qualified',
       importCurrency: 'USD',
-      qualificationReason: 'broker_default',
+      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_default',
       ...(isDrip && { isReinvestedDividend: true }),
     });
   }
