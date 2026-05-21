@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { StockLot, StockOrigin, HoldingPeriod, PlanType, SoldLot } from '../../types';
+import type { StockLot, StockOrigin, HoldingPeriod, PlanType, SoldLot, QualificationReason } from '../../types';
 import { isLikelyReinvestedDividend } from '../../utils';
 
 // Safety guard: reject CSV files with absurd row counts to prevent DoS.
