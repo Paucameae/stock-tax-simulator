@@ -250,12 +250,26 @@ function App() {
     const reconciled = grants.length > 0 ? reconcileLots(importedLots, grants).lots : importedLots;
 
     // 2. Then apply user overrides and defaults for any DO lots that are still not
-    //    reconciled (no grant matched or StockExport not imported).
+    //    reconciled (no grant matched or StockExport not imported). Lots already
+    //    authoritatively classified by the broker (DRIP detection, reliable plan
+    //    label, previous manual / bulk pass) keep their parser-derived planType
+    //    untouched — overwriting them with the user's default would silently
+    //    downgrade a known-good classification (e.g. DRIP shares correctly
+    //    marked as non_qualified would become qualified_macron).
     let prepared: StockLot[];
     try {
       const overrides = JSON.parse(localStorage.getItem('planTypeOverrides') || '{}');
       prepared = reconciled.map((lot) => {
         if (lot.reconciled) return lot; // StockExport wins over overrides/defaults
+        const reason = lot.qualificationReason;
+        if (
+          reason === 'broker_plan_name' ||
+          reason === 'broker_drip_marker' ||
+          reason === 'manual' ||
+          reason === 'bulk_qualify'
+        ) {
+          return lot;
+        }
         if (lot.origin === 'DO' && overrides[lot.id]) {
           return { ...lot, planType: overrides[lot.id] };
         }
