@@ -26,11 +26,12 @@ describe('parseMsHoldingsCsv', () => {
     expect(lots.every(l => l.importCurrency === 'USD')).toBe(true);
   });
 
-  it('maps plan names to the correct origin', () => {
+  it('maps plan names to the correct origin (no SP/ESPP from MS)', () => {
     const lots = parseMsHoldingsCsv(sample);
     const byOrigin = (o: string) => lots.filter(l => l.origin === o).length;
-    expect(byOrigin('DO')).toBe(2); // Microsoft Stock Awards
-    expect(byOrigin('SP')).toBe(1); // ESPP
+    // Long Share Savings Plan is now classified as DO (no active ESPP at MSFT FR)
+    expect(byOrigin('DO')).toBe(3); // 2x Microsoft Stock Awards + 1x Long Share Savings Plan
+    expect(byOrigin('SP')).toBe(0);
     expect(byOrigin('FM')).toBe(1); // Macron qualified
   });
 
@@ -43,12 +44,19 @@ describe('parseMsHoldingsCsv', () => {
     expect(lot.currentValueUsd).toBeCloseTo(1894.25, 2);
   });
 
-  it('computes ESPP FMV (cost basis / 0.90) for SP origin only', () => {
+  it('never emits esppFmvPerShareUsd for MS lots (no SP origin anymore)', () => {
     const lots = parseMsHoldingsCsv(sample);
-    const espp = lots.find(l => l.origin === 'SP')!;
-    expect(espp.esppFmvPerShareUsd).toBeCloseTo((16.84 / 0.99) / 0.90, 4);
-    const stockAward = lots.find(l => l.origin === 'DO')!;
-    expect(stockAward.esppFmvPerShareUsd).toBeUndefined();
+    expect(lots.every(l => l.esppFmvPerShareUsd === undefined)).toBe(true);
+  });
+
+  it('flags fractional Long Share Savings Plan lots as DRIP', () => {
+    const lots = parseMsHoldingsCsv(sample);
+    // 12-Mar-2009 Long Share Savings Plan, qty 0.99 → DRIP (post-2009 accrual on legacy ESPP shares)
+    const drip = lots.find(l => l.acquisitionDate.getFullYear() === 2009)!;
+    expect(drip.origin).toBe('DO');
+    expect(drip.planType).toBe('non_qualified');
+    expect(drip.isReinvestedDividend).toBe(true);
+    expect(drip.qualificationReason).toBe('broker_drip_marker');
   });
 });
 
@@ -81,10 +89,11 @@ describe('parseMsSalesCsv', () => {
     expect(lot.costBasisUsd).toBeCloseTo(1314.85, 2);
   });
 
-  it('maps plan names to origin', () => {
+  it('maps plan names to origin (Long Share Savings Plan → DO)', () => {
     const sales = parseMsSalesCsv(sample);
-    expect(sales.find(s => s.origin === 'SP')).toBeDefined();
-    expect(sales.find(s => s.origin === 'DO')).toBeDefined();
+    // All MS sales now resolve to DO (no SP/ESPP at Microsoft France).
+    expect(sales.every(s => s.origin === 'DO')).toBe(true);
+    expect(sales.find(s => s.origin === 'SP')).toBeUndefined();
   });
 
   it('infers Long holding period when held ≥ 1 year', () => {
