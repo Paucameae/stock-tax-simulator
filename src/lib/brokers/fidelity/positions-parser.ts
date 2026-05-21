@@ -255,7 +255,16 @@ export function parseCsvFile(csvText: string): StockLot[] {
       isDrip = true;
     } else {
       ({ origin: resolvedOrigin, planType } = getDefaultPlanType(origin, grantDate ?? acquisitionDate));
-      qualificationReason = 'broker_default';
+      // FM/FQ/SP come from Fidelity's Origin column and fully determine the
+      // fiscal regime (Macron / pre-Macron via the 2015-08-07 cutoff for FQ,
+      // ESPP for SP). Treat them as authoritative broker classifications.
+      // DO is genuinely ambiguous (US Stock Award covers both qualified and
+      // non-qualified plans), and an unrecognised origin falls back to DO —
+      // both must remain user-overridable via bulk-qualify. Note: FQ may be
+      // remapped to FM post-cutoff by getDefaultPlanType — we still consider
+      // it authoritative because the input column was a real plan code.
+      const fromBrokerColumn = origin === 'FM' || origin === 'FQ' || origin === 'SP';
+      qualificationReason = fromBrokerColumn ? 'broker_plan_name' : 'broker_default';
       isDrip = isLikelyReinvestedDividend(resolvedOrigin, quantity);
       // Fractional quantity on a vest-origin lot is the unambiguous signature
       // of a DRIP. DRIP shares are bought on the open market with the cash
