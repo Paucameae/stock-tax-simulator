@@ -42,14 +42,37 @@ export interface BulkQualifyOptions {
 
 /**
  * Bulk-qualification only touches lots that the user genuinely needs to
- * decide for: lots already reconciled against StockExport carry an
- * authoritative classification we must not silently overwrite, and ESPP
- * lots (origin SP) are self-describing in broker exports — unless the
- * user opts in via `options.includeEspp`.
+ * decide for. A lot is excluded when its classification is already
+ * authoritative:
+ *
+ *   - `reconciled` against StockExport (unique/by-quantity/by-agreement
+ *     matches),
+ *   - `origin === 'SP'` (ESPP is self-describing in broker exports —
+ *     unless the user opts in via `options.includeEspp`),
+ *   - `qualificationReason` already set to a trustworthy source:
+ *       • `broker_plan_name` — origin derived from a reliable broker
+ *         label (Morgan Stanley "Microsoft Stock Awards", "… Macron", …),
+ *       • `broker_drip_marker` — broker flagged the lot as a reinvested
+ *         dividend (or parser detected it via fractional-quantity
+ *         heuristic),
+ *       • `manual` — user changed the classification by hand,
+ *       • `bulk_qualify` — already requalified in a previous bulk pass.
+ *
+ * Only `broker_default` (no info available — typical of Fidelity sales
+ * reports) and `undefined` (legacy data) remain eligible.
  */
 export function isEligibleForBulk(lot: QualifiableLot, options: BulkQualifyOptions = {}): boolean {
   if (lot.reconciled) return false;
   if (lot.origin === 'SP' && !options.includeEspp) return false;
+  const reason = lot.qualificationReason;
+  if (
+    reason === 'broker_plan_name' ||
+    reason === 'broker_drip_marker' ||
+    reason === 'manual' ||
+    reason === 'bulk_qualify'
+  ) {
+    return false;
+  }
   return true;
 }
 
