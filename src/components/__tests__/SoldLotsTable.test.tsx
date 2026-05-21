@@ -109,4 +109,39 @@ describe('SoldLotsTable', () => {
     );
     expect(screen.getByText(/taux BCE de la date de vente/i)).toBeDefined();
   });
+
+  it('hides DRIP filter when no lot is flagged as reinvested dividend', () => {
+    render(
+      <SoldLotsTable
+        soldLots={[makeSold()]}
+        onSoldLotsChange={vi.fn()}
+        defaultPlanType="qualified_macron"
+        saleYear={2024}
+        onSaleYearChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByLabelText(/dividendes réinvestis/i)).toBeNull();
+  });
+
+  it('filters lots by DRIP flag', () => {
+    const lots = [
+      makeSold({ id: 'plain', isReinvestedDividend: false }),
+      makeSold({ id: 'drip', isReinvestedDividend: true, quantity: 7, proceeds: 700, costBasis: 200, gainLoss: 500 }),
+    ];
+    render(
+      <SoldLotsTable
+        soldLots={lots}
+        onSoldLotsChange={vi.fn()}
+        defaultPlanType="qualified_macron"
+        saleYear={2024}
+        onSaleYearChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Ventes effectuées \(2 lots\)/)).toBeDefined();
+    const dripSelect = screen.getByLabelText(/dividendes réinvestis/i) as HTMLSelectElement;
+    fireEvent.change(dripSelect, { target: { value: 'drip' } });
+    expect(screen.getByText(/Ventes effectuées \(1 lot\)/)).toBeDefined();
+    fireEvent.change(dripSelect, { target: { value: 'noDrip' } });
+    expect(screen.getByText(/Ventes effectuées \(1 lot\)/)).toBeDefined();
+  });
 });
