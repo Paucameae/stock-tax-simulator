@@ -51,6 +51,23 @@ export function SoldLotsTable({
     if (filterDrip === 'drip' && l.isReinvestedDividend !== true) return false;
     if (filterDrip === 'noDrip' && l.isReinvestedDividend === true) return false;
     return true;
+  }).sort((a, b) => {
+    // Tri déterministe pour rendre l'ordre lisible et reproductible
+    // indépendamment de l'ordre des fichiers d'import / de la fusion
+    // multi-broker :
+    //   1. date de vente croissante (chronologique) ;
+    //   2. date d'acquisition croissante (regroupe visuellement les lots
+    //      issus d'un même vesting) ;
+    //   3. courtier alphabétique ;
+    //   4. origine (DO, FM, FQ, SP) ;
+    //   5. quantité décroissante (les gros lots remontent).
+    const ds = a.saleDate.getTime() - b.saleDate.getTime();
+    if (ds !== 0) return ds;
+    const da = a.acquisitionDate.getTime() - b.acquisitionDate.getTime();
+    if (da !== 0) return da;
+    if (a.broker !== b.broker) return a.broker.localeCompare(b.broker);
+    if (a.origin !== b.origin) return a.origin.localeCompare(b.origin);
+    return b.quantity - a.quantity;
   });
   const hiddenCount = soldLots.length - filteredLots.length;
 
