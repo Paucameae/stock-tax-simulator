@@ -65,6 +65,10 @@ describe('parseMsActivityCells — full Activity sheet (Dupont-like)', () => {
     expect(result.soldLots[0].proceedsUsd).toBe(2440);
     expect(result.soldLots[0].costBasisUsd).toBe(1314.85);
     expect(result.soldLots[0].origin).toBe('DO');
+    // Plan label is reliable → mark the sale as authoritatively classified so
+    // the bulk-qualify panel does not propose to overwrite it.
+    expect(result.soldLots[0].qualificationReason).toBe('broker_plan_name');
+    expect(result.soldLots[0].isReinvestedDividend).toBeUndefined();
 
     expect(result.lots).toHaveLength(2);
     expect(result.lots[0].quantity).toBe(495);
@@ -171,5 +175,23 @@ describe('parseMsActivityCells — blank-row separation', () => {
     const result = parseMsActivityCells(cells);
     expect(result.soldLots).toHaveLength(1);
     expect(result.lots).toHaveLength(1);
+  });
+
+  it('classifies a fractional Share Sales row as DRIP (DO/non_qualified)', () => {
+    // A fractional quantity on an FM-mapped plan is the signature of a
+    // reinvested-dividend share: it must be reclassified to DO/non_qualified
+    // and tagged with broker_drip_marker so the bulk-qualify UI leaves it
+    // alone.
+    const cells: string[][] = [
+      row('Share Sales'),
+      row('Date', 'Plan Name', 'Fund Name', 'Type', 'Order Status', 'Sale Price', 'Quantity', 'Net Cash Proceeds', 'Acquisition Date', 'Acquisition Value'),
+      row('46013', 'Microsoft Qualified Stock Awards - Macron', 'MSFT', 'Ad Hoc', 'Complete', '488', '0.123', '60.02', '44804', '32.4'),
+    ];
+    const result = parseMsActivityCells(cells);
+    expect(result.soldLots).toHaveLength(1);
+    expect(result.soldLots[0].origin).toBe('DO');
+    expect(result.soldLots[0].planType).toBe('non_qualified');
+    expect(result.soldLots[0].qualificationReason).toBe('broker_drip_marker');
+    expect(result.soldLots[0].isReinvestedDividend).toBe(true);
   });
 });

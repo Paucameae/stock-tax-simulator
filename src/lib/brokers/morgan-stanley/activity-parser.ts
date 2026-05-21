@@ -276,8 +276,17 @@ function parseShareSalesSection(
     const acquisitionValue = parseMsAmount(acqValRaw);
     if (!Number.isFinite(acquisitionValue) || acquisitionValue < 0) continue;
 
-    const origin = planNameToOrigin(row[map['Plan Name']] ?? '');
-    if (!origin) continue;
+    const rawOrigin = planNameToOrigin(row[map['Plan Name']] ?? '');
+    if (!rawOrigin) continue;
+
+    // Same DRIP heuristic as the CSV Share Sales parser: a fractional
+    // quantity on a non-ESPP origin is a reinvested-dividend share. We
+    // force DO/non_qualified for those so the bulk-qualify and DRIP-filter
+    // UI behave consistently regardless of whether the user imported the
+    // CSV "Share Sales" file or the XLSX activity bundle.
+    const isDrip = isLikelyReinvestedDividend(rawOrigin, quantity);
+    const origin: StockOrigin = isDrip ? 'DO' : rawOrigin;
+    const planType: PlanType = isDrip ? 'non_qualified' : defaultPlanTypeFor(rawOrigin);
 
     idCounter.n++;
     out.push({
@@ -293,8 +302,10 @@ function parseShareSalesSection(
       costBasisUsd: acquisitionValue,
       holdingPeriod: computeHoldingPeriod(acquisitionDate, saleDate),
       origin,
-      planType: defaultPlanTypeFor(origin),
+      planType,
       importCurrency: 'USD' as ImportCurrency,
+      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
+      ...(isDrip && { isReinvestedDividend: true }),
     });
   }
 

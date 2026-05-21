@@ -378,9 +378,22 @@ function App() {
 
     // 2. For lots that did NOT reconcile, fall back to the user's default
     //    planType (Macron / pré-Macron). Reconciled lots keep the planType
-    //    derived from their grant — never overwrite it.
+    //    derived from their grant — never overwrite it. Lots already
+    //    authoritatively classified by the broker (Morgan Stanley plan
+    //    label, DRIP detection, …) also keep their parser-derived planType:
+    //    overwriting them with the user's default would silently downgrade
+    //    a known-good classification.
     const withPlanType = reconciled.map((sl) => {
       if (sl.reconciled) return sl;
+      const reason = sl.qualificationReason;
+      if (
+        reason === 'broker_plan_name' ||
+        reason === 'broker_drip_marker' ||
+        reason === 'manual' ||
+        reason === 'bulk_qualify'
+      ) {
+        return sl;
+      }
       return {
         ...sl,
         planType: settings.defaultPlanType === 'non_qualified' ? 'non_qualified' as const : 'qualified_macron' as const,
