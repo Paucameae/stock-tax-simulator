@@ -58,7 +58,10 @@ function parseMsAmount(raw: string): number {
 /** Map MS Plan Name to the app's StockOrigin code. */
 function planNameToOrigin(planName: string): StockOrigin | null {
   const n = planName.trim();
-  if (n === 'Microsoft Corporation Long Share Savings Plan') return 'SP';
+  // See positions-parser.ts for the rationale: no active ESPP at Microsoft
+  // France, so Long Share Savings Plan is treated as DO (DRIP detection via
+  // fractional quantity at the call site).
+  if (n === 'Microsoft Corporation Long Share Savings Plan') return 'DO';
   if (n === 'Microsoft Qualified Stock Awards - Macron') return 'FM';
   if (n === 'Microsoft Stock Awards') return 'DO';
   return null;
@@ -159,7 +162,7 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
     origin,
     planType: defaultPlanTypeFor(origin),
     importCurrency: 'USD' as ImportCurrency,
-    qualificationReason: 'broker_plan_name',
+    qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
     ...(isDrip && { isReinvestedDividend: true }),
   };
 }

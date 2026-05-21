@@ -32,7 +32,11 @@ function parseMsAmount(raw: string): number {
 
 function planNameToOrigin(planName: string): StockOrigin | null {
   const n = planName.trim();
-  if (n === 'Microsoft Corporation Long Share Savings Plan') return 'SP';
+  // Microsoft Corporation Long Share Savings Plan: closed since ~2009.
+  // Any lot still appearing under this label is either a legacy vest (integer
+  // quantity → DO non_qualified) or a DRIP accrual on top of it (fractional
+  // quantity). User-confirmed: there is no active ESPP at Microsoft France.
+  if (n === 'Microsoft Corporation Long Share Savings Plan') return 'DO';
   if (n === 'Microsoft Qualified Stock Awards - Macron') return 'FM';
   if (n === 'Microsoft Stock Awards') return 'DO';
   return null;
@@ -48,6 +52,8 @@ function defaultPlanTypeFor(origin: StockOrigin): PlanType {
     // qualified shares under this label should reconcile via StockExport or
     // mark them manually.
     case 'DO': return 'non_qualified';
+    // Unreachable for MS lots after PR #2 (Long Share Savings Plan now maps
+    // to DO). Kept for type completeness.
     case 'SP': return 'non_qualified';
   }
 }
@@ -135,8 +141,6 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
       totalCostBasis: 0,
       currentValue: 0,
       unrealizedGainLoss: 0,
-      // ESPP FMV before 10% discount
-      esppFmvPerShareUsd: origin === 'SP' ? costBasisPerShareUsd / 0.90 : undefined,
       costBasisPerShareUsd,
       totalCostBasisUsd: acquisitionValue,
       // MS does not export market value; default to cost basis (live MSFT
@@ -146,7 +150,7 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
       origin,
       holdingPeriod: 'Long' as HoldingPeriod,
       planType: defaultPlanTypeFor(origin),
-      qualificationReason: 'broker_plan_name',
+      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
       ...(isDrip && { isReinvestedDividend: true }),
     });
   }
