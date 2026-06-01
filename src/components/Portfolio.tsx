@@ -419,12 +419,13 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                 <Select
                   value={filterDrip}
                   onChange={(e) => setFilterDrip(e.target.value as 'all' | 'drip' | 'noDrip')}
-                  className="w-40"
-                  aria-label="Filtrer les dividendes réinvestis (DRIP)"
+                  className="w-64"
+                  aria-label="Filtrer les dividendes réinvestis"
+                  title="Les dividendes réinvestis (DRIP) génèrent de nombreux petits lots fractionnaires classés automatiquement."
                 >
-                  <option value="all">DRIP : tous</option>
-                  <option value="drip">DRIP uniquement</option>
-                  <option value="noDrip">Masquer les DRIP</option>
+                  <option value="all">Toutes les lignes</option>
+                  <option value="drip">Dividendes réinvestis seulement</option>
+                  <option value="noDrip">Masquer les dividendes réinvestis</option>
                 </Select>
               )}
               {isFiltered && (
