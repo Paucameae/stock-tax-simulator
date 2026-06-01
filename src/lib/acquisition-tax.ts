@@ -37,8 +37,8 @@ export function calculateAcquisitionGainTax(
    * a per-lot weighted average based on actual holding years using
    * {@link macronAbatementRateFromHoldingYears}.
    *
-   * Only used when planType === 'qualified_macron' (or pre-Macron falls back
-   * through the Macron path because grantDate is missing).
+   * Only used when planType === 'qualified_macron'. The pre-Macron regime
+   * never applies an abatement, so this argument is ignored for FQ lots.
    */
   macronAbatementRate: number = AGA_ABATEMENT_RATE_SHORT,
   config?: TaxConfig
@@ -57,8 +57,14 @@ export function calculateAcquisitionGainTax(
   const agaThreshold = config?.agaThreshold ?? AGA_THRESHOLD;
   const salaryRate = config?.salaryContributionRate ?? SALARY_CONTRIBUTION_RATE;
 
-  // Pre-Macron regime (FQ)
-  if (planType === 'qualified_pre_macron' && grantDate) {
+  // Pre-Macron regime (FQ). Applied whenever the lot is classified
+  // qualified_pre_macron — even when the grant date is unknown (e.g. a user
+  // forcing Origine=FQ on a sold lot, which carries no grant date). In that
+  // case we default to the post-28/09/2012 sub-regime (T&S, PS activité,
+  // 10 % salary contribution, no abatement) — the common Microsoft pré-Macron
+  // case (KPMG 2025 deck p. 22). We must NOT fall through to the Macron path,
+  // which would wrongly grant the 50 % abatement and the patrimoine PS rate.
+  if (planType === 'qualified_pre_macron') {
     return calculatePreMacronAcquisitionGainTax(totalAcquisitionGain, otherIncome, taxShares, grantDate, config);
   }
 
@@ -106,7 +112,7 @@ function calculatePreMacronAcquisitionGainTax(
   totalAcquisitionGain: number,
   otherIncome: number,
   taxShares: number,
-  grantDate: Date,
+  grantDate: Date | undefined,
   config?: TaxConfig
 ): AcquisitionGainTaxResult {
   const psPatrimoine = config?.psPatrimoine ?? PS_PATRIMOINE;
@@ -114,13 +120,16 @@ function calculatePreMacronAcquisitionGainTax(
   const csgDeductible = config?.csgDeductible ?? CSG_DEDUCTIBLE;
   const salaryRate = config?.salaryContributionRate ?? SALARY_CONTRIBUTION_RATE;
 
-  const grantTimestamp = grantDate.getTime();
   const sep2012 = new Date(2012, 8, 28).getTime();
   // 10 % salary contribution introduced by article 13 of the 2008 Social
   // Security Financing Act, applicable only to AGA grants on or after
   // 16 October 2007 (KPMG 2025 deck p. 21). Grants prior to that date are
   // exempt from the 10 % "contribution salariale".
   const oct2007 = new Date(2007, 9, 16).getTime();
+  // When the grant date is unknown (e.g. a manual Origine=FQ override on a
+  // sold lot), default to the post-28/09/2012 sub-regime — the common
+  // Microsoft pré-Macron case (PS activité 9.7 %, 10 % salary contribution).
+  const grantTimestamp = grantDate ? grantDate.getTime() : sep2012;
   const isPre2007Grant = grantTimestamp < oct2007;
 
   if (grantTimestamp < sep2012) {

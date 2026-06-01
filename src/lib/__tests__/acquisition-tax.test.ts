@@ -153,10 +153,17 @@ describe('calculateAcquisitionGainTax', () => {
       expect(r.salaryContribution).toBeCloseTo(gain * cfg2025.salaryContributionRate, 2);
     });
 
-    it('falls back to Macron path when grantDate is undefined', () => {
-      // Without grantDate, pre-macron branch is skipped → Macron abatement applies
-      const r = calculateAcquisitionGainTax(100000, 0, 1, 'qualified_pre_macron', undefined, 0.5, cfg2025);
-      expect(r.abatement50).toBe(50000);
+    it('without grantDate, applies the post-2012 pré-Macron regime (no Macron abatement)', () => {
+      // Bug fix: a qualified_pre_macron lot with no grant date (e.g. user forcing
+      // Origine=FQ on a sold lot) must stay in the pré-Macron regime — never fall
+      // through to the Macron 50 % abatement. Defaults to the post-28/09/2012
+      // sub-regime: no abatement, PS activité, 10 % salary contribution.
+      const gain = 100000;
+      const r = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_pre_macron', undefined, 0.5, cfg2025);
+      expect(r.abatement50).toBe(0);
+      expect(r.below300k).toBe(gain);
+      expect(r.psBelow).toBeCloseTo(gain * cfg2025.psActivite, 2);
+      expect(r.salaryContribution).toBeCloseTo(gain * cfg2025.salaryContributionRate, 2);
     });
 
     it('grants before 16 Oct 2007 escape the 10 % salary contribution', () => {

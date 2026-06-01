@@ -45,8 +45,17 @@ const TX_COL = {
   netShares: 'BB',
 } as const;
 
-/** Macron law takes effect for awards granted on/after 2015-08-07 (JO 2015-08-07). */
-const MACRON_START = new Date('2015-08-07T00:00:00Z');
+/**
+ * Microsoft pivot between the pré-Macron and Macron regimes, by *grant* date.
+ * Although the Macron law (loi 2015-990) authorises plans from 7 Aug 2015, KPMG
+ * 2025 (deck p. 20-23) establishes that Microsoft switched its France-qualified
+ * grants to the Macron regime as of 30 November 2016 — the last pré-Macron grant
+ * is dated 29 November 2016. Grants before this date follow the post-28/09/2012
+ * pré-Macron regime (T&S, PS activité, 10 % salary contribution).
+ * Built with the local-time constructor to match parseIsoDate (which also uses
+ * local time), avoiding a one-day skew across time zones.
+ */
+const MACRON_START = new Date(2016, 10, 30);
 
 export interface ParsedStockExport {
   grants: GrantInfo[];

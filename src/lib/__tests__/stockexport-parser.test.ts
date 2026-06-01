@@ -18,9 +18,20 @@ describe('classifyAward', () => {
     });
   });
 
-  it('classifies FQ awards granted before 2015-08-07 as qualified_pre_macron (origin FQ)', () => {
+  it('classifies FQ awards granted before 2016-11-30 as qualified_pre_macron (origin FQ)', () => {
     expect(classifyAward('FQ Annual', new Date(2014, 0, 15))).toEqual({
       origin: 'FQ', planType: 'qualified_pre_macron',
+    });
+  });
+
+  it('uses the Microsoft 2016-11-30 pivot (KPMG 2025): 2016-10-17 is pré-Macron, 2016-11-30 is Macron', () => {
+    // 17 Oct 2016 — before the Microsoft Macron pivot ⇒ pré-Macron (origin FQ).
+    expect(classifyAward('FY17 FQ Annual', new Date(2016, 9, 17))).toEqual({
+      origin: 'FQ', planType: 'qualified_pre_macron',
+    });
+    // 30 Nov 2016 — first Microsoft Macron grant ⇒ Macron (origin FM).
+    expect(classifyAward('FY17 FQ Annual', new Date(2016, 10, 30))).toEqual({
+      origin: 'FM', planType: 'qualified_macron',
     });
   });
 

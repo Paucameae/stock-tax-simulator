@@ -136,8 +136,14 @@ function reassembleAmounts(
   return best;
 }
 
-/** Macron law takes effect for awards granted on/after 2015-08-07 (JO 2015-08-07). */
-const MACRON_START = new Date('2015-08-07T00:00:00Z');
+/**
+ * Microsoft pivot between the pré-Macron and Macron regimes, by *grant* date.
+ * Per KPMG 2025 (deck p. 20-23) Microsoft switched its France-qualified grants
+ * to the Macron regime as of 30 November 2016 (last pré-Macron grant: 29 Nov 2016).
+ * Built with the local-time constructor to match parseFidelityDate, avoiding a
+ * one-day skew across time zones.
+ */
+const MACRON_START = new Date(2016, 10, 30);
 
 /**
  * Default origin/planType inferred from a Fidelity CSV origin code.
@@ -145,7 +151,7 @@ const MACRON_START = new Date('2015-08-07T00:00:00Z');
  * Notes (per KPMG "Stock Awards – Déclaration des revenus 2025"):
  *  - "FQ" in Microsoft labels only signals that shares are France-qualified;
  *    whether they fall under the Macron or pre-Macron regime depends on the
- *    grant date (cutoff: 2015-08-07).
+ *    grant date (Microsoft cutoff: 2016-11-30, KPMG 2025 deck p. 20-23).
  *  - "DO" (US Stock Awards / RSU) are non-qualified by default. The user can
  *    still mark them as qualified manually or via StockExport reconciliation.
  */
@@ -256,7 +262,7 @@ export function parseCsvFile(csvText: string): StockLot[] {
     } else {
       ({ origin: resolvedOrigin, planType } = getDefaultPlanType(origin, grantDate ?? acquisitionDate));
       // FM/FQ/SP come from Fidelity's Origin column and fully determine the
-      // fiscal regime (Macron / pre-Macron via the 2015-08-07 cutoff for FQ,
+      // fiscal regime (Macron / pre-Macron via the 2016-11-30 cutoff for FQ,
       // ESPP for SP). Treat them as authoritative broker classifications.
       // DO is genuinely ambiguous (US Stock Award covers both qualified and
       // non-qualified plans), and an unrecognised origin falls back to DO —
