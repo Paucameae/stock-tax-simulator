@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateDeclaration, formatDeclarationText, groupForm2074Lines } from '../declaration';
+import { generateDeclaration, formatDeclarationText, groupForm2074Lines, buildForm2074Rows } from '../declaration';
 import type { TaxSimulationResult, SaleLotEntry, StockLot } from '../types';
 
 function makeLot(overrides: Partial<StockLot> = {}): StockLot {
@@ -356,3 +356,38 @@ describe('groupForm2074Lines', () => {
     expect(grouped[0]).toEqual(single);
   });
 });
+
+describe('buildForm2074Rows', () => {
+  it('emits a header row plus one row per line, with the displayed columns', () => {
+    const lines = [
+      { date: '07/07/2025', quantity: 2, origin: 'Stock Award', salePrice: 424.42, costBasis: 120.16, gainLoss: 608.52 },
+    ];
+    const rows = buildForm2074Rows(lines);
+    expect(rows).toHaveLength(2);
+    // En-têtes avec numéros de ligne du cadre 510.
+    expect(rows[0]).toEqual([
+      'Date vente (512)',
+      'Type (511)',
+      'Nb actions (515)',
+      'PU vente (514)',
+      'Montant vente (516)',
+      'PU acquisition (520)',
+      'Prix acquisition global (521)',
+      'PV/MV (524)',
+    ]);
+    // Montant vente = 2 × 424.42, prix acq global = 2 × 120.16 (arrondis au centime).
+    expect(rows[1]).toEqual([
+      '07/07/2025', 'Stock Award', 2, 424.42, 848.84, 120.16, 240.32, 608.52,
+    ]);
+  });
+
+  it('reflects the grouping state passed in (grouped vs raw lines)', () => {
+    const raw = [
+      { date: '07/07/2025', quantity: 1, origin: 'Stock Award', salePrice: 424.42, costBasis: 120, gainLoss: 304.42 },
+      { date: '07/07/2025', quantity: 1, origin: 'Stock Award', salePrice: 424.42, costBasis: 120, gainLoss: 304.42 },
+    ];
+    expect(buildForm2074Rows(raw)).toHaveLength(3); // header + 2 lignes brutes
+    expect(buildForm2074Rows(groupForm2074Lines(raw))).toHaveLength(2); // header + 1 ligne regroupée
+  });
+});
+

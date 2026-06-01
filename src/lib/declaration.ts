@@ -39,6 +39,46 @@ export function groupForm2074Lines(lines: Form2074Line[]): Form2074Line[] {
   return [...groups.values()];
 }
 
+/**
+ * Transforme des lignes 2074 (déjà regroupées ou non par l'appelant) en une
+ * matrice de cellules prête à être exportée en XLSX. La première ligne porte
+ * les en-têtes avec les numéros de ligne du cadre 510 entre parenthèses ;
+ * les colonnes reprennent exactement le tableau affiché à l'écran.
+ *
+ * Les montants sont des nombres (pas des chaînes) pour rester réutilisables
+ * dans un tableur (sommes, vérifications). On laisse Excel formater.
+ */
+export function buildForm2074Rows(lines: Form2074Line[]): (string | number)[][] {
+  const F = FORM_2074_CADRE_510;
+  const header: (string | number)[] = [
+    `Date vente (${F.saleDate.line})`,
+    `Type (${F.designation.line})`,
+    `Nb actions (${F.quantity.line})`,
+    `PU vente (${F.unitSalePrice.line})`,
+    `Montant vente (${F.totalSale.line})`,
+    `PU acquisition (${F.unitAcqPrice.line})`,
+    `Prix acquisition global (${F.totalAcqPrice.line})`,
+    `PV/MV (${F.result.line})`,
+  ];
+  const rows = lines.map((line): (string | number)[] => {
+    const totalSale = line.quantity * line.salePrice;
+    const totalCost = line.quantity * line.costBasis;
+    // Arrondi au centime pour les montants dérivés, cohérent avec l'affichage.
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    return [
+      line.date,
+      line.origin,
+      line.quantity,
+      round2(line.salePrice),
+      round2(totalSale),
+      round2(line.costBasis),
+      round2(totalCost),
+      round2(line.gainLoss),
+    ];
+  });
+  return [header, ...rows];
+}
+
 export function generateDeclaration(
   result: TaxSimulationResult,
   lots: SaleLotEntry[],

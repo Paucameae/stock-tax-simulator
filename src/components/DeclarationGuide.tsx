@@ -1,10 +1,11 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
-import { FileText, Copy, Check } from 'lucide-react';
+import { FileText, Copy, Check, Download } from 'lucide-react';
 import type { TaxSimulationResult, SaleLotEntry } from '../lib/types';
-import { generateDeclaration, formatDeclarationText, groupForm2074Lines } from '../lib/declaration';
+import { generateDeclaration, formatDeclarationText, groupForm2074Lines, buildForm2074Rows } from '../lib/declaration';
 import { FORM_2042, FORM_2042C_AGA_MACRON, FORM_2074_CADRE_510 } from '../lib/tax-forms';
+import { buildXlsxBlob, downloadBlob } from '../lib/xlsx-writer';
 import { formatEUR } from '../lib/utils';
 
 /** impots.gouv.fr limite la saisie manuelle du cadre 510 à 99 lignes. */
@@ -48,6 +49,14 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // L'export reprend les lignes EXACTEMENT telles qu'affichées : `displayedLines`
+  // reflète déjà l'état de la case « Regrouper les lignes identiques ».
+  const handleExportXlsx = () => {
+    const rows = buildForm2074Rows(displayedLines);
+    const blob = buildXlsxBlob(rows, `2074 cadre 510 ${fiscalYear}`);
+    const suffix = groupLines ? '-regroupe' : '';
+    downloadBlob(blob, `formulaire-2074-${fiscalYear}${suffix}.xlsx`);
+  };
   return (
     <div className="space-y-6">
       <Card>
@@ -161,6 +170,16 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                     </span>
                   )}
                 </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportXlsx}
+                  className="gap-1"
+                  title="Télécharger les lignes du cadre 510 au format Excel (respecte le regroupement ci-dessus)"
+                >
+                  <Download className="h-4 w-4" />
+                  Exporter en xlsx
+                </Button>
               </div>
               {exceedsImpotsLimit && !groupLines && (
                 <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md p-2 mb-3">
