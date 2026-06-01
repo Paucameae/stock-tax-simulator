@@ -39,6 +39,15 @@ scripts/ms-inspect.out
 scripts/trim-logos.ps1
 .git-msg-*.txt
 
+# Local-only feature demo fixtures and verification scripts (ad-hoc, not shared)
+demo/README-features-demo.md
+demo/build-stockexport-demo.cjs
+demo/*-features.csv
+demo/demo-stockexport.xlsx
+demo/verify-broker-demos.mjs
+demo/verify-end-to-end.mjs
+demo/verify-stockexport-demo.mjs
+
 # Local-only KPMG reference deck (copyrighted, not redistributed)
 public/Stock Awards - Déclaration des revenus 2025 - KPMG Avocats - ENG.pdf
 
