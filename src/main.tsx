@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { registerServiceWorker } from './lib/sw-update.ts'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -9,11 +10,5 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-// Register service worker for PWA / offline support
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // SW registration failed — app still works normally
-    });
-  });
-}
+// Register service worker for PWA / offline support, with in-app update prompts.
+registerServiceWorker();

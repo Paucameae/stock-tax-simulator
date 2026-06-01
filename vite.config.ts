@@ -1,11 +1,46 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite'
+import { execSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+// A version string that changes on every deploy so the service worker can
+// scope its cache per-build and purge older caches on activation. Prefer the
+// git commit hash (stable + traceable); fall back to a build timestamp.
+function resolveBuildVersion(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return `t${Date.now()}`;
+  }
+}
+
+// Replace the `__SW_VERSION__` placeholder in the emitted public/sw.js with the
+// build version. Files in public/ are copied verbatim by Vite, so we post-process
+// the output in closeBundle (after it has been written to the output dir).
+function swVersionPlugin(version: string): Plugin {
+  return {
+    name: 'sw-version',
+    apply: 'build',
+    closeBundle() {
+      const swPath = resolve(__dirname, 'dist', 'sw.js');
+      try {
+        const src = readFileSync(swPath, 'utf8');
+        writeFileSync(swPath, src.replace(/__SW_VERSION__/g, version), 'utf8');
+      } catch {
+        // No sw.js in output (e.g. library build) — nothing to do.
+      }
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), swVersionPlugin(resolveBuildVersion())],
   server: {
     proxy: {
       '/api': 'http://localhost:7071',

@@ -16,6 +16,7 @@ import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult,
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
 import { DividendsDeclaration } from './components/DividendsDeclaration';
 import { BulkQualifyPanel } from './components/BulkQualifyPanel';
+import { UpdateBanner } from './components/UpdateBanner';
 import { generateId, mergeByBroker } from './lib/utils';
 
 // Lazy-load heavy components (pdfjs-dist via Settings, recharts via Portfolio)
@@ -731,6 +732,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <UpdateBanner />
       {/* Header */}
       <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">

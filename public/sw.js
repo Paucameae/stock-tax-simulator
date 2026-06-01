@@ -1,7 +1,11 @@
 /// Service Worker for Simulateur Fiscal MSFT
 /// Cache-first for static assets, network-first for API calls
 
-const CACHE_NAME = 'stock-tax-simulator-v1';
+// Replaced at build time (see vite.config.ts) by the build version so each
+// deploy gets a distinct cache that the `activate` handler can purge. In dev
+// the placeholder is left as-is, which is harmless.
+const SW_VERSION = '__SW_VERSION__';
+const CACHE_NAME = `stock-tax-simulator-${SW_VERSION}`;
 
 // Static assets to precache (populated at build time via index.html)
 // The SW will also cache any same-origin request at runtime
@@ -11,12 +15,24 @@ const PRECACHE_URLS = [
   '/favicon.svg',
 ];
 
-// Install: precache essential assets
+// Install: precache essential assets.
+// NOTE: we deliberately do NOT call self.skipWaiting() here. A freshly
+// installed SW stays in the `waiting` state while an older version still
+// controls open tabs, so an active user keeps running entirely on the old
+// version (its cache intact) until they explicitly opt in to the update via
+// the in-app banner (which posts SKIP_WAITING below).
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
   );
-  self.skipWaiting();
+});
+
+// Allow the page to trigger the waiting SW's activation on demand (banner
+// "Recharger" button). The client reloads once on `controllerchange`.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Activate: clean up old caches
