@@ -75,6 +75,7 @@ export type QualificationReason =
   | 'reconciled_by_quantity'   // multiple grants — disambiguated by net-share count
   | 'reconciled_by_agreement'  // multiple grants but identical (origin, planType)
   | 'nq_via_withholding'       // grant reclassified as NQ thanks to the StockExport Transactions sheet
+  | 'inferred_espp_by_date'    // fractional lot on a calendar-quarter-end date → MSFT ESPP purchase pattern
   | 'manual'                   // user changed the value via a Select on the lot row
   | 'bulk_qualify';            // user used the bulk-qualify panel
 

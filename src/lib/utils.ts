@@ -27,6 +27,38 @@ export function isLikelyReinvestedDividend(origin: StockOrigin, quantity: number
 }
 
 /**
+ * True when the lot's (acquisitionDate, quantity) matches the Microsoft
+ * ESPP purchase pattern: a fractional quantity AND an acquisition date that
+ * falls on the last business day of a calendar quarter (i.e. within the
+ * last 4 days of March / June / September / December).
+ *
+ * The Microsoft ESPP purchase period ends on the last business day of each
+ * calendar quarter; deposits land on or near that date. Stock Award vests
+ * at Microsoft are scheduled on grant-anniversary dates (Feb/May/Aug/Nov 28-31
+ * for FQ Annual, or 15th-of-month for On-Hire/refresh) and never fall on
+ * a calendar-quarter end by design. Dividend pay dates are mid-quarter
+ * (Feb/May/Aug/Nov around the 12th-14th), also never on quarter ends.
+ *
+ * So a fractional lot dated on (or 1-3 days before) March 31 / June 30 /
+ * September 30 / December 31 is unambiguously an ESPP purchase. This is
+ * used by the Fidelity sales-CSV parser to set `origin: 'SP'` rather than
+ * defaulting to `'DO'` (which would then trigger the DRIP heuristic).
+ */
+export function isLikelyEsppPurchase(acquisitionDate: Date, quantity: number): boolean {
+  if (!Number.isFinite(quantity) || quantity <= 0) return false;
+  if (Math.abs(quantity - Math.round(quantity)) <= 1e-6) return false;
+  if (!(acquisitionDate instanceof Date) || isNaN(acquisitionDate.getTime())) return false;
+  const month = acquisitionDate.getMonth(); // 0-based: 2=Mar, 5=Jun, 8=Sep, 11=Dec
+  if (month !== 2 && month !== 5 && month !== 8 && month !== 11) return false;
+  // Last day of the month (using day 0 of next month). Accept the last 4 days
+  // to absorb cases where the last business day falls a Friday before a weekend
+  // (e.g. Sept 30 2023 was a Saturday → purchase landed on Sept 29).
+  const lastDayOfMonth = new Date(acquisitionDate.getFullYear(), month + 1, 0).getDate();
+  const day = acquisitionDate.getDate();
+  return day >= lastDayOfMonth - 3 && day <= lastDayOfMonth;
+}
+
+/**
  * Human-readable explanation of why a lot carries its current
  * (origin, planType). Used as the title of the origin badge so users can
  * understand a classification at a glance.
@@ -54,8 +86,8 @@ export function qualificationReasonLabel(
       case 'reconciled_by_agreement':
         return 'Rapproché avec plusieurs grants Microsoft StockExport candidats partageant la même classification fiscale.';
       case 'nq_via_withholding':
-        return 'Reclassé en plan non qualifié grâce à la retenue d\u2019actions pour impôt observée sur l\u2019export Microsoft (signature d\u2019un Stock Award).';
-      case 'manual':
+        return 'Reclassé en plan non qualifié grâce à la retenue d\u2019actions pour impôt observée sur l\u2019export Microsoft (signature d\u2019un Stock Award).';      case 'inferred_espp_by_date':
+        return 'Classé en ESPP : la quantité fractionnaire et la date d’acquisition (fin de trimestre calendaire) correspondent au schéma d’achat ESPP Microsoft.';      case 'manual':
         return 'Choix manuel via le menu déroulant sur cette ligne.';
       case 'bulk_qualify':
         return 'Choix appliqué via le panneau de qualification en lot.';
@@ -91,6 +123,8 @@ export function qualificationReasonShort(
       return awardType ? `Reclassé NQ · ${awardType}` : 'Reclassé NQ';
     case 'broker_drip_marker':
       return 'DRIP courtier';
+    case 'inferred_espp_by_date':
+      return 'ESPP inféré';
     case 'manual':
       return 'Manuel';
     case 'bulk_qualify':
