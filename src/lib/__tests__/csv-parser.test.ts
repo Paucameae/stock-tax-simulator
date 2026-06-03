@@ -427,6 +427,50 @@ describe('parseSalesCsvFile', () => {
     expect(lots[0].planType).toBe('non_qualified');
   });
 
+  describe('ESPP inference (MSFT calendar-quarter-end pattern)', () => {
+    it('reclassifies fractional lot on MAR/31 as SP (not DRIP)', () => {
+      // Real user case: Fidelity sale dated MAR/31/2023 with fractional qty 2.7061
+      const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'MAR/31/2023', qty: '2.7061', proceeds: '1212.29', costBasis: '702.15', gainLoss: '510.14', duration: 'LONG' })].join('\n');
+      const lots = parseSalesCsvFile(csv);
+      expect(lots).toHaveLength(1);
+      expect(lots[0].origin).toBe('SP');
+      expect(lots[0].planType).toBe('non_qualified');
+      expect(lots[0].isReinvestedDividend).toBeUndefined();
+      expect(lots[0].qualificationReason).toBe('inferred_espp_by_date');
+    });
+
+    it('reclassifies fractional lot on JUN/30 as SP (not DRIP)', () => {
+      const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'JUN/30/2023', qty: '2.2939', proceeds: '1027.64', costBasis: '703.06', gainLoss: '324.58', duration: 'LONG' })].join('\n');
+      const lots = parseSalesCsvFile(csv);
+      expect(lots[0].origin).toBe('SP');
+      expect(lots[0].isReinvestedDividend).toBeUndefined();
+      expect(lots[0].qualificationReason).toBe('inferred_espp_by_date');
+    });
+
+    it('reclassifies fractional lot on SEP/29 (Friday — last business day before Sat Sep 30)', () => {
+      const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'SEP/29/2023', qty: '1.5' })].join('\n');
+      const lots = parseSalesCsvFile(csv);
+      expect(lots[0].origin).toBe('SP');
+      expect(lots[0].qualificationReason).toBe('inferred_espp_by_date');
+    });
+
+    it('keeps DO + DRIP flag for fractional lot on mid-quarter date (true DRIP)', () => {
+      // MSFT dividend pay date pattern: ~Feb 14
+      const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'FEB/14/2024', qty: '0.5' })].join('\n');
+      const lots = parseSalesCsvFile(csv);
+      expect(lots[0].origin).toBe('DO');
+      expect(lots[0].isReinvestedDividend).toBe(true);
+      expect(lots[0].qualificationReason).toBe('broker_drip_marker');
+    });
+
+    it('keeps DO for whole-share lot even on quarter-end date', () => {
+      const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'MAR/31/2023', qty: '10' })].join('\n');
+      const lots = parseSalesCsvFile(csv);
+      expect(lots[0].origin).toBe('DO');
+      expect(lots[0].qualificationReason).toBe('broker_default');
+    });
+  });
+
   it('parses negative gain/loss row', () => {
     const csv = [SALES_HEADER, makeSalesRow({ proceeds: '100.00', costBasis: '200.00', gainLoss: '-100.00' })].join('\n');
     const lots = parseSalesCsvFile(csv);

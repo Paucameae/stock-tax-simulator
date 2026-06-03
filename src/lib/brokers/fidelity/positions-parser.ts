@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import type { StockLot, StockOrigin, HoldingPeriod, PlanType, SoldLot, QualificationReason } from '../../types';
-import { isLikelyReinvestedDividend } from '../../utils';
+import { isLikelyEsppPurchase, isLikelyReinvestedDividend } from '../../utils';
 
 // Safety guard: reject CSV files with absurd row counts to prevent DoS.
 const MAX_CSV_ROWS = 5000;
@@ -417,8 +417,24 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
 
     id++;
 
-    const origin: StockOrigin = 'DO';
-    const isDrip = isLikelyReinvestedDividend(origin, quantity);
+    // The Fidelity sales CSV carries no origin/plan info, so we default to
+    // 'DO' (US Stock Award / RSU). However, two MSFT-specific patterns refine
+    // this default:
+    //   1. ESPP inference: a fractional quantity on a calendar-quarter-end
+    //      date (Mar 31 / Jun 30 / Sep 30 / Dec 31, or 1-3 days earlier when
+    //      the last business day fell before a weekend) is the unambiguous
+    //      signature of an ESPP purchase. Reclassify as 'SP' to avoid the
+    //      DRIP heuristic flagging it incorrectly.
+    //   2. DRIP heuristic: otherwise, a non-integer quantity on a non-SP
+    //      origin is the signature of a reinvested dividend.
+    const isEspp = isLikelyEsppPurchase(acquisitionDate, quantity);
+    const origin: StockOrigin = isEspp ? 'SP' : 'DO';
+    const isDrip = !isEspp && isLikelyReinvestedDividend(origin, quantity);
+    const qualificationReason: QualificationReason = isEspp
+      ? 'inferred_espp_by_date'
+      : isDrip
+        ? 'broker_drip_marker'
+        : 'broker_default';
 
     lots.push({
       id: `sold-${id}`,
@@ -433,10 +449,11 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
       costBasisUsd: costBasis,
       holdingPeriod,
       origin,
-      // DO = US Stock Award (RSU), non-qualified by default. User can override.
+      // DO = US Stock Award (RSU), non-qualified by default. ESPP (SP) is
+      // always non-qualified too. User can override either via the UI.
       planType: 'non_qualified',
       importCurrency: 'USD',
-      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_default',
+      qualificationReason,
       ...(isDrip && { isReinvestedDividend: true }),
     });
   }
