@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 // Mock pdfjs-dist (imported transitively by Settings → tax-notice-parser)
 vi.mock('pdfjs-dist', () => ({
@@ -27,29 +27,30 @@ describe('Settings component', () => {
     expect(screen.getByText('Célibataire')).toBeInTheDocument();
   });
 
-  it('shows dirty indicator when settings change', () => {
-    render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
-    const incomeInput = screen.getByPlaceholderText('Ex: 80 000');
-    fireEvent.change(incomeInput, { target: { value: '50000' } });
-    expect(screen.getByText(/modifications non enregistrées/i)).toBeInTheDocument();
-  });
-
-  it('calls onSettingsChange on save', () => {
+  it('auto-saves debounced settings changes without a manual click', () => {
+    vi.useFakeTimers();
     const onChange = vi.fn();
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={onChange} />);
     const incomeInput = screen.getByPlaceholderText('Ex: 80 000');
     fireEvent.change(incomeInput, { target: { value: '50000' } });
-    const saveButton = screen.getByText('Enregistrer');
-    fireEvent.click(saveButton);
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
     expect(onChange).toHaveBeenCalledOnce();
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ otherTaxableIncome: 50000 }));
+    vi.useRealTimers();
   });
 
-  it('shows "Enregistré !" after save', () => {
+  it('shows "Enregistré" after auto-save', () => {
+    vi.useFakeTimers();
     render(<Settings settings={DEFAULT_SETTINGS} onSettingsChange={vi.fn()} />);
     const incomeInput = screen.getByPlaceholderText('Ex: 80 000');
     fireEvent.change(incomeInput, { target: { value: '50000' } });
-    fireEvent.click(screen.getByText('Enregistrer'));
-    expect(screen.getByText('Enregistré !')).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+    expect(screen.getByText('Enregistré')).toBeInTheDocument();
+    vi.useRealTimers();
   });
 });

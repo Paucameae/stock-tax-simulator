@@ -2,7 +2,7 @@ import React from 'react';
 import { Input } from './ui/input';
 import { Select } from './ui/select';
 import { Button } from './ui/button';
-import { Settings as SettingsIcon, Save, AlertTriangle, FileText, ShieldCheck, Users } from 'lucide-react';
+import { Settings as SettingsIcon, Check, FileText, ShieldCheck, Users } from 'lucide-react';
 import type { AppSettings, FamilyStatus, GrantInfo, StockLot, SoldLot, SavedSimulation } from '../lib/types';
 import { Tooltip } from './ui/tooltip';
 import { saveVersionedSettings } from '../lib/storage';
@@ -101,7 +101,8 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
   const update = (patch: Partial<AppSettings>) => {
     const next = { ...local, ...patch };
 
-    // Auto-calculate tax shares unless manual
+    // Recompute tax shares in real time whenever the household composition
+    // changes, unless the user has explicitly overridden them by hand.
     if (!next.taxSharesManual && ('familyStatus' in patch || 'numberOfChildren' in patch)) {
       next.taxShares = calculateTaxShares(next.familyStatus, next.numberOfChildren);
     }
@@ -109,14 +110,18 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
     setLocal(next);
   };
 
-  const handleSave = () => {
-    onSettingsChange(local);
-    saveVersionedSettings('appSettings', local);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const isDirty = JSON.stringify(local) !== JSON.stringify(settings);
+  // Auto-save: debounce local edits and persist them without a manual click.
+  React.useEffect(() => {
+    if (JSON.stringify(local) === JSON.stringify(settings)) return;
+    const timer = setTimeout(() => {
+      onSettingsChange(local);
+      saveVersionedSettings('appSettings', local);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    }, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [local]);
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto pb-6">
@@ -166,22 +171,16 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
           header="bg-sky-50/60"
           iconColor="text-sky-600"
           footer={
-            (isDirty || saved) && (
-              <div className="border-t bg-amber-50/50 px-5 py-3 flex items-center gap-4">
-                {isDirty && (
-                  <div className="flex items-center gap-2 text-sm text-amber-700">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    Modifications non enregistrées
-                  </div>
-                )}
-                <div className="ml-auto">
-                  <Button onClick={handleSave} className="gap-2">
-                    <Save className="h-4 w-4" />
-                    {saved ? 'Enregistré !' : 'Enregistrer'}
-                  </Button>
-                </div>
-              </div>
-            )
+            <div className="border-t bg-gray-50/60 px-5 py-2.5 flex items-center justify-end text-xs text-gray-500">
+              {saved ? (
+                <span className="flex items-center gap-1.5 text-emerald-600">
+                  <Check className="h-3.5 w-3.5 shrink-0" />
+                  Enregistré
+                </span>
+              ) : (
+                <span>Enregistrement automatique activé</span>
+              )}
+            </div>
           }
         >
           <div className="space-y-6">
@@ -230,6 +229,7 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
                       variant="ghost"
                       size="sm"
                       className="shrink-0"
+                      title="Revenir au calcul automatique"
                       onClick={() =>
                         update({
                           taxSharesManual: false,
@@ -237,7 +237,7 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
                         })
                       }
                     >
-                      Recalculer
+                      Auto
                     </Button>
                   )}
                 </div>
