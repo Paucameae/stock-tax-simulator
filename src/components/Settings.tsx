@@ -266,6 +266,8 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Revenu imposable de l'ensemble du foyer fiscal (tous les membres réunis).
+                  Si pré-rempli depuis un avis d'imposition, pensez à l'ajuster{'\u00A0'}:
+                  l'avis porte sur l'année précédente et vos revenus ont pu évoluer.
                 </p>
               </div>
               <div>

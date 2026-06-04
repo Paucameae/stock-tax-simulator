@@ -135,6 +135,12 @@ export function TaxNoticeImporter({ settings, onSettingsChange, embedded = false
               Vérifiez les valeurs avant d'appliquer. Le <strong>revenu imposable</strong>
               sera utilisé comme base pour le calcul du barème progressif.
             </Alert>
+            <Alert variant="warning">
+              Cet avis porte sur les revenus de l'année <strong>précédente</strong>.
+              Vos revenus ayant pu évoluer, pensez à ajuster le champ{' '}
+              <strong>« Revenu imposable hors actions (€/an) »</strong> pour refléter
+              votre situation de l'année en cours.
+            </Alert>
           </div>
         )}
     </>

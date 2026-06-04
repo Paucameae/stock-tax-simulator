@@ -59,14 +59,33 @@ async function extractTextFromPdf(file: File): Promise<string> {
 
 /**
  * Parse a number from a French-formatted string: "95 000" -> 95000, "2,50" -> 2.5
+ *
+ * In France the comma is the decimal separator and the thousands separator is a
+ * (possibly non-breaking) space. We therefore strip spaces and turn the comma
+ * into a dot before parsing.
  */
 function parseFrenchNumber(str: string): number | undefined {
   if (!str) return undefined;
-  // Remove spaces (thousands separator), replace comma with dot
-  const cleaned = str.replace(/\s/g, '').replace(',', '.');
+  // Remove spaces (thousands separator, incl. non-breaking), comma -> dot
+  const cleaned = str.replace(/[\s\u00A0]/g, '').replace(',', '.');
   const num = parseFloat(cleaned);
   return isNaN(num) ? undefined : num;
 }
+
+/**
+ * Regex fragment matching a single French-formatted number and nothing more.
+ *
+ * Two alternatives, grouped form tried first so we don't stop early on a space:
+ *  - `\d{1,3}(?:[ \u00A0]\d{3})+`  → "95 000", "1 234 567" (1-3 lead digits then
+ *    groups of *exactly* three). This stops at the first non-3-digit chunk, so a
+ *    trailing stray number ("100 481 8") or year ("100 481 2024") is NOT merged.
+ *  - `\d+`                          → "100481" (no thousands separator at all).
+ *
+ * This prevents the previous greedy `[\d\s]+` capture from concatenating several
+ * space-separated column values into one absurd multi-million figure.
+ */
+const FR_NUMBER = '(\\d{1,3}(?:[ \\u00A0]\\d{3}(?!\\d))+|\\d+)(?:,\\d+)?';
+
 
 /**
  * Parse the French tax notice (avis d'imposition) PDF.
@@ -150,7 +169,7 @@ export function parseTaxNotice(text: string): TaxNoticeData {
 
   // --- Revenu brut global ---
   // "Revenu brut global.............................................. 108261"
-  const rbrMatch = t.match(new RegExp(`revenu\\s+brut\\s+global${SEP}([\\d\\s]+[\\d])`, 'i'));
+  const rbrMatch = t.match(new RegExp(`revenu\\s+brut\\s+global${SEP}${FR_NUMBER}`, 'i'));
   if (rbrMatch) {
     result.revenuBrutGlobal = parseFrenchNumber(rbrMatch[1]);
   }
@@ -158,14 +177,14 @@ export function parseTaxNotice(text: string): TaxNoticeData {
   // --- Revenu imposable ---
   // "Revenu imposable............................................... 100481"
   // Avoid matching "revenu fiscal" or "revenu brut"
-  const riMatch = t.match(new RegExp(`revenu\\s+imposable${SEP}([\\d\\s]+[\\d])`, 'i'));
+  const riMatch = t.match(new RegExp(`revenu\\s+imposable${SEP}${FR_NUMBER}`, 'i'));
   if (riMatch) {
     result.revenuImposable = parseFrenchNumber(riMatch[1]);
   }
 
   // --- Revenu fiscal de référence (RFR) ---
   // "Revenu fiscal de référence   .............................. 108989"
-  const rfrMatch = t.match(new RegExp(`revenu\\s+fiscal\\s+de\\s+r[ée]f[ée]rence${SEP}([\\d\\s]+[\\d])`, 'i'));
+  const rfrMatch = t.match(new RegExp(`revenu\\s+fiscal\\s+de\\s+r[ée]f[ée]rence${SEP}${FR_NUMBER}`, 'i'));
   if (rfrMatch) {
     result.revenuFiscalReference = parseFrenchNumber(rfrMatch[1]);
   }

@@ -125,3 +125,33 @@ Revenu fiscal de référence   .............................. 45000
     expect(result.taxShares).toBe(1);
   });
 });
+
+describe('parseTaxNotice – French number formatting (no million bug)', () => {
+  it('does not merge a trailing stray number into the amount', () => {
+    // Reconstructed PDF line where a stray value follows on the same row.
+    const text = `Revenu imposable............................................... 100 481 8`;
+    expect(parseTaxNotice(text).revenuImposable).toBe(100481);
+  });
+
+  it('does not merge an adjacent year into the amount', () => {
+    const text = `Revenu fiscal de référence .............................. 108 989 2024`;
+    expect(parseTaxNotice(text).revenuFiscalReference).toBe(108989);
+  });
+
+  it('parses space-grouped thousands correctly', () => {
+    const text = `Revenu brut global.............................................. 1 234 567`;
+    expect(parseTaxNotice(text).revenuBrutGlobal).toBe(1234567);
+  });
+
+  it('parses an amount written without any thousands separator', () => {
+    const text = `Revenu imposable............................................... 100481`;
+    expect(parseTaxNotice(text).revenuImposable).toBe(100481);
+  });
+
+  it('does not produce an implausible multi-million figure from columns', () => {
+    const text = `Revenu imposable ... 100 481`;
+    const value = parseTaxNotice(text).revenuImposable;
+    expect(value).toBeLessThan(1_000_000);
+    expect(value).toBe(100481);
+  });
+});
