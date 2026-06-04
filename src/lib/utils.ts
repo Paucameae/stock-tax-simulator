@@ -27,10 +27,9 @@ export function isLikelyReinvestedDividend(origin: StockOrigin, quantity: number
 }
 
 /**
- * True when the lot's (acquisitionDate, quantity) matches the Microsoft
- * ESPP purchase pattern: a fractional quantity AND an acquisition date that
- * falls on the last business day of a calendar quarter (i.e. within the
- * last 4 days of March / June / September / December).
+ * True when the lot's acquisition date matches the Microsoft ESPP purchase
+ * pattern: a date that falls on (or within the last 4 days of) the last
+ * business day of a calendar quarter — March / June / September / December.
  *
  * The Microsoft ESPP purchase period ends on the last business day of each
  * calendar quarter; deposits land on or near that date. Stock Award vests
@@ -39,14 +38,18 @@ export function isLikelyReinvestedDividend(origin: StockOrigin, quantity: number
  * a calendar-quarter end by design. Dividend pay dates are mid-quarter
  * (Feb/May/Aug/Nov around the 12th-14th), also never on quarter ends.
  *
- * So a fractional lot dated on (or 1-3 days before) March 31 / June 30 /
- * September 30 / December 31 is unambiguously an ESPP purchase. This is
- * used by the Fidelity sales-CSV parser to set `origin: 'SP'` rather than
- * defaulting to `'DO'` (which would then trigger the DRIP heuristic).
+ * So a lot dated on (or 1-3 days before) March 31 / June 30 / September 30 /
+ * December 31 is unambiguously an ESPP purchase. This is used by the Fidelity
+ * sales-CSV parser to set `origin: 'SP'` rather than defaulting to `'DO'`.
+ *
+ * NOTE: the quantity is intentionally NOT part of the signal. An ESPP
+ * purchase can be a whole number of shares (e.g. exactly 10), and an earlier
+ * version that also required a fractional quantity produced false negatives
+ * when Fidelity split a single ESPP sale into a whole-share line plus a
+ * fractional-share line (only the fractional one was detected). The
+ * calendar-quarter-end date carries essentially all of the signal for MSFT.
  */
-export function isLikelyEsppPurchase(acquisitionDate: Date, quantity: number): boolean {
-  if (!Number.isFinite(quantity) || quantity <= 0) return false;
-  if (Math.abs(quantity - Math.round(quantity)) <= 1e-6) return false;
+export function isLikelyEsppPurchase(acquisitionDate: Date): boolean {
   if (!(acquisitionDate instanceof Date) || isNaN(acquisitionDate.getTime())) return false;
   const month = acquisitionDate.getMonth(); // 0-based: 2=Mar, 5=Jun, 8=Sep, 11=Dec
   if (month !== 2 && month !== 5 && month !== 8 && month !== 11) return false;

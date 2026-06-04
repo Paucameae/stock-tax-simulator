@@ -72,54 +72,50 @@ describe('isLikelyReinvestedDividend', () => {
 });
 
 describe('isLikelyEsppPurchase', () => {
-  it('flags fractional quantity on calendar-quarter-end dates (MSFT ESPP pattern)', () => {
+  it('flags any quantity on calendar-quarter-end dates (MSFT ESPP pattern)', () => {
     // Real user case: Fidelity sold lots dated Mar 31 / Jun 30 2023 with fractional qty
-    expect(isLikelyEsppPurchase(new Date(2023, 2, 31), 2.7061)).toBe(true);
-    expect(isLikelyEsppPurchase(new Date(2023, 5, 30), 2.2939)).toBe(true);
+    expect(isLikelyEsppPurchase(new Date(2023, 2, 31))).toBe(true);
+    expect(isLikelyEsppPurchase(new Date(2023, 5, 30))).toBe(true);
     // Other quarter ends
-    expect(isLikelyEsppPurchase(new Date(2024, 8, 30), 1.5)).toBe(true);  // Sep 30
-    expect(isLikelyEsppPurchase(new Date(2024, 11, 31), 0.42)).toBe(true); // Dec 31
+    expect(isLikelyEsppPurchase(new Date(2024, 8, 30))).toBe(true);  // Sep 30
+    expect(isLikelyEsppPurchase(new Date(2024, 11, 31))).toBe(true); // Dec 31
+  });
+
+  it('flags quarter-end dates regardless of whole vs fractional quantity', () => {
+    // Fidelity may split a single ESPP sale into a whole-share line plus a
+    // fractional-share line (real user case: Jun 30 2025 qty 10 + qty 0.5874).
+    // Both must be detected as ESPP — the quantity is not part of the signal.
+    expect(isLikelyEsppPurchase(new Date(2025, 5, 30))).toBe(true);
   });
 
   it('accepts the last business day when month-end falls on a weekend', () => {
     // Sep 30 2023 was a Saturday; MSFT ESPP purchase landed on Sep 29 (Friday)
-    expect(isLikelyEsppPurchase(new Date(2023, 8, 29), 1.234)).toBe(true);
+    expect(isLikelyEsppPurchase(new Date(2023, 8, 29))).toBe(true);
     // Dec 31 2022 was a Saturday; purchase on Dec 30 (Friday)
-    expect(isLikelyEsppPurchase(new Date(2022, 11, 30), 2.5)).toBe(true);
-  });
-
-  it('does not flag whole-share quantities', () => {
-    expect(isLikelyEsppPurchase(new Date(2023, 2, 31), 10)).toBe(false);
-    expect(isLikelyEsppPurchase(new Date(2023, 5, 30), 1)).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2022, 11, 30))).toBe(true);
   });
 
   it('does not flag mid-quarter dates (DRIP pay-date pattern)', () => {
     // MSFT dividends pay around the 12th-14th of Feb/May/Aug/Nov
-    expect(isLikelyEsppPurchase(new Date(2023, 1, 14), 0.5)).toBe(false);
-    expect(isLikelyEsppPurchase(new Date(2023, 4, 11), 0.3)).toBe(false);
-    expect(isLikelyEsppPurchase(new Date(2023, 7, 10), 0.2)).toBe(false);
-    expect(isLikelyEsppPurchase(new Date(2023, 10, 9), 0.4)).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2023, 1, 14))).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2023, 4, 11))).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2023, 7, 10))).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2023, 10, 9))).toBe(false);
   });
 
   it('does not flag mid-month dates in quarter-end months', () => {
-    expect(isLikelyEsppPurchase(new Date(2023, 2, 15), 0.5)).toBe(false);
-    expect(isLikelyEsppPurchase(new Date(2023, 5, 1), 0.5)).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2023, 2, 15))).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2023, 5, 1))).toBe(false);
   });
 
   it('does not flag non-quarter-end months even on their last day', () => {
-    expect(isLikelyEsppPurchase(new Date(2023, 0, 31), 0.5)).toBe(false);  // Jan 31
-    expect(isLikelyEsppPurchase(new Date(2023, 7, 31), 0.5)).toBe(false);  // Aug 31 (FY Annual vest date)
-    expect(isLikelyEsppPurchase(new Date(2023, 10, 30), 0.5)).toBe(false); // Nov 30
-  });
-
-  it('rejects non-positive or non-finite quantities', () => {
-    expect(isLikelyEsppPurchase(new Date(2023, 2, 31), 0)).toBe(false);
-    expect(isLikelyEsppPurchase(new Date(2023, 2, 31), -1)).toBe(false);
-    expect(isLikelyEsppPurchase(new Date(2023, 2, 31), NaN)).toBe(false);
+    expect(isLikelyEsppPurchase(new Date(2023, 0, 31))).toBe(false);  // Jan 31
+    expect(isLikelyEsppPurchase(new Date(2023, 7, 31))).toBe(false);  // Aug 31 (FY Annual vest date)
+    expect(isLikelyEsppPurchase(new Date(2023, 10, 30))).toBe(false); // Nov 30
   });
 
   it('rejects invalid dates', () => {
-    expect(isLikelyEsppPurchase(new Date('invalid'), 1.5)).toBe(false);
+    expect(isLikelyEsppPurchase(new Date('invalid'))).toBe(false);
   });
 });
 

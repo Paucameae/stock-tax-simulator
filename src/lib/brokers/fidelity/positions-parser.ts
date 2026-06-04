@@ -420,14 +420,16 @@ export function parseSalesCsvFile(csvText: string): SoldLot[] {
     // The Fidelity sales CSV carries no origin/plan info, so we default to
     // 'DO' (US Stock Award / RSU). However, two MSFT-specific patterns refine
     // this default:
-    //   1. ESPP inference: a fractional quantity on a calendar-quarter-end
+    //   1. ESPP inference: an acquisition date on a calendar-quarter-end
     //      date (Mar 31 / Jun 30 / Sep 30 / Dec 31, or 1-3 days earlier when
     //      the last business day fell before a weekend) is the unambiguous
-    //      signature of an ESPP purchase. Reclassify as 'SP' to avoid the
-    //      DRIP heuristic flagging it incorrectly.
+    //      signature of an ESPP purchase — regardless of whether the quantity
+    //      is whole or fractional (Fidelity may split a single ESPP sale into
+    //      a whole-share line plus a fractional-share line). Reclassify as
+    //      'SP' to avoid the DRIP heuristic flagging it incorrectly.
     //   2. DRIP heuristic: otherwise, a non-integer quantity on a non-SP
     //      origin is the signature of a reinvested dividend.
-    const isEspp = isLikelyEsppPurchase(acquisitionDate, quantity);
+    const isEspp = isLikelyEsppPurchase(acquisitionDate);
     const origin: StockOrigin = isEspp ? 'SP' : 'DO';
     const isDrip = !isEspp && isLikelyReinvestedDividend(origin, quantity);
     const qualificationReason: QualificationReason = isEspp

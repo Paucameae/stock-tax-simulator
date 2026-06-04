@@ -463,11 +463,28 @@ describe('parseSalesCsvFile', () => {
       expect(lots[0].qualificationReason).toBe('broker_drip_marker');
     });
 
-    it('keeps DO for whole-share lot even on quarter-end date', () => {
-      const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'MAR/31/2023', qty: '10' })].join('\n');
+    it('reclassifies WHOLE-share lot on quarter-end date as SP (quantity is not part of the signal)', () => {
+      // Real user case: Fidelity split one ESPP sale into a whole-share line
+      // (qty 10) plus a fractional-share line (qty 0.5874), both acquired
+      // JUN/30/2025. The whole-share line must also be detected as ESPP.
+      const csv = [SALES_HEADER, makeSalesRow({ acqDate: 'JUN/30/2025', qty: '10', proceeds: '4981.58', costBasis: '4476.70', gainLoss: '504.88' })].join('\n');
       const lots = parseSalesCsvFile(csv);
-      expect(lots[0].origin).toBe('DO');
-      expect(lots[0].qualificationReason).toBe('broker_default');
+      expect(lots[0].origin).toBe('SP');
+      expect(lots[0].isReinvestedDividend).toBeUndefined();
+      expect(lots[0].qualificationReason).toBe('inferred_espp_by_date');
+    });
+
+    it('classifies both lines of a split ESPP sale as SP (whole + fractional)', () => {
+      const csv = [
+        SALES_HEADER,
+        makeSalesRow({ acqDate: 'JUN/30/2025', qty: '10', proceeds: '4981.58', costBasis: '4476.70', gainLoss: '504.88' }),
+        makeSalesRow({ acqDate: 'JUN/30/2025', qty: '0.5874', proceeds: '292.62', costBasis: '262.96', gainLoss: '29.66' }),
+      ].join('\n');
+      const lots = parseSalesCsvFile(csv);
+      expect(lots).toHaveLength(2);
+      expect(lots.every((l) => l.origin === 'SP')).toBe(true);
+      expect(lots.every((l) => l.qualificationReason === 'inferred_espp_by_date')).toBe(true);
+      expect(lots.every((l) => l.isReinvestedDividend === undefined)).toBe(true);
     });
   });
 
