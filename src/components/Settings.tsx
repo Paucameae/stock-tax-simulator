@@ -219,7 +219,7 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
-                    step="0.5"
+                    step="0.25"
                     min="1"
                     max="30"
                     value={local.taxShares}
@@ -254,7 +254,7 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
                   Revenu imposable hors actions (€/an)
-                  <Tooltip content="Salaires, pensions, revenus fonciers… hors plus-values mobilières. Correspond au revenu imposable de votre dernier avis d'imposition." />
+                  <Tooltip content="Salaires, pensions, revenus fonciers… hors plus-values mobilières. Indiquez le revenu imposable de l'ensemble du foyer fiscal, tel qu'il figure sur votre dernier avis d'imposition." />
                 </label>
                 <Input
                   type="number"
@@ -264,6 +264,9 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
                   onChange={(e) => update({ otherTaxableIncome: Math.max(0, parseFloat(e.target.value) || 0) })}
                   placeholder="Ex: 80 000"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Revenu imposable de l'ensemble du foyer fiscal (tous les membres réunis).
+                </p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">

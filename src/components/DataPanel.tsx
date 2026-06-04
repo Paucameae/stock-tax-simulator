@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import { Database, Award, Building2 } from 'lucide-react';
+import { Database, Award, Building2, ShieldAlert } from 'lucide-react';
 import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
@@ -150,6 +150,19 @@ export function DataPanel({
           </p>
         </div>
       </header>
+
+      <div
+        role="note"
+        className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      >
+        <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+        <p>
+          <strong>Avant d'importer{'\u00A0'}:</strong> passez vos fichiers en
+          label de confidentialité <strong>Général</strong> ou{' '}
+          <strong>Public</strong>. Les fichiers protégés (chiffrés) ne peuvent
+          pas être lus par l'application.
+        </p>
+      </div>
 
       {/* 1. Grants & vesting (transverse) */}
       <section className="space-y-4">
