@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import type { StockLot, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
+import type { StockLot, HoldingPeriod, PlanType, ImportCurrency, StockOrigin } from '../../types';
 
 const MAX_ROWS = 5000;
 
