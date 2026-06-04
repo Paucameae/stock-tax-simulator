@@ -177,11 +177,11 @@ describe('parseMsActivityCells — blank-row separation', () => {
     expect(result.lots).toHaveLength(1);
   });
 
-  it('classifies a fractional Share Sales row as DRIP (DO/non_qualified)', () => {
-    // A fractional quantity on an FM-mapped plan is the signature of a
-    // reinvested-dividend share: it must be reclassified to DO/non_qualified
-    // and tagged with broker_drip_marker so the bulk-qualify UI leaves it
-    // alone.
+  it('keeps a fractional Share Sales row classified by its MS Plan Name (no auto-DRIP)', () => {
+    // The fractional-quantity DRIP heuristic was dropped: legitimate
+    // fractional vests (prorata, accounting adjustments) were being
+    // mislabelled. The MS Plan Name is now trusted as the sole source
+    // of truth for origin/planType at parse time.
     const cells: string[][] = [
       row('Share Sales'),
       row('Date', 'Plan Name', 'Fund Name', 'Type', 'Order Status', 'Sale Price', 'Quantity', 'Net Cash Proceeds', 'Acquisition Date', 'Acquisition Value'),
@@ -189,9 +189,9 @@ describe('parseMsActivityCells — blank-row separation', () => {
     ];
     const result = parseMsActivityCells(cells);
     expect(result.soldLots).toHaveLength(1);
-    expect(result.soldLots[0].origin).toBe('DO');
-    expect(result.soldLots[0].planType).toBe('non_qualified');
-    expect(result.soldLots[0].qualificationReason).toBe('broker_drip_marker');
-    expect(result.soldLots[0].isReinvestedDividend).toBe(true);
+    expect(result.soldLots[0].origin).toBe('FM');
+    expect(result.soldLots[0].planType).toBe('qualified_macron');
+    expect(result.soldLots[0].qualificationReason).toBe('broker_plan_name');
+    expect(result.soldLots[0].isReinvestedDividend).toBeUndefined();
   });
 });

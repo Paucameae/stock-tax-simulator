@@ -243,8 +243,15 @@ function findCandidateGrantsByDate(date: Date, byDay: Map<string, GrantInfo[]>):
 function applyGrantToSoldLot(sl: SoldLot, grant: GrantInfo, reason: QualificationReason): SoldLot {
   const origin: StockOrigin = grant.origin;
   const planType: PlanType = grant.planType;
+  // A successful StockExport reconciliation proves the lot came from a
+  // documented vest (StockExport never contains DRIP shares). Clear any
+  // prior DRIP flag posed by the broker parser's fractional-quantity
+  // heuristic so the qualified plan classification stays consistent
+  // (see isDripQualifiedInconsistent in lib/utils.ts).
+  const { isReinvestedDividend: _drop, ...rest } = sl;
+  void _drop;
   return {
-    ...sl,
+    ...rest,
     origin,
     planType,
     grantIdHash: grant.grantIdHash,
@@ -296,8 +303,11 @@ function pickByQuantity(
 function applyGrant(lot: StockLot, grant: GrantInfo, reason: QualificationReason): StockLot {
   const origin: StockOrigin = grant.origin;
   const planType: PlanType = grant.planType;
+  // See applyGrantToSoldLot above for the rationale.
+  const { isReinvestedDividend: _drop, ...rest } = lot;
+  void _drop;
   return {
-    ...lot,
+    ...rest,
     origin,
     planType,
     grantIdHash: grant.grantIdHash,

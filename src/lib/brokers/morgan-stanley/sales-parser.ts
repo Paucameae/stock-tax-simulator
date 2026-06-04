@@ -1,6 +1,5 @@
 import Papa from 'papaparse';
 import type { SoldLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
-import { isLikelyReinvestedDividend } from '../../utils';
 import { parseWorksheet, parseSharedStrings, readXlsx } from '../../xlsx-reader';
 
 const MAX_ROWS = 5000;
@@ -144,13 +143,18 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
 
   const proceedsUsd = quantity * salePrice;
   const holdingPeriod = computeHoldingPeriod(acquisitionDate, saleDate);
-  const rawOrigin = origin;
-  const isDrip = isLikelyReinvestedDividend(rawOrigin, quantity);
-  // DRIP shares are bought on the open market with the cash dividend and
-  // are no longer attached to the source plan — classify them as
-  // non-qualified Stock Award regardless of the Savings Plan label.
-  const resolvedOrigin: StockOrigin = isDrip ? 'DO' : rawOrigin;
-  const planType = isDrip ? 'non_qualified' : defaultPlanTypeFor(rawOrigin);
+  // The Morgan Stanley export always carries an explicit Plan Name (rows
+  // with an unknown plan are filtered out above). We therefore trust the
+  // broker classification and do NOT apply the fractional-quantity DRIP
+  // heuristic here: a Microsoft FQ Annual vest, an AGA Macron tranche or
+  // an On-Hire RSU may legitimately yield a fractional residue (prorata
+  // on the last vesting period, accounting adjustment, split). False
+  // positives produced an inconsistent display when the lot was later
+  // reconciled to a qualified-plan grant via StockExport.
+  //
+  // If, in a future export, MS starts surfacing DRIP shares under a
+  // dedicated plan label, add a new case to planNameToOrigin and flag it
+  // explicitly there instead of reintroducing this heuristic.
 
   idCounter.n++;
   return {
@@ -165,11 +169,10 @@ function rowToSoldLot(row: ShareSaleRow, idCounter: { n: number }): SoldLot | nu
     proceedsUsd,
     costBasisUsd: acquisitionValue,
     holdingPeriod,
-    origin: resolvedOrigin,
-    planType,
+    origin,
+    planType: defaultPlanTypeFor(origin),
     importCurrency: 'USD' as ImportCurrency,
-    qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
-    ...(isDrip && { isReinvestedDividend: true }),
+    qualificationReason: 'broker_plan_name',
   };
 }
 

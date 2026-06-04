@@ -1,6 +1,5 @@
 import Papa from 'papaparse';
-import type { StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
-import { isLikelyReinvestedDividend } from '../../utils';
+import type { StockLot, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
 
 const MAX_ROWS = 5000;
 
@@ -130,13 +129,10 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
     const costBasisPerShareUsd = acquisitionValue / quantity;
 
     id++;
-    const rawOrigin = origin;
-    const isDrip = isLikelyReinvestedDividend(rawOrigin, quantity);
-    // DRIP shares are bought on the open market with the cash dividend and
-    // are no longer attached to the source plan — classify them as
-    // non-qualified Stock Award regardless of the Savings Plan label.
-    const resolvedOrigin: StockOrigin = isDrip ? 'DO' : rawOrigin;
-    const planType = isDrip ? 'non_qualified' : defaultPlanTypeFor(rawOrigin);
+    // The Morgan Stanley export always carries an explicit Plan Name (rows
+    // with an unknown plan are filtered out above). We trust the broker
+    // classification and do NOT apply the fractional-quantity DRIP heuristic
+    // here — see sales-parser.ts for the full rationale.
     lots.push({
       id: `ms-lot-${id}`,
       broker: 'morgan_stanley',
@@ -153,11 +149,10 @@ export function parseMsHoldingsCsv(csvText: string): StockLot[] {
       // price fetch will overwrite where it is used for display).
       currentValueUsd: acquisitionValue,
       importCurrency: 'USD' as ImportCurrency,
-      origin: resolvedOrigin,
+      origin,
       holdingPeriod: 'Long' as HoldingPeriod,
-      planType,
-      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
-      ...(isDrip && { isReinvestedDividend: true }),
+      planType: defaultPlanTypeFor(origin),
+      qualificationReason: 'broker_plan_name',
     });
   }
 

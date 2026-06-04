@@ -1,7 +1,6 @@
 import type { SoldLot, StockLot, StockOrigin, HoldingPeriod, PlanType, ImportCurrency } from '../../types';
 import type { DividendEvent } from '../fidelity/transactions-parser';
 import { parseWorksheet, parseSharedStrings, readXlsx } from '../../xlsx-reader';
-import { isLikelyReinvestedDividend } from '../../utils';
 import { MS_MISSING_LOT_DETAIL_MESSAGE, MS_NON_ENGLISH_EXPORT_MESSAGE } from './sales-parser';
 
 /**
@@ -279,14 +278,12 @@ function parseShareSalesSection(
     const rawOrigin = planNameToOrigin(row[map['Plan Name']] ?? '');
     if (!rawOrigin) continue;
 
-    // Same DRIP heuristic as the CSV Share Sales parser: a fractional
-    // quantity on a non-ESPP origin is a reinvested-dividend share. We
-    // force DO/non_qualified for those so the bulk-qualify and DRIP-filter
-    // UI behave consistently regardless of whether the user imported the
-    // CSV "Share Sales" file or the XLSX activity bundle.
-    const isDrip = isLikelyReinvestedDividend(rawOrigin, quantity);
-    const origin: StockOrigin = isDrip ? 'DO' : rawOrigin;
-    const planType: PlanType = isDrip ? 'non_qualified' : defaultPlanTypeFor(rawOrigin);
+    // We trust the MS Plan Name. The fractional-quantity DRIP heuristic
+    // produced false positives on legitimate fractional vests (AGA Macron
+    // prorata, FY Annual residue) and was inconsistent with the StockExport
+    // reconciliation. See sales-parser.ts for the full rationale.
+    const origin: StockOrigin = rawOrigin;
+    const planType: PlanType = defaultPlanTypeFor(rawOrigin);
 
     idCounter.n++;
     out.push({
@@ -304,8 +301,7 @@ function parseShareSalesSection(
       origin,
       planType,
       importCurrency: 'USD' as ImportCurrency,
-      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
-      ...(isDrip && { isReinvestedDividend: true }),
+      qualificationReason: 'broker_plan_name',
     });
   }
 
@@ -361,13 +357,8 @@ function parseHoldingsSection(
     if (!Number.isFinite(acquisitionValue) || acquisitionValue < 0) continue;
 
     const costBasisPerShareUsd = acquisitionValue / quantity;
-    const rawOrigin = origin;
-    const isDrip = isLikelyReinvestedDividend(rawOrigin, quantity);
-    // DRIP shares are bought on the open market with the cash dividend and
-    // are no longer attached to the source plan — classify them as
-    // non-qualified Stock Award regardless of the Savings Plan label.
-    const resolvedOrigin: StockOrigin = isDrip ? 'DO' : rawOrigin;
-    const planType = isDrip ? 'non_qualified' : defaultPlanTypeFor(rawOrigin);
+    // We trust the MS Savings Plan Name. See sales-parser.ts for the full
+    // rationale on dropping the fractional-quantity DRIP heuristic.
 
     idCounter.n++;
     out.push({
@@ -383,11 +374,10 @@ function parseHoldingsSection(
       totalCostBasisUsd: acquisitionValue,
       currentValueUsd: acquisitionValue,
       importCurrency: 'USD' as ImportCurrency,
-      origin: resolvedOrigin,
+      origin,
       holdingPeriod: 'Long' as HoldingPeriod,
-      planType,
-      qualificationReason: isDrip ? 'broker_drip_marker' : 'broker_plan_name',
-      ...(isDrip && { isReinvestedDividend: true }),
+      planType: defaultPlanTypeFor(origin),
+      qualificationReason: 'broker_plan_name',
     });
   }
   return out;

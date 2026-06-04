@@ -49,20 +49,19 @@ describe('parseMsHoldingsCsv', () => {
     expect(lots.every(l => l.esppFmvPerShareUsd === undefined)).toBe(true);
   });
 
-  it('flags fractional Long Share Savings Plan lots as DRIP', () => {
+  it('does NOT auto-flag fractional Long Share Savings Plan lots as DRIP (trust the broker plan name)', () => {
     const lots = parseMsHoldingsCsv(sample);
-    // 12-Mar-2009 Long Share Savings Plan, qty 0.99 → DRIP (post-2009 accrual on legacy ESPP shares)
-    const drip = lots.find(l => l.acquisitionDate.getFullYear() === 2009)!;
-    expect(drip.origin).toBe('DO');
-    expect(drip.planType).toBe('non_qualified');
-    expect(drip.isReinvestedDividend).toBe(true);
-    expect(drip.qualificationReason).toBe('broker_drip_marker');
+    // 12-Mar-2009 Long Share Savings Plan, qty 0.99 — the previous version
+    // flagged this as DRIP via the fractional-quantity heuristic. That
+    // heuristic produced false positives on legitimate fractional vests
+    // (prorata, accounting adjustments). We now trust the MS Plan Name
+    // exclusively; DRIP can be re-applied via the bulk-qualify panel.
+    const lot = lots.find(l => l.acquisitionDate.getFullYear() === 2009)!;
+    expect(lot.isReinvestedDividend).toBeUndefined();
+    expect(lot.qualificationReason).toBe('broker_plan_name');
   });
 
-  it('reclassifies fractional Macron qualified lots as DO/non_qualified DRIP', () => {
-    // A fractional Macron-qualified vest is impossible (vests come in whole
-    // shares); it can only be a DRIP accrual. The parser must override
-    // the Savings Plan label and re-classify as a non-qualified Stock Award.
+  it('keeps fractional Macron qualified lots classified as FM/qualified_macron (trust the broker plan name)', () => {
     const csv = [
       'Holdings by Lot',
       'Acquisition Date,Savings Plan Name,Lot Number,Current Share Quantity,Current Value',
@@ -70,10 +69,10 @@ describe('parseMsHoldingsCsv', () => {
     ].join('\n');
     const lots = parseMsHoldingsCsv(csv);
     expect(lots).toHaveLength(1);
-    expect(lots[0].origin).toBe('DO');
-    expect(lots[0].planType).toBe('non_qualified');
-    expect(lots[0].isReinvestedDividend).toBe(true);
-    expect(lots[0].qualificationReason).toBe('broker_drip_marker');
+    expect(lots[0].origin).toBe('FM');
+    expect(lots[0].planType).toBe('qualified_macron');
+    expect(lots[0].isReinvestedDividend).toBeUndefined();
+    expect(lots[0].qualificationReason).toBe('broker_plan_name');
   });
 });
 
@@ -163,16 +162,16 @@ describe('parseMsSalesCsv', () => {
     expect(() => parseMsSalesCsv(frEuro)).toThrow(/anglais.*USD/);
   });
 
-  it('reclassifies fractional Macron qualified sales as DO/non_qualified DRIP', () => {
+  it('keeps fractional Macron qualified sales classified as FM/qualified_macron (trust the broker plan name)', () => {
     const csv = [
       'Date,Plan Name,Fund Name,Type,Order Status,Sale Price,Quantity,Net Cash Proceeds,Acquisition Date,Acquisition Value',
       '10-Mar-2025,Microsoft Qualified Stock Awards - Macron,MSFT,Ad Hoc,Complete,$390.00,0.128,$49.92,15-May-2024,$45.00',
     ].join('\n');
     const sales = parseMsSalesCsv(csv);
     expect(sales).toHaveLength(1);
-    expect(sales[0].origin).toBe('DO');
-    expect(sales[0].planType).toBe('non_qualified');
-    expect(sales[0].isReinvestedDividend).toBe(true);
-    expect(sales[0].qualificationReason).toBe('broker_drip_marker');
+    expect(sales[0].origin).toBe('FM');
+    expect(sales[0].planType).toBe('qualified_macron');
+    expect(sales[0].isReinvestedDividend).toBeUndefined();
+    expect(sales[0].qualificationReason).toBe('broker_plan_name');
   });
 });

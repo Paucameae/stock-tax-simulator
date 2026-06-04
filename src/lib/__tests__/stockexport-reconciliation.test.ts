@@ -162,6 +162,35 @@ describe('reconcileLots', () => {
     expect(stats.reconciled).toBe(3);
     expect(lots.every((l) => l.reconciled)).toBe(true);
   });
+
+  it('clears a prior isReinvestedDividend flag when the lot is reconciled (no fiscal inconsistency)', () => {
+    // Real user case: a fractional lot was flagged DRIP by a broker parser
+    // heuristic, then StockExport reconciliation matched it to a qualified
+    // Macron grant. The flag must be cleared so the lot does not display
+    // as "DRIP qualifié" (a fiscally impossible combination).
+    const lot = makeLot({
+      id: 'lot-frac',
+      acquisitionDate: new Date(2021, 7, 31),
+      quantity: 3.765,
+      origin: 'DO',
+      planType: 'non_qualified',
+      isReinvestedDividend: true,
+    });
+    const grant = makeGrant({
+      grantIdHash: 'hash-fy18',
+      awardType: 'FY18 FQ Annual',
+      awardDate: new Date(2017, 7, 15),
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [{ date: new Date(2021, 7, 31), shares: 3.765 }],
+    });
+    const { lots, stats } = reconcileLots([lot], [grant]);
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].reconciled).toBe(true);
+    expect(lots[0].origin).toBe('FM');
+    expect(lots[0].planType).toBe('qualified_macron');
+    expect(lots[0].isReinvestedDividend).toBeUndefined();
+  });
 });
 
 function makeSoldLot(partial: Partial<SoldLot> & Pick<SoldLot, 'id' | 'acquisitionDate' | 'origin'>): SoldLot {
@@ -260,6 +289,33 @@ describe('reconcileSoldLots', () => {
     // Original origin/planType preserved.
     expect(lots[0].origin).toBe('FM');
     expect(lots[0].planType).toBe('qualified_macron');
+  });
+
+  it('clears a prior isReinvestedDividend flag when the sold lot is reconciled', () => {
+    // Regression: sold lot 31/08/2021 qty 3.765 was flagged DRIP by the MS
+    // parser, then reconciled to a Macron grant by StockExport. The flag
+    // must be cleared post-reconciliation to avoid the "DRIP qualifié"
+    // fiscal inconsistency warning.
+    const sl = makeSoldLot({
+      id: 'ms-sold-drip',
+      acquisitionDate: new Date(2021, 7, 31),
+      quantity: 3.765,
+      origin: 'DO',
+      planType: 'non_qualified',
+      isReinvestedDividend: true,
+    });
+    const grant = makeGrant({
+      grantIdHash: 'hash-fy18',
+      awardType: 'FY18 FQ Annual',
+      planType: 'qualified_macron',
+      origin: 'FM',
+      vestSchedule: [{ date: new Date(2021, 7, 31), shares: 3.765 }],
+    });
+    const { lots, stats } = reconcileSoldLots([sl], [grant]);
+    expect(stats.reconciled).toBe(1);
+    expect(lots[0].origin).toBe('FM');
+    expect(lots[0].planType).toBe('qualified_macron');
+    expect(lots[0].isReinvestedDividend).toBeUndefined();
   });
 });
 
