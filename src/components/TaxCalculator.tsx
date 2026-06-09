@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Tooltip } from './ui/tooltip';
+import { ExplainButton } from './ui/ExplainButton';
 import { Receipt, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import type { TaxSimulationResult, TaxMode, FamilyStatus } from '../lib/types';
 import { getTaxConfig } from '../lib/tax-rates';
@@ -106,6 +107,24 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
             <span className="ml-2 text-xs font-normal text-gray-500">
               · {taxMode === 'pfu' ? `PFU ${pfuTotalRate}` : 'Barème progressif'}
             </span>
+            <ExplainButton
+              className="ml-auto"
+              topic="Détail du calcul fiscal"
+              facts={{
+                régime: taxMode === 'pfu' ? `PFU ${pfuTotalRate}` : 'Barème progressif',
+                produitBrutEUR: r.totalProceeds,
+                gainAcquisitionEUR: r.totalAcquisitionGain,
+                plusValueEUR: r.totalCapitalGain,
+                impotGainAcquisitionEUR: r.acquisitionGainTax.total,
+                impotPlusValueEUR: r.capitalGainTax.total,
+                cehrEUR: r.cehr,
+                cdhrEUR: r.cdhr,
+                impotTotalEUR: r.totalTax,
+                montantNetEUR: r.netAmount,
+                tauxEffectif: r.effectiveTaxRate,
+                anneeFiscale: fiscalYear,
+              }}
+            />
           </CardTitle>
         </CardHeader>
         <CardContent>
