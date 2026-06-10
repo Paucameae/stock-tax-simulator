@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
+import { ExplainButton } from './ui/ExplainButton';
 import { FileText, Copy, Check, Download } from 'lucide-react';
 import type { TaxSimulationResult, SaleLotEntry } from '../lib/types';
 import { generateDeclaration, formatDeclarationText, groupForm2074Lines, buildForm2074Rows } from '../lib/declaration';
@@ -66,10 +67,32 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
               <FileText className="h-5 w-5" />
               Instructions de déclaration — Revenus {fiscalYear}
             </span>
-            <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1">
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copié !' : 'Copier'}
-            </Button>
+            <span className="flex items-center gap-1">
+              <ExplainButton
+                topic="Instructions de déclaration"
+                label="Expliquer"
+                facts={{
+                  anneeFiscale: fiscalYear,
+                  form2042: {
+                    case3VG_plusValue: declaration.case3VG,
+                    case3VH_moinsValue: declaration.case3VH,
+                    case2OP_optionBareme: declaration.option2OP,
+                  },
+                  form2042C_agaMacron: {
+                    case1TZ: declaration.case1TZ,
+                    case1UZ: declaration.case1UZ,
+                    case1TT: declaration.case1TT,
+                  },
+                  case3SG_csgDeductible: declaration.case3SG,
+                  csgDeductibleAnneeProchaineEUR: declaration.deductibleCSGNextYear,
+                  nombreLignes2074: displayedLineCount,
+                }}
+              />
+              <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1">
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? 'Copié !' : 'Copier'}
+              </Button>
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>

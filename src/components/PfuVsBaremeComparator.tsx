@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
+import { ExplainButton } from './ui/ExplainButton';
 import { ThumbsUp, ChevronDown } from 'lucide-react';
 import type { TaxSimulationResult, SaleSimulation, SaleLotEntry, AppSettings, TaxMode } from '../lib/types';
 import { runSimulation } from '../lib/tax-engine';
@@ -94,7 +95,7 @@ export const PfuVsBaremeComparator = React.memo(function PfuVsBaremeComparator({
       {/* Recommendation footer — kept compact and conditional. */}
       <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
         <ThumbsUp className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-        <div className="text-sm">
+        <div className="text-sm flex-1">
           <span className="font-semibold text-green-800">Recommandation : {recommended}</span>
           <span className="text-green-700">
             {' · '}Économie estimée <strong>{formatEUR(savings)}</strong> par rapport à l'autre option.
@@ -103,6 +104,27 @@ export const PfuVsBaremeComparator = React.memo(function PfuVsBaremeComparator({
             )}
           </span>
         </div>
+        <ExplainButton
+          className="shrink-0 -my-1"
+          topic="PFU vs barème progressif"
+          label="Expliquer"
+          facts={{
+            recommandation: recommended,
+            economieEUR: savings,
+            pfu: {
+              impotTotalEUR: pfuResult.totalTax,
+              montantNetEUR: pfuResult.netAmount,
+              tauxEffectif: pfuResult.effectiveTaxRate,
+            },
+            baremeProgressif: {
+              impotTotalEUR: baremeResult.totalTax,
+              montantNetEUR: baremeResult.netAmount,
+              tauxEffectif: baremeResult.effectiveTaxRate,
+            },
+            caseACocherSiBareme: '2OP',
+            anneeFiscale: fiscalYear,
+          }}
+        />
       </div>
     </div>
   );

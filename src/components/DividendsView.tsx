@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';
+import { ExplainButton } from './ui/ExplainButton';
 import { Coins, ChevronDown, ChevronRight } from 'lucide-react';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 import {
@@ -100,6 +101,26 @@ export function DividendsView({ dividends, cashInterest }: DividendsViewProps) {
               {formatUSD(dividends.reduce((s, d) => s + d.grossUsd, 0))}
               <span className="text-sm font-normal text-gray-500"> brut</span>
             </p>
+            <ExplainButton
+              className="mt-1"
+              topic="Dividendes Microsoft"
+              label="Expliquer"
+              facts={{
+                nombreVersements: dividends.length,
+                totalBrutUSD: dividends.reduce((s, d) => s + d.grossUsd, 0),
+                totalRetenueUS_USD: dividends.reduce((s, d) => s + d.taxWithheldUsd, 0),
+                totalNetUSD: dividends.reduce((s, d) => s + d.netUsd, 0),
+                interetsCashUSD: cashTotalUsd,
+                parAnnee: groups.map((g) => ({
+                  annee: g.year,
+                  brutEUR: g.grossEur,
+                  retenueUS_EUR: g.taxWithheldEur,
+                  netEUR: g.netEur,
+                })),
+                noteRetenueUS: 'Retenue à la source US de 15 % (convention fiscale), imputable comme crédit d\'impôt.',
+                caseInteretsCash: '2TR',
+              }}
+            />
           </div>
         </div>
       </CardHeader>
