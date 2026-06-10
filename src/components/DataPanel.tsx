@@ -1,6 +1,5 @@
 ﻿import React from 'react';
-import { Database, Award, Building2, ShieldAlert } from 'lucide-react';
-import { CsvImporter } from './CsvImporter';
+import { Database, Award, Building2, ShieldAlert, Sparkles } from 'lucide-react';import { CsvImporter } from './CsvImporter';
 import { StockExportImporter } from './StockExportImporter';
 import { DividendsImporter } from './DividendsImporter';
 import { DividendsSummary } from './DividendsSummary';
@@ -29,6 +28,10 @@ interface DataPanelProps {
   onClearBrokerLots: (broker: Broker) => void;
   onClearBrokerSales: (broker: Broker) => void;
   onClearBrokerDividends: (broker: Broker) => void;
+  /** True when the user already has data loaded (hides the demo prompt). */
+  hasData: boolean;
+  /** Load a synthetic demo dataset so the user can explore without importing. */
+  onLoadDemo: () => void;
 }
 
 interface SectionHeaderProps {
@@ -127,6 +130,8 @@ export function DataPanel({
   onClearBrokerLots,
   onClearBrokerSales,
   onClearBrokerDividends,
+  hasData,
+  onLoadDemo,
 }: DataPanelProps) {
   const fidelityLots = React.useMemo(() => lots.filter((l) => l.broker === 'fidelity'), [lots]);
   const fidelitySold = React.useMemo(() => soldLots.filter((s) => s.broker === 'fidelity'), [soldLots]);
@@ -163,6 +168,27 @@ export function DataPanel({
           pas être lus par l'application.
         </p>
       </div>
+
+      {!hasData && (
+        <div className="flex flex-col gap-3 rounded-lg border border-violet-300 bg-violet-50 px-4 py-3 text-sm text-violet-900 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Sparkles className="h-5 w-5 shrink-0 text-violet-600" aria-hidden="true" />
+            <p>
+              <strong>Première visite{'\u00A0'}?</strong> Chargez un jeu de
+              données de démonstration (fictif) pour explorer le portefeuille,
+              la simulation et la déclaration sans rien importer.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onLoadDemo}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-700"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            Charger la démo
+          </button>
+        </div>
+      )}
 
       {/* 1. Grants & vesting (transverse) */}
       <section className="space-y-4">

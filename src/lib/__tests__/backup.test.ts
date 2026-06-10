@@ -197,6 +197,30 @@ describe('importFromJsonString', () => {
     expect(result.warnings.some((w) => /vente/i.test(w))).toBe(true);
   });
 
+  it('drops lots with an unknown origin or plan type', () => {
+    const payload = JSON.stringify({
+      version: 3,
+      app: 'stock-tax-simulator',
+      exportedAt: new Date().toISOString(),
+      settings: DEFAULTS,
+      lots: [
+        { ...LOT, acquisitionDate: LOT.acquisitionDate.toISOString() }, // valid
+        { ...LOT, acquisitionDate: LOT.acquisitionDate.toISOString(), origin: 'XX' }, // bad origin
+        { ...LOT, acquisitionDate: LOT.acquisitionDate.toISOString(), planType: 'bogus' }, // bad plan type
+      ],
+      soldLots: [
+        { ...SOLD, acquisitionDate: SOLD.acquisitionDate.toISOString(), saleDate: SOLD.saleDate.toISOString(), origin: 'ZZ' }, // bad origin
+      ],
+      savedSimulations: [],
+    });
+
+    const result = importFromJsonString(payload, DEFAULTS);
+    expect(result.lots).toHaveLength(1);
+    expect(result.soldLots).toHaveLength(0);
+    expect(result.warnings.some((w) => /position/i.test(w))).toBe(true);
+    expect(result.warnings.some((w) => /vente/i.test(w))).toBe(true);
+  });
+
   it('falls back to defaults when settings are invalid', () => {
     const payload = JSON.stringify({
       version: 1,

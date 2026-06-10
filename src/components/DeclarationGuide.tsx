@@ -74,6 +74,17 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
+            {/* Rappel CSG déductible */}
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-900">
+              <span aria-hidden className="mt-0.5">💡</span>
+              <p>
+                <strong>Pensez à la CSG déductible.</strong> La CSG (6,8 %) acquittée sur vos revenus
+                du patrimoine et de placement de {fiscalYear - 1} est déductible de votre revenu global de{' '}
+                {fiscalYear}, à reporter en case <strong>6DE</strong> du formulaire 2042. Ce montant est en
+                principe pré-rempli par l'administration ; vérifiez-le.
+              </p>
+            </div>
+
             {/* Formulaire 2042 */}
             <div>
               <h4 className="font-semibold text-blue-800 mb-3 text-base">FORMULAIRE 2042 — Déclaration principale</h4>

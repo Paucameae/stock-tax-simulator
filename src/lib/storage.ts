@@ -126,6 +126,16 @@ const GRANTS_VERSION = 1;
 const VALID_PLAN_TYPES_ALL: readonly PlanType[] = ['qualified_macron', 'qualified_pre_macron', 'non_qualified'];
 const VALID_ORIGINS: readonly StockOrigin[] = ['SP', 'DO', 'FM', 'FQ'];
 
+/** Type guard: is `raw` one of the known stock origins (SP/DO/FM/FQ)? */
+export function isValidOrigin(raw: unknown): raw is StockOrigin {
+  return typeof raw === 'string' && VALID_ORIGINS.includes(raw as StockOrigin);
+}
+
+/** Type guard: is `raw` one of the known plan types? */
+export function isValidPlanType(raw: unknown): raw is PlanType {
+  return typeof raw === 'string' && VALID_PLAN_TYPES_ALL.includes(raw as PlanType);
+}
+
 export function saveGrants(grants: GrantInfo[]): boolean {
   const payload = {
     version: GRANTS_VERSION,

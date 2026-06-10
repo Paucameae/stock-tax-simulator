@@ -70,5 +70,14 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'html'],
+      // Focus the report on the pure business logic (the tax engine and
+      // parsers). UI components are exercised by Testing Library but are not
+      // the priority for line-coverage tracking.
+      include: ['src/lib/**/*.ts'],
+      exclude: ['src/lib/**/__tests__/**', 'src/lib/types.ts'],
+    },
   },
 })

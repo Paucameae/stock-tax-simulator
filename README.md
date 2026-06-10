@@ -14,7 +14,7 @@ détention, et la conversion USD→EUR au taux BCE historique.
 - **Front** : React 19, Vite 8, TypeScript 6, Tailwind v4
 - **API** : Azure Functions v4 (Node 20) — endpoint `/api/msft-quote`
   (proxy vers Finnhub, cache 5 min, rate-limit 20 req/min/IP)
-- **Tests** : Vitest + Testing Library (252 tests)
+- **Tests** : Vitest + Testing Library (~500 tests)
 - **CI** : GitHub Actions (lint, type-check, tests, `npm audit`)
 - **Déploiement** : Azure Static Web Apps
 - **Stockage** : `localStorage` versionné (schéma v2)
@@ -110,10 +110,10 @@ src/
     csv-parser.ts          Parsing CSV (papaparse) + garde-fous
     tax-notice-parser.ts   Extraction PDF avis d'imposition
     ecb-rates.ts           Client API BCE (taux historiques EUR/USD)
-    backup.ts              Export/import JSON avec signature
+    backup.ts              Export/import JSON (validation à l'import)
     storage.ts             localStorage versionné (migration v1→v2)
     types.ts               Types partagés (StockLot, TaxSimulationResult…)
-  __tests__/               Tests unitaires (252 au total)
+  __tests__/               Tests unitaires
 
 api/
   src/functions/

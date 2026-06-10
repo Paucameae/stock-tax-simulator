@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+coverage
 *.local
 
 # Editor directories and files
@@ -26,6 +27,10 @@ dist-ssr
 # Azure Functions local secrets
 api/local.settings.json
 local.settings.json
+
+# Local-only scratch notes and inspection dumps (may contain broker PII)
+scratch.md
+scripts/*.out
 
 # Local scratch files (private samples, personal notes)
 tmp/

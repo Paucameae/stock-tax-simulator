@@ -5,7 +5,7 @@
 // fields are rejected to keep the runtime state consistent.
 
 import type { AppSettings, Broker, GrantInfo, QualificationReason, StockLot, SoldLot, SavedSimulation } from './types';
-import { validateGrant, validateSettings } from './storage';
+import { isValidOrigin, isValidPlanType, validateGrant, validateSettings } from './storage';
 
 const KNOWN_QUALIFICATION_REASONS: QualificationReason[] = [
   'broker_default',
@@ -121,7 +121,7 @@ function validateLot(raw: unknown): StockLot | null {
   const acq = parseDate(raw.acquisitionDate);
   if (!acq) return null;
   if (typeof raw.id !== 'string' || typeof raw.quantity !== 'number' || raw.quantity <= 0) return null;
-  if (typeof raw.origin !== 'string' || typeof raw.planType !== 'string') return null;
+  if (!isValidOrigin(raw.origin) || !isValidPlanType(raw.planType)) return null;
 
   return {
     id: raw.id,
@@ -135,9 +135,9 @@ function validateLot(raw: unknown): StockLot | null {
     availableForSaleDate: parseDate(raw.availableForSaleDate),
     availableForTransferDate: parseDate(raw.availableForTransferDate),
     grantDate: parseDate(raw.grantDate),
-    origin: raw.origin as StockLot['origin'],
+    origin: raw.origin,
     holdingPeriod: (raw.holdingPeriod === 'Long' ? 'Long' : 'Short'),
-    planType: raw.planType as StockLot['planType'],
+    planType: raw.planType,
     esppFmvPerShare: typeof raw.esppFmvPerShare === 'number' ? raw.esppFmvPerShare : undefined,
     esppFmvPerShareUsd: typeof raw.esppFmvPerShareUsd === 'number' ? raw.esppFmvPerShareUsd : undefined,
     costBasisPerShareUsd: typeof raw.costBasisPerShareUsd === 'number' ? raw.costBasisPerShareUsd : undefined,
@@ -160,7 +160,7 @@ function validateSoldLot(raw: unknown): SoldLot | null {
   const sale = parseDate(raw.saleDate);
   if (!acq || !sale) return null;
   if (typeof raw.id !== 'string' || typeof raw.quantity !== 'number' || raw.quantity <= 0) return null;
-  if (typeof raw.origin !== 'string' || typeof raw.planType !== 'string') return null;
+  if (!isValidOrigin(raw.origin) || !isValidPlanType(raw.planType)) return null;
 
   return {
     id: raw.id,
@@ -172,8 +172,8 @@ function validateSoldLot(raw: unknown): SoldLot | null {
     costBasis: Number(raw.costBasis) || 0,
     gainLoss: Number(raw.gainLoss) || 0,
     holdingPeriod: (raw.holdingPeriod === 'Long' ? 'Long' : 'Short'),
-    origin: raw.origin as SoldLot['origin'],
-    planType: raw.planType as SoldLot['planType'],
+    origin: raw.origin,
+    planType: raw.planType,
     proceedsUsd: typeof raw.proceedsUsd === 'number' ? raw.proceedsUsd : undefined,
     costBasisUsd: typeof raw.costBasisUsd === 'number' ? raw.costBasisUsd : undefined,
     eurUsdRate: typeof raw.eurUsdRate === 'number' ? raw.eurUsdRate : undefined,

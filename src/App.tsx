@@ -11,6 +11,7 @@ import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, saveGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
 import { reconcileLots, reconcileSoldLots } from './lib/stockexport-reconciliation';
 import { applyBulkChoiceToLots, applyBulkChoiceToSoldLots, countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from './lib/bulk-qualify';
+import { buildDemoData } from './lib/demo-data';
 import type { ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo, Broker } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
@@ -717,6 +718,36 @@ function App() {
     setDeclResult(decl.result);
   }, [declTaxMode]);
 
+  /**
+   * Load a fully synthetic demo dataset so a first-time user (or a tester) can
+   * explore every flow — portfolio, simulation, declaration, dividends —
+   * without exporting anything from their broker. Mirrors handleBackupImport:
+   * it replaces the current state wholesale and persists it, then bootstraps
+   * the declaration view. The numbers are fake and carry no PII.
+   */
+  const handleLoadDemo = React.useCallback(() => {
+    const demo = buildDemoData();
+    setSettings(demo.settings);
+    saveVersionedSettings('appSettings', demo.settings);
+    setLots(demo.lots);
+    setSoldLots(demo.soldLots);
+    setGrants([]);
+    setDividends(demo.dividends);
+    setCashInterest([]);
+    saveDividends({
+      dividends: demo.dividends,
+      cashInterest: [],
+      importedAt: new Date().toISOString(),
+    });
+    setSimEntries([]);
+    setSimResult(null);
+    const decl = computeDeclarationFor(demo.soldLots, demo.settings, declTaxMode);
+    setSaleYear(decl.saleYear);
+    setDeclEntries(decl.entries);
+    setDeclResult(decl.result);
+    setActiveTab('portfolio');
+  }, [declTaxMode]);
+
   const settingsDone = isSettingsConfigured(settings, DEFAULT_SETTINGS);
   const portfolioDone = lots.length > 0;
   const simulationDone = simResult !== null;
@@ -991,6 +1022,8 @@ function App() {
             onClearBrokerLots={handleClearBrokerLots}
             onClearBrokerSales={handleClearBrokerSales}
             onClearBrokerDividends={handleClearBrokerDividends}
+            hasData={lots.length > 0 || soldLots.length > 0 || grants.length > 0 || dividends.length > 0}
+            onLoadDemo={handleLoadDemo}
           />
           </React.Suspense>
         </div>
@@ -1081,6 +1114,15 @@ function App() {
             >
               Mentions légales
             </button>
+            {' · '}
+            <a
+              href="https://github.com/Paucameae/stock-tax-simulator/issues/new?template=user-feedback.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-gray-500 transition-colors"
+            >
+              Donner mon avis / signaler un bug
+            </a>
           </div>
         </div>
       </footer>
