@@ -5,6 +5,9 @@ export type FamilyStatus = 'single' | 'couple';
 export type HoldingPeriod = 'Short' | 'Long';
 export type ImportCurrency = 'EUR' | 'USD';
 
+/** Where the EUR/USD rate carried by a lot comes from. Absent on pre-v4 data, treated as 'ecb'. */
+export type RateSource = 'ecb' | 'manual';
+
 /**
  * Broker identifier. The app supports multi-broker users (typically Microsoft
  * employees who hold shares at Fidelity, Morgan Stanley, or both). The broker
@@ -37,6 +40,7 @@ export interface StockLot {
   totalCostBasisUsd?: number;
   currentValueUsd?: number;
   eurUsdRate?: number;
+  rateSource?: RateSource;
   importCurrency?: ImportCurrency;
   // Reconciliation with Microsoft StockExport (optional — present when matched)
   grantIdHash?: string;
@@ -53,6 +57,12 @@ export interface StockLot {
    * a lot is showing up out of the usual vest schedule.
    */
   isReinvestedDividend?: boolean;
+  /**
+   * Indicative amounts (currentValue / unrealizedGainLoss) that were dropped
+   * to 0 by backup validation because the file held a non-numeric value.
+   * Cleared as soon as they are recomputed from a fresh MSFT quote.
+   */
+  hasUnreliableAmounts?: boolean;
   /**
    * Provenance of the current (origin, planType) on this lot — used to
    * surface a tooltip explaining *why* the lot is classified as it is.
@@ -161,6 +171,7 @@ export interface SoldLot {
   proceedsUsd?: number;
   costBasisUsd?: number;
   eurUsdRate?: number;
+  rateSource?: RateSource;
   importCurrency?: ImportCurrency;
   // Reconciliation with Microsoft StockExport (optional — present when matched)
   grantIdHash?: string;
@@ -168,6 +179,8 @@ export interface SoldLot {
   reconciled?: boolean;
   /** See StockLot.isReinvestedDividend. Carried through to sold lots so the table can flag historical DRIP sales. */
   isReinvestedDividend?: boolean;
+  /** See StockLot.hasUnreliableAmounts. On a sold lot only gainLoss is indicative (it is recomputed from proceeds - costBasis). */
+  hasUnreliableAmounts?: boolean;
   /** See StockLot.qualificationReason. */
   qualificationReason?: QualificationReason;
 }

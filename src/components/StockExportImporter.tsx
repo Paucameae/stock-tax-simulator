@@ -5,6 +5,7 @@ import { Alert } from './ui/alert';
 import { Select } from './ui/select';
 import { FileDropZone } from './ui/FileDropZone';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
+import { ConfirmDeleteDialog } from './ui/ConfirmDeleteDialog';
 import { stockexportGuide } from './guides/stockexport-steps';
 import { parseStockExportFile, hashGrantIds } from '../lib/stockexport-parser';
 import { saveGrants, clearGrants } from '../lib/storage';
@@ -42,6 +43,7 @@ export function StockExportImporter({
   const [warnings, setWarnings] = React.useState<string[]>([]);
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showGuide, setShowGuide] = React.useState(false);
+  const [confirmClear, setConfirmClear] = React.useState(false);
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -71,6 +73,7 @@ export function StockExportImporter({
     setFileName(null);
     setWarnings([]);
     setError(null);
+    setConfirmClear(false);
   };
 
   const totals = React.useMemo(() => {
@@ -92,7 +95,7 @@ export function StockExportImporter({
           {grants.length > 0 && (
             <button
               type="button"
-              onClick={handleClear}
+              onClick={() => setConfirmClear(true)}
               aria-label="Supprimer les grants importés"
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors whitespace-nowrap shrink-0"
             >
@@ -135,6 +138,20 @@ export function StockExportImporter({
           onClose={() => setShowGuide(false)}
           guides={[stockexportGuide]}
           title="Comment télécharger votre StockExport"
+        />
+
+        <ConfirmDeleteDialog
+          open={confirmClear}
+          title="Supprimer les grants importés ?"
+          recap={[
+            `${grants.length.toLocaleString('fr-FR')} grant${grants.length > 1 ? 's' : ''}`,
+            `${totals.awarded.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions attribuées`,
+            `${totals.unvested.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions non acquises`,
+          ]}
+          body="Vos positions, ventes et dividendes ne sont pas affectés, mais la qualification automatique des lots (Macron / non qualifié) ne sera plus possible. Cette action est irréversible — vous pourrez ré-importer votre StockExport à tout moment."
+          confirmLabel="Supprimer les grants"
+          onCancel={() => setConfirmClear(false)}
+          onConfirm={handleClear}
         />
 
         {error && (

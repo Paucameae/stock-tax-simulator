@@ -1,0 +1,16 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "",
+
+    "//": "Requis pour /api/msft-quote (cotation MSFT via Finnhub). Clé gratuite sur https://finnhub.io",
+    "FINNHUB_API_KEY": "",
+
+    "// AZURE_OPENAI": "Requis pour /api/ai-assistant (assistant 'Expliquer ce calcul'). Sans ces valeurs, l'endpoint renvoie 503 et le front se dégrade proprement.",
+    "AZURE_OPENAI_ENDPOINT": "https://VOTRE-RESSOURCE.openai.azure.com",
+    "AZURE_OPENAI_API_KEY": "",
+    "AZURE_OPENAI_DEPLOYMENT": "",
+    "AZURE_OPENAI_API_VERSION": "2024-10-21"
+  }
+}

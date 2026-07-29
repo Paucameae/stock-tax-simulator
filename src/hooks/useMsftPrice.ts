@@ -1,6 +1,13 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { fetchECBRates, convertUsdToEur, formatDateKey } from '../lib/ecb-rates';
 import { formatUSD } from '../lib/utils';
+import {
+  fetchWithTimeout,
+  httpErrorMessage,
+  parseRetryAfter,
+  apiErrorMessage,
+  isAbortError,
+} from '../lib/api-client';
 
 interface MsftPriceResult {
   usdPrice: number | null;
@@ -30,15 +37,19 @@ export function useMsftPrice(): MsftPriceResult {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchPrice = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/msft-quote');
-      if (!res.ok) throw new Error('Erreur API');
+      const res = await fetchWithTimeout('/api/msft-quote', { signal: controller.signal });
+      if (!res.ok) throw new Error(httpErrorMessage(res.status, parseRetryAfter(res)));
       const data = await res.json();
-      if (!data.c || data.c === 0) throw new Error('Prix indisponible');
+      if (!data.c || data.c === 0) throw new Error('Cours MSFT indisponible pour le moment.');
       const usd = data.c as number;
       setUsdPrice(usd);
 
@@ -64,10 +75,11 @@ export function useMsftPrice(): MsftPriceResult {
       } else {
         setError(`Cours MSFT: ${formatUSD(usd)} — Taux BCE du jour indisponible, convertissez manuellement.`);
       }
-    } catch {
-      setError('Impossible de récupérer le cours MSFT.');
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setError(apiErrorMessage(err, 'Impossible de récupérer le cours MSFT.'));
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) setLoading(false);
     }
   }, []);
 
@@ -76,6 +88,7 @@ export function useMsftPrice(): MsftPriceResult {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPrice();
+    return () => abortRef.current?.abort();
   }, [fetchPrice]);
 
   return { usdPrice, eurPrice, change, changeEur, changePercent, marketTimestamp, lastUpdated, error, loading, retry: fetchPrice };

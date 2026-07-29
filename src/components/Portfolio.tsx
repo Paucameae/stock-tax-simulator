@@ -4,7 +4,7 @@ import { Badge } from './ui/badge';
 import { Alert } from './ui/alert';
 import { Tooltip } from './ui/tooltip';
 import { Select } from './ui/select';
-import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Info, X } from 'lucide-react';
+import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Info, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Treemap, ResponsiveContainer } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
@@ -17,6 +17,8 @@ import { Dialog, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
 import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
+import { useMsftPrice } from '../hooks/useMsftPrice';
+import { lotMarketValue, lotUnrealizedGain, portfolioTotals } from '../lib/portfolio-value';
 
 interface PortfolioProps {
   lots: StockLot[];
@@ -28,6 +30,8 @@ interface PortfolioProps {
   onBulkQualify?: (choice: BulkQualifyChoice, options: BulkQualifyOptions) => void;
   /** Whether the user has imported a StockExport file — drives the wording of the banner. */
   hasGrants?: boolean;
+  /** ISO date of the last positions import, used to date the fallback valuation. */
+  importedAt?: string | null;
 }
 
 // Threshold under which the lot table auto-opens — small portfolios fit on one
@@ -54,7 +58,8 @@ const BROKER_COLORS: Record<string, string> = {
 
 type GroupBy = 'origin' | 'holding' | 'broker';
 
-export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [], onBulkQualify, hasGrants = false }: PortfolioProps) {
+export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [], onBulkQualify, hasGrants = false, importedAt = null }: PortfolioProps) {
+  const { eurPrice, lastUpdated, loading: priceLoading, error: priceError, retry: retryPrice } = useMsftPrice();
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
   const [filterHolding, setFilterHolding] = React.useState<'all' | 'Short' | 'Long'>('all');
   const [filterBroker, setFilterBroker] = React.useState<Broker | 'all'>('all');
@@ -108,9 +113,9 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
         case 'fmv':
           return dir * ((a.esppFmvPerShare ?? 0) - (b.esppFmvPerShare ?? 0));
         case 'value':
-          return dir * (a.currentValue - b.currentValue);
+          return dir * ((lotMarketValue(a, eurPrice) ?? 0) - (lotMarketValue(b, eurPrice) ?? 0));
         case 'gain':
-          return dir * (a.unrealizedGainLoss - b.unrealizedGainLoss);
+          return dir * ((lotUnrealizedGain(a, eurPrice) ?? 0) - (lotUnrealizedGain(b, eurPrice) ?? 0));
         case 'holding':
           // Long > Short
           return dir * (a.holdingPeriod === b.holdingPeriod ? 0 : a.holdingPeriod === 'Long' ? 1 : -1);
@@ -123,19 +128,17 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
     });
 
     return result;
-  }, [lots, filterOrigin, filterHolding, filterBroker, filterDrip, sortKey, sortDir]);
+  }, [lots, filterOrigin, filterHolding, filterBroker, filterDrip, sortKey, sortDir, eurPrice]);
 
   const totalQuantity = lots.reduce((sum, l) => sum + l.quantity, 0);
-  const totalValue = lots.reduce((sum, l) => sum + l.currentValue, 0);
-  const totalGainLoss = lots.reduce((sum, l) => sum + l.unrealizedGainLoss, 0);
+  const { value: totalValue, gainLoss: totalGainLoss } = portfolioTotals(lots, eurPrice);
 
   // When the lot table is open AND filtered, swap the header KPIs to reflect
   // the filtered slice — that's the question the user is currently asking
   // ("how much weight do my Macron AGAs carry?"). When closed/unfiltered we
   // keep the global totals so the card is always a snapshot of the whole.
   const filteredQuantity = filteredLots.reduce((sum, l) => sum + l.quantity, 0);
-  const filteredValue = filteredLots.reduce((sum, l) => sum + l.currentValue, 0);
-  const filteredGainLoss = filteredLots.reduce((sum, l) => sum + l.unrealizedGainLoss, 0);
+  const { value: filteredValue, gainLoss: filteredGainLoss } = portfolioTotals(filteredLots, eurPrice);
 
   const [groupBy, setGroupBy] = React.useState<GroupBy>('origin');
 
@@ -168,30 +171,32 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
         fill = BROKER_COLORS[lot.broker] ?? '#888';
       }
       const existing = buckets.get(key);
+      const value = lotMarketValue(lot, eurPrice) ?? 0;
+      const gainLoss = lotUnrealizedGain(lot, eurPrice) ?? 0;
       if (existing) {
-        existing.value += lot.currentValue;
+        existing.value += value;
         existing.count += 1;
         existing.shares += lot.quantity;
-        existing.gainLoss += lot.unrealizedGainLoss;
+        existing.gainLoss += gainLoss;
       } else {
         buckets.set(key, {
           key,
           name,
           code,
-          value: Math.max(0, lot.currentValue),
+          value: Math.max(0, value),
           count: 1,
           shares: lot.quantity,
-          gainLoss: lot.unrealizedGainLoss,
+          gainLoss,
           fill,
         });
       }
     }
     return Array.from(buckets.values()).sort((a, b) => b.value - a.value);
-  }, [lots, groupBy]);
+  }, [lots, groupBy, eurPrice]);
 
   // Hide the treemap when it would degenerate to a single full-width tile —
   // it adds visual noise without conveying any breakdown.
-  const showTreemap = treemapData.length >= 2 && totalValue > 0;
+  const showTreemap = treemapData.length >= 2 && totalValue !== null && totalValue > 0;
 
   const handlePlanTypeChange = (lotId: string, planType: string) => {
     const updated = lots.map((l) => {
@@ -210,6 +215,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
 
   const hasDOLots = lots.some((l) => l.origin === 'DO');
   const hasUsdImport = lots.some((l) => l.importCurrency === 'USD');
+  const manualRateCount = lots.filter((l) => l.rateSource === 'manual').length;
   const hasEsppLots = lots.some((l) => l.origin === 'SP');
   const totalEligibleForBulk = countEligible(lots);
   const esppEligibleForBulk = countEligible(lots, { includeEspp: true }) - totalEligibleForBulk;
@@ -239,6 +245,8 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   // Header KPIs reflect filters only when the lot table is open AND a filter is
   // active; otherwise the card stays a global snapshot of the whole portfolio.
   const showFilteredKpis = tableOpen && isFiltered;
+  const displayedValue = showFilteredKpis ? filteredValue : totalValue;
+  const displayedGainLoss = showFilteredKpis ? filteredGainLoss : totalGainLoss;
   const toggleTable = () => {
     setTableOpen((v) => {
       const next = !v;
@@ -289,7 +297,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
             />
             <Kpi
               label={showFilteredKpis ? 'Valeur filtrée' : 'Valeur totale'}
-              value={formatEUR(showFilteredKpis ? filteredValue : totalValue)}
+              value={displayedValue === null ? '—' : formatEUR(displayedValue)}
             />
             <Kpi
               label={
@@ -300,10 +308,29 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                   )}
                 </span>
               }
-              value={`${(showFilteredKpis ? filteredGainLoss : totalGainLoss) >= 0 ? '+' : ''}${formatEUR(showFilteredKpis ? filteredGainLoss : totalGainLoss)}`}
-              valueClassName={(showFilteredKpis ? filteredGainLoss : totalGainLoss) >= 0 ? 'text-green-600' : 'text-red-600'}
+              value={
+                displayedGainLoss === null
+                  ? '—'
+                  : `${displayedGainLoss >= 0 ? '+' : ''}${formatEUR(displayedGainLoss)}`
+              }
+              valueClassName={
+                displayedGainLoss === null
+                  ? 'text-gray-400'
+                  : displayedGainLoss >= 0
+                    ? 'text-green-600'
+                    : 'text-red-600'
+              }
             />
           </div>
+
+          <ValuationSource
+            eurPrice={eurPrice}
+            lastUpdated={lastUpdated}
+            loading={priceLoading}
+            error={priceError}
+            onRetry={retryPrice}
+            importedAt={importedAt}
+          />
 
           {/* Allocation treemap */}
           {showTreemap && (
@@ -449,6 +476,17 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
               )}
             </div>
 
+            {manualRateCount > 0 && (
+              <p className="mb-3 flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>
+                  {manualRateCount} lot{manualRateCount > 1 ? 's' : ''} converti
+                  {manualRateCount > 1 ? 's' : ''} avec un taux de change saisi manuellement, non issu du flux
+                  BCE. Vérifiez ces montants avant de les reporter sur votre déclaration.
+                </span>
+              </p>
+            )}
+
             <PortfolioTableAndCards
               filteredLots={filteredLots}
               hasMultipleBrokers={hasMultipleBrokers}
@@ -458,6 +496,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
               sortDir={sortDir}
               onSort={handleSort}
               showFxDetails={showFxDetails}
+              eurPrice={eurPrice}
               onPlanTypeChange={handlePlanTypeChange}
             />
           </CardContent>
@@ -484,6 +523,74 @@ function Kpi({
       <div className="text-xs text-gray-500">{label}</div>
       <div className={`text-base font-semibold ${valueClassName ?? ''}`}>{value}</div>
     </div>
+  );
+}
+
+/**
+ * States where the valuation comes from: the live MSFT quote, or the amounts
+ * frozen in the broker export. Always visible so the figures above are never
+ * mistaken for a real-time portfolio.
+ */
+function ValuationSource({
+  eurPrice,
+  lastUpdated,
+  loading,
+  error,
+  onRetry,
+  importedAt,
+}: {
+  eurPrice: number | null;
+  lastUpdated: Date | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  importedAt: string | null;
+}) {
+  const importDate = importedAt ? new Date(importedAt) : null;
+  const importLabel =
+    importDate && !isNaN(importDate.getTime())
+      ? `de votre import du ${importDate.toLocaleDateString('fr-FR')}`
+      : 'de votre dernier import';
+
+  if (eurPrice !== null) {
+    return (
+      <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-500">
+        <span>
+          Valorisé au cours MSFT de {formatEUR(eurPrice)}
+          {lastUpdated ? ` (${lastUpdated.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})` : ''}.
+        </span>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={loading}
+          className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-900 underline-offset-2 hover:underline disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          Actualiser
+        </button>
+      </p>
+    );
+  }
+
+  if (loading) {
+    return <p className="mt-2 text-xs text-gray-500">Récupération du cours MSFT…</p>;
+  }
+
+  return (
+    <p className="mt-2 flex flex-wrap items-start gap-x-1.5 gap-y-1 text-xs text-amber-700">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+      <span>
+        Cours MSFT indisponible{error ? ` (${error})` : ''} — montants figés, issus {importLabel}.
+      </span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex items-center gap-1 font-medium text-amber-800 underline-offset-2 hover:underline"
+      >
+        <RefreshCw className="h-3 w-3" aria-hidden="true" />
+        Réessayer
+      </button>
+    </p>
   );
 }
 
@@ -573,6 +680,8 @@ interface PortfolioTableAndCardsProps {
   sortKey: PortfolioSortKey;
   sortDir: 'asc' | 'desc';
   onSort: (key: PortfolioSortKey) => void;
+  /** Live MSFT price in EUR, or `null` to fall back to the exported amounts. */
+  eurPrice: number | null;
   onPlanTypeChange: (lotId: string, planType: string) => void;
 }
 
@@ -599,6 +708,7 @@ function PortfolioTableAndCards({
   sortKey,
   sortDir,
   onSort,
+  eurPrice,
   onPlanTypeChange: handlePlanTypeChange,
 }: PortfolioTableAndCardsProps) {
   return (
@@ -643,6 +753,8 @@ function PortfolioTableAndCards({
               <tbody>
                 {filteredLots.map((lot) => {
                   const notYetAvailable = lot.availableForSaleDate && lot.availableForSaleDate > new Date();
+                  const value = lotMarketValue(lot, eurPrice);
+                  const gain = lotUnrealizedGain(lot, eurPrice);
                   return (
                     <tr key={lot.id} className="border-b hover:bg-gray-50 group">
                       <td className="px-2.5 py-2 sticky left-0 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_rgb(229,231,235)]">{formatDate(lot.acquisitionDate)}</td>
@@ -660,6 +772,14 @@ function PortfolioTableAndCards({
                           </td>
                           <td className="px-2.5 py-2 text-right text-gray-500 font-mono text-xs">
                             {lot.eurUsdRate ? lot.eurUsdRate.toFixed(4) : '—'}
+                            {lot.rateSource === 'manual' && (
+                              <span
+                                className="ml-1 px-1 rounded bg-amber-100 text-amber-800 font-sans not-italic"
+                                title="Taux saisi manuellement, non issu du flux BCE"
+                              >
+                                manuel
+                              </span>
+                            )}
                           </td>
                         </>
                       )}
@@ -668,12 +788,27 @@ function PortfolioTableAndCards({
                           {lot.origin === 'SP' ? formatEUR(lot.esppFmvPerShare ?? 0) : '—'}
                         </td>
                       )}
-                      <td className="px-2.5 py-2 text-right">{formatEUR(lot.currentValue)}</td>
-                      <td className={`px-2.5 py-2 text-right ${lot.unrealizedGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        <span className="inline-flex items-center gap-1">
-                          {lot.unrealizedGainLoss >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                          {formatEUR(Math.abs(lot.unrealizedGainLoss))}
-                        </span>
+                      <td className="px-2.5 py-2 text-right">
+                        {value === null ? '—' : formatEUR(value)}
+                        {eurPrice === null && lot.hasUnreliableAmounts && (
+                          <span
+                            className="ml-1 align-middle text-amber-600"
+                            title="Montant indicatif recalculé lors d'une restauration de sauvegarde : à vérifier"
+                          >
+                            <AlertTriangle className="inline h-3 w-3" aria-hidden="true" />
+                            <span className="sr-only">Montant indicatif à vérifier</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className={`px-2.5 py-2 text-right ${gain === null ? 'text-gray-400' : gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {gain === null ? (
+                          '—'
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            {gain >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                            {formatEUR(Math.abs(gain))}
+                          </span>
+                        )}
                       </td>
                       <td className="px-2.5 py-2 text-center">
                         <div className="inline-flex flex-col items-center gap-0.5">
@@ -766,6 +901,7 @@ function PortfolioTableAndCards({
             hasMultipleBrokers={hasMultipleBrokers}
             hasUsdImport={hasUsdImport}
             hasEsppLots={hasEsppLots}
+            eurPrice={eurPrice}
             onPlanTypeChange={handlePlanTypeChange}
           />
         ))}
@@ -781,16 +917,20 @@ function MobileLotCard({
   hasMultipleBrokers,
   hasUsdImport,
   hasEsppLots,
+  eurPrice,
   onPlanTypeChange: handlePlanTypeChange,
 }: {
   lot: StockLot;
   hasMultipleBrokers: boolean;
   hasUsdImport: boolean;
   hasEsppLots: boolean;
+  eurPrice: number | null;
   onPlanTypeChange: (lotId: string, planType: string) => void;
 }) {
   const [detailsOpen, setDetailsOpen] = React.useState(false);
   const notYetAvailable = lot.availableForSaleDate && lot.availableForSaleDate > new Date();
+  const value = lotMarketValue(lot, eurPrice);
+  const gain = lotUnrealizedGain(lot, eurPrice);
 
   return (
     <>
@@ -844,13 +984,19 @@ function MobileLotCard({
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <div className="text-gray-500">Valeur</div>
-              <div className="font-medium">{formatEUR(lot.currentValue)}</div>
+              <div className="font-medium">{value === null ? '—' : formatEUR(value)}</div>
             </div>
             <div>
               <div className="text-gray-500">PV/MV</div>
-              <div className={`font-medium inline-flex items-center gap-1 ${lot.unrealizedGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {lot.unrealizedGainLoss >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                {formatEUR(Math.abs(lot.unrealizedGainLoss))}
+              <div className={`font-medium inline-flex items-center gap-1 ${gain === null ? 'text-gray-400' : gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {gain === null ? (
+                  '—'
+                ) : (
+                  <>
+                    {gain >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                    {formatEUR(Math.abs(gain))}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -885,6 +1031,7 @@ function MobileLotCard({
         lot={lot}
         hasUsdImport={hasUsdImport}
         hasEsppLots={hasEsppLots}
+        eurPrice={eurPrice}
         onPlanTypeChange={handlePlanTypeChange}
       />
     </>
@@ -954,7 +1101,7 @@ function OriginCodesLegend() {
         <Info className="h-3.5 w-3.5" />
         Codes origine
       </button>
-      <Dialog open={open} onClose={() => setOpen(false)} className="max-w-lg">
+      <Dialog open={open} onClose={() => setOpen(false)} label="Codes d'origine des lots" className="max-w-lg">
         <div className="flex items-start justify-between gap-3 mb-3">
           <h2 className="text-base font-semibold">Codes d'origine des lots</h2>
           <button
@@ -988,6 +1135,7 @@ function LotDetailsDialog({
   lot,
   hasUsdImport,
   hasEsppLots,
+  eurPrice,
   onPlanTypeChange,
 }: {
   open: boolean;
@@ -995,10 +1143,13 @@ function LotDetailsDialog({
   lot: StockLot;
   hasUsdImport: boolean;
   hasEsppLots: boolean;
+  eurPrice: number | null;
   onPlanTypeChange: (lotId: string, planType: string) => void;
 }) {
+  const value = lotMarketValue(lot, eurPrice);
+  const gain = lotUnrealizedGain(lot, eurPrice);
   return (
-    <Dialog open={open} onClose={onClose} className="max-w-md">
+    <Dialog open={open} onClose={onClose} label={`Détail du lot du ${formatDate(lot.acquisitionDate)}`} className="max-w-md">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h2 className="text-base font-semibold">Lot du {formatDate(lot.acquisitionDate)}</h2>
@@ -1023,18 +1174,18 @@ function LotDetailsDialog({
         )}
 
         <dt className="text-gray-500">Valeur actuelle</dt>
-        <dd className="text-right font-medium">{formatEUR(lot.currentValue)}</dd>
+        <dd className="text-right font-medium">{value === null ? '—' : formatEUR(value)}</dd>
 
         <dt className="text-gray-500">PV/MV latente</dt>
-        <dd className={`text-right font-medium ${lot.unrealizedGainLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          {lot.unrealizedGainLoss >= 0 ? '+' : ''}{formatEUR(lot.unrealizedGainLoss)}
+        <dd className={`text-right font-medium ${gain === null ? 'text-gray-400' : gain >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          {gain === null ? '—' : `${gain >= 0 ? '+' : ''}${formatEUR(gain)}`}
         </dd>
 
         {hasUsdImport && lot.costBasisPerShareUsd && (
           <>
             <dt className="text-gray-500">Prix USD</dt>
             <dd className="text-right font-mono text-xs">{formatUSD(lot.costBasisPerShareUsd)}</dd>
-            <dt className="text-gray-500">Taux BCE</dt>
+            <dt className="text-gray-500">{lot.rateSource === 'manual' ? 'Taux manuel' : 'Taux BCE'}</dt>
             <dd className="text-right font-mono text-xs">{lot.eurUsdRate?.toFixed(4) ?? '—'}</dd>
           </>
         )}

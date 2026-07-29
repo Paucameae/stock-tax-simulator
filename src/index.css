@@ -17,3 +17,52 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Printing targets a single region (the declaration summary) marked with
+   `data-print-root`. Hiding the rest with `visibility` rather than `display`
+   keeps the print engine's page breaks predictable. */
+@media print {
+  @page {
+    margin: 15mm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible;
+  }
+
+  [data-print-root] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  /* Ink-friendly and readable on monochrome printers. */
+  [data-print-root] * {
+    color: #000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  [data-print-root] th,
+  [data-print-root] td {
+    border: 1px solid #999 !important;
+  }
+
+  [data-print-root] table,
+  [data-print-root] tr,
+  [data-print-root] li {
+    break-inside: avoid;
+  }
+
+  [data-print-root] h3,
+  [data-print-root] h4 {
+    break-after: avoid;
+  }
+}
+

@@ -148,4 +148,56 @@ describe('BackupPanel', () => {
       expect(screen.queryByRole('button', { name: /Remplacer mes données/i })).toBeNull();
     });
   });
+
+  it('previews the before/after counts of the restore', async () => {
+    const current = {
+      settings: DEFAULTS,
+      lots: [],
+      soldLots: [],
+      savedSimulations: [{ id: 'a' }, { id: 'b' }] as never,
+    };
+    render(<BackupPanel current={current} defaults={DEFAULTS} onImport={vi.fn()} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    const valid = JSON.stringify({
+      app: 'stock-tax-simulator',
+      version: 3,
+      exportedAt: new Date().toISOString(),
+      settings: DEFAULTS,
+      lots: [],
+      soldLots: [],
+      savedSimulations: [],
+    });
+    fireEvent.change(input, {
+      target: { files: [new File([valid], 'backup.json', { type: 'application/json' })] },
+    });
+
+    const row = (await screen.findByRole('rowheader', { name: 'Simulations enregistrées' })).closest('tr')!;
+    // Current 2 → 0 after restore: the loss must be visible in the preview.
+    expect(row).toHaveTextContent('2');
+    expect(row).toHaveTextContent('0');
+  });
+
+  it('warns and relabels the confirm button when rows are rejected', async () => {
+    render(<BackupPanel current={CURRENT} defaults={DEFAULTS} onImport={vi.fn()} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    const withJunk = JSON.stringify({
+      app: 'stock-tax-simulator',
+      version: 3,
+      exportedAt: new Date().toISOString(),
+      settings: DEFAULTS,
+      lots: [{ nope: true }],
+      soldLots: [],
+      savedSimulations: [],
+    });
+    fireEvent.change(input, {
+      target: { files: [new File([withJunk], 'backup.json', { type: 'application/json' })] },
+    });
+
+    expect(
+      await screen.findByRole('button', { name: /Remplacer malgré les lignes ignorées/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/1 position\(s\) ignorée\(s\)/i);
+  });
 });

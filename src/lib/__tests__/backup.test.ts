@@ -67,7 +67,7 @@ describe('exportToJsonString', () => {
     const json = exportToJsonString(makeInput());
     const parsed = JSON.parse(json);
     expect(parsed.app).toBe('stock-tax-simulator');
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(typeof parsed.exportedAt).toBe('string');
     expect(parsed.lots).toHaveLength(1);
     expect(parsed.soldLots).toHaveLength(1);
@@ -352,5 +352,85 @@ describe('importFromJsonString', () => {
     const result = importFromJsonString(payload, DEFAULTS);
     expect(result.grants).toEqual([]);
     expect(result.warnings.some((w) => /grant/i.test(w))).toBe(true);
+  });
+});
+
+describe('importFromJsonString — strict numeric validation', () => {
+  function payload(lots: unknown[], soldLots: unknown[] = []): string {
+    return JSON.stringify({
+      version: 4,
+      app: 'stock-tax-simulator',
+      exportedAt: new Date().toISOString(),
+      settings: DEFAULTS,
+      lots,
+      soldLots,
+      savedSimulations: [],
+    });
+  }
+
+  const rawLot = { ...LOT, acquisitionDate: LOT.acquisitionDate.toISOString() };
+  const rawSold = {
+    ...SOLD,
+    acquisitionDate: SOLD.acquisitionDate.toISOString(),
+    saleDate: SOLD.saleDate.toISOString(),
+  };
+
+  it.each([
+    ['costBasisPerShare', 'abc'],
+    ['totalCostBasis', null],
+  ])('rejects a lot whose %s is not a finite number', (field, value) => {
+    const result = importFromJsonString(payload([{ ...rawLot, [field]: value }]), DEFAULTS);
+    expect(result.lots).toEqual([]);
+    expect(result.counts.lotsRejected).toBe(1);
+  });
+
+  it('rejects a lot whose amount overflows to Infinity when parsed', () => {
+    // Written as raw JSON: a source literal would already lose precision.
+    const json = payload([rawLot]).replace('"totalCostBasis":20000', '"totalCostBasis":1e999');
+    const result = importFromJsonString(json, DEFAULTS);
+    expect(result.lots).toEqual([]);
+  });
+
+  it.each([
+    ['proceeds', 'abc'],
+    ['costBasis', undefined],
+  ])('rejects a sale whose %s is not a finite number', (field, value) => {
+    const result = importFromJsonString(payload([], [{ ...rawSold, [field]: value }]), DEFAULTS);
+    expect(result.soldLots).toEqual([]);
+    expect(result.counts.soldLotsRejected).toBe(1);
+  });
+
+  it('keeps a lot with a corrupt indicative amount and flags it', () => {
+    const result = importFromJsonString(payload([{ ...rawLot, currentValue: 'oops' }]), DEFAULTS);
+    expect(result.lots).toHaveLength(1);
+    expect(result.lots[0].currentValue).toBe(0);
+    expect(result.lots[0].hasUnreliableAmounts).toBe(true);
+    expect(result.counts.degraded).toBe(1);
+    expect(result.warnings.some((w) => /indicatifs/i.test(w))).toBe(true);
+  });
+
+  it('recomputes a corrupt gainLoss from proceeds and cost basis', () => {
+    const result = importFromJsonString(payload([], [{ ...rawSold, gainLoss: 'oops' }]), DEFAULTS);
+    expect(result.soldLots[0].gainLoss).toBe(SOLD.proceeds - SOLD.costBasis);
+    expect(result.soldLots[0].hasUnreliableAmounts).toBe(true);
+  });
+
+  it('leaves a valid lot untouched and unflagged', () => {
+    const result = importFromJsonString(payload([rawLot]), DEFAULTS);
+    expect(result.lots[0].currentValue).toBe(LOT.currentValue);
+    expect(result.lots[0].hasUnreliableAmounts).toBeUndefined();
+    expect(result.counts.degraded).toBe(0);
+  });
+
+  it('reads a manual rate source and ignores an unknown one', () => {
+    const result = importFromJsonString(
+      payload([
+        { ...rawLot, id: 'a', eurUsdRate: 1.1, rateSource: 'manual' },
+        { ...rawLot, id: 'b', eurUsdRate: 1.1, rateSource: 'wat' },
+      ]),
+      DEFAULTS
+    );
+    expect(result.lots[0].rateSource).toBe('manual');
+    expect(result.lots[1].rateSource).toBeUndefined();
   });
 });

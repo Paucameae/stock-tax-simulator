@@ -12,9 +12,11 @@ détention, et la conversion USD→EUR au taux BCE historique.
 ## Stack
 
 - **Front** : React 19, Vite 8, TypeScript 6, Tailwind v4
-- **API** : Azure Functions v4 (Node 20) — endpoint `/api/msft-quote`
-  (proxy vers Finnhub, cache 5 min, rate-limit 20 req/min/IP)
-- **Tests** : Vitest + Testing Library (~500 tests)
+- **API** : Azure Functions v4 (Node 20) — deux endpoints :
+  `/api/msft-quote` (proxy vers Finnhub, cache 5 min, rate-limit 20 req/min/IP)
+  et `/api/ai-assistant` (assistant « Expliquer ce calcul » via Azure OpenAI,
+  grounded, rate-limit 12 req/min/IP)
+- **Tests** : Vitest + Testing Library (500 tests)
 - **CI** : GitHub Actions (lint, type-check, tests, `npm audit`)
 - **Déploiement** : Azure Static Web Apps
 - **Stockage** : `localStorage` versionné (schéma v2)
@@ -39,7 +41,12 @@ cd api ; npm install ; cd ..
 
 ### Configuration
 
-Créer `api/local.settings.json` (ne **jamais** commiter ce fichier) :
+Copier le modèle fourni puis renseigner vos clés (ne **jamais** commiter
+`api/local.settings.json` — il est dans `.gitignore`) :
+
+```pwsh
+copy api\local.settings.json.example api\local.settings.json
+```
 
 ```json
 {
@@ -47,30 +54,48 @@ Créer `api/local.settings.json` (ne **jamais** commiter ce fichier) :
   "Values": {
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "AzureWebJobsStorage": "",
-    "FINNHUB_API_KEY": "VOTRE_CLE"
+    "FINNHUB_API_KEY": "VOTRE_CLE",
+    "AZURE_OPENAI_ENDPOINT": "https://VOTRE-RESSOURCE.openai.azure.com",
+    "AZURE_OPENAI_API_KEY": "VOTRE_CLE",
+    "AZURE_OPENAI_DEPLOYMENT": "NOM_DU_DEPLOIEMENT",
+    "AZURE_OPENAI_API_VERSION": "2024-10-21"
   }
 }
 ```
 
+| Variable | Endpoint | Rôle |
+|---|---|---|
+| `FINNHUB_API_KEY` | `/api/msft-quote` | Cotation MSFT temps réel (proxy Finnhub) |
+| `AZURE_OPENAI_ENDPOINT` | `/api/ai-assistant` | Assistant « Expliquer ce calcul » |
+| `AZURE_OPENAI_API_KEY` | `/api/ai-assistant` | Clé de la ressource Azure OpenAI |
+| `AZURE_OPENAI_DEPLOYMENT` | `/api/ai-assistant` | Nom du déploiement du modèle |
+| `AZURE_OPENAI_API_VERSION` | `/api/ai-assistant` | Optionnel (défaut `2024-10-21`) |
+
+> Le front fonctionne **sans** ces clés : les endpoints concernés renvoient
+> une erreur `503` et l'UI se dégrade proprement (pas de cotation live / assistant
+> IA indisponible).
+
 ### Lancer en local
 
-Deux terminaux :
-
 ```pwsh
-# Terminal 1 — front (port 5173)
 npm run dev
-
-# Terminal 2 — API (port 7071)
-cd api ; func start
 ```
 
-Vite proxifie `/api/*` vers `localhost:7071`.
+Lance le front (port 5173) **et** l'hôte Azure Functions (port 7071) ; Vite
+proxifie `/api/*` vers `localhost:7071`. Sans l'API, pas de cotation MSFT live :
+le portefeuille reste valorisé aux montants figés de l'export.
+
+Pour ne lancer qu'une moitié : `npm run dev:web` ou `npm run dev:api`.
+`dev:api` recompile `api/` avant de démarrer — l'hôte Functions sert `api/dist`,
+donc une modification TypeScript non recompilée passe inaperçue.
 
 ### Scripts utiles
 
 | Commande | Description |
 |---|---|
-| `npm run dev` | Dev server Vite avec HMR |
+| `npm run dev` | Front (5173) + API (7071) |
+| `npm run dev:web` | Dev server Vite seul avec HMR |
+| `npm run dev:api` | Build + hôte Azure Functions seul |
 | `npm run build` | Build de production (`dist/`) |
 | `npm run preview` | Servir le build de prod |
 | `npm run lint` | ESLint flat config |

@@ -1,4 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  fetchWithTimeout,
+  httpErrorMessage,
+  parseRetryAfter,
+  apiErrorMessage,
+  isAbortError,
+} from '../lib/api-client';
 
 interface ExplainRequest {
   /** Short label of what is being explained, e.g. "Détail du calcul fiscal". */
@@ -26,27 +33,38 @@ export function useAiExplain(): UseAiExplainResult {
   const [answer, setAnswer] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const explain = useCallback(async (req: ExplainRequest) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     setAnswer(null);
     try {
-      const res = await fetch('/api/ai-assistant', {
+      const res = await fetchWithTimeout('/api/ai-assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
+        signal: controller.signal,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(typeof data?.error === 'string' ? data.error : 'Erreur de l\'assistant');
+        // The API returns its own French message; fall back to the status wording.
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : httpErrorMessage(res.status, parseRetryAfter(res))
+        );
       }
       if (typeof data?.answer !== 'string') {
         throw new Error('Réponse inattendue de l\'assistant.');
       }
       setAnswer(data.answer);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "L'assistant est indisponible.");
+      if (isAbortError(e)) return;
+      setError(apiErrorMessage(e, "L'assistant est indisponible."));
     } finally {
       setLoading(false);
     }

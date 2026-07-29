@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
-import { validateSettings, loadVersionedSettings, saveVersionedSettings } from '../storage';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import {
+  validateSettings,
+  loadVersionedSettings,
+  saveVersionedSettings,
+  safeSetItem,
+  onStorageFailure,
+  type StorageFailure,
+} from '../storage';
 import type { AppSettings } from '../types';
 
 const DEFAULTS: AppSettings = {
@@ -84,5 +91,78 @@ describe('loadVersionedSettings / saveVersionedSettings', () => {
     const result = loadVersionedSettings('appSettings', DEFAULTS);
     expect(result.taxShares).toBe(1); // default
     expect(result.familyStatus).toBe('single'); // default
+  });
+});
+
+describe('safeSetItem / onStorageFailure', () => {
+  let setItemSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    setItemSpy?.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  function failWith(err: unknown) {
+    setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw err;
+    });
+  }
+
+  const quotaError = () => new DOMException('quota', 'QuotaExceededError');
+
+  it('returns true and does not notify on success', () => {
+    const failures: StorageFailure[] = [];
+    const unsubscribe = onStorageFailure((f) => failures.push(f));
+    expect(safeSetItem('k', 'v')).toBe(true);
+    expect(failures).toHaveLength(0);
+    unsubscribe();
+  });
+
+  it('returns false and notifies subscribers with reason "quota"', () => {
+    failWith(quotaError());
+    const failures: StorageFailure[] = [];
+    const unsubscribe = onStorageFailure((f) => failures.push(f));
+    expect(safeSetItem('appSettings', 'v')).toBe(false);
+    expect(failures).toEqual([{ key: 'appSettings', reason: 'quota' }]);
+    unsubscribe();
+  });
+
+  it('reports non-quota DOMExceptions as "unavailable"', () => {
+    failWith(new DOMException('denied', 'SecurityError'));
+    const failures: StorageFailure[] = [];
+    const unsubscribe = onStorageFailure((f) => failures.push(f));
+    safeSetItem('appSettings', 'v');
+    expect(failures[0].reason).toBe('unavailable');
+    unsubscribe();
+  });
+
+  it('does not notify for transient writes (caches, UI state)', () => {
+    failWith(quotaError());
+    const failures: StorageFailure[] = [];
+    const unsubscribe = onStorageFailure((f) => failures.push(f));
+    expect(safeSetItem('ecbRateCache', 'v', { transient: true })).toBe(false);
+    expect(failures).toHaveLength(0);
+    unsubscribe();
+  });
+
+  it('stops notifying after unsubscribe', () => {
+    failWith(quotaError());
+    const failures: StorageFailure[] = [];
+    onStorageFailure((f) => failures.push(f))();
+    safeSetItem('appSettings', 'v');
+    expect(failures).toHaveLength(0);
+  });
+
+  it('propagates the failure through saveVersionedSettings', () => {
+    failWith(quotaError());
+    const failures: StorageFailure[] = [];
+    const unsubscribe = onStorageFailure((f) => failures.push(f));
+    expect(saveVersionedSettings('appSettings', DEFAULTS)).toBe(false);
+    expect(failures).toHaveLength(1);
+    unsubscribe();
   });
 });

@@ -6,8 +6,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 // not network/rate conversion which is covered in ecb-rates.test.ts.
 vi.mock('../../hooks/useEcbConversion', () => ({
   useEcbConversion: () => ({
-    convertLots: vi.fn(async (lots: unknown) => ({ converted: lots, missingCount: 0 })),
-    convertSoldLots: vi.fn(async (lots: unknown) => ({ converted: lots, missingCount: 0 })),
+    convertLots: vi.fn(async (lots: unknown) => ({ converted: lots, missingCount: 0, rates: {} })),
+    convertSoldLots: vi.fn(async (lots: unknown) => ({ converted: lots, missingCount: 0, rates: {} })),
     loading: false,
     error: null as string | null,
   }),

@@ -76,6 +76,7 @@ export function SoldLotsTable({
   const totalGainLoss = filteredLots.reduce((sum, l) => sum + l.gainLoss, 0);
   const totalQuantity = filteredLots.reduce((sum, l) => sum + l.quantity, 0);
   const hasUsd = filteredLots.some((l) => l.importCurrency === 'USD');
+  const manualRateCount = filteredLots.filter((l) => l.rateSource === 'manual').length;
 
   const handleOriginChange = (lotId: string, origin: StockOrigin) => {
     const planMap: Record<StockOrigin, PlanType> = {
@@ -471,6 +472,14 @@ export function SoldLotsTable({
         {hasUsd && (
           <p className="mt-3 text-xs text-gray-500">
             Montants convertis en EUR au taux BCE de la date de vente.
+          </p>
+        )}
+
+        {manualRateCount > 0 && (
+          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {manualRateCount} cession{manualRateCount > 1 ? 's' : ''} convertie
+            {manualRateCount > 1 ? 's' : ''} avec un taux de change saisi manuellement, non issu du flux BCE.
+            Vérifiez ces montants avant de les reporter sur votre déclaration.
           </p>
         )}
       </CardContent>

@@ -4,7 +4,7 @@
 // Dates are stored as ISO strings and re-hydrated on import. Unknown/invalid
 // fields are rejected to keep the runtime state consistent.
 
-import type { AppSettings, Broker, GrantInfo, QualificationReason, StockLot, SoldLot, SavedSimulation } from './types';
+import type { AppSettings, Broker, GrantInfo, QualificationReason, RateSource, StockLot, SoldLot, SavedSimulation } from './types';
 import { isValidOrigin, isValidPlanType, validateGrant, validateSettings } from './storage';
 
 const KNOWN_QUALIFICATION_REASONS: QualificationReason[] = [
@@ -30,7 +30,9 @@ function validateQualificationReason(raw: unknown): QualificationReason | undefi
 // v3: added StockExport reconciliation fields (reconciled / grantIdHash /
 //     awardType) on StockLot and SoldLot, and a top-level `grants` array
 //     so the StockExport classification survives a backup round-trip.
-const BACKUP_VERSION = 3;
+// v4: added `rateSource` on StockLot and SoldLot to distinguish an ECB rate
+//     from one the user typed in. Absent on v1-v3 backups → read as 'ecb'.
+const BACKUP_VERSION = 4;
 
 const VALID_BROKERS: readonly Broker[] = ['fidelity', 'morgan_stanley'];
 
@@ -61,6 +63,18 @@ export interface BackupInput {
   grants?: GrantInfo[];
 }
 
+export interface ImportCounts {
+  lotsKept: number;
+  lotsRejected: number;
+  soldLotsKept: number;
+  soldLotsRejected: number;
+  grantsKept: number;
+  grantsRejected: number;
+  savedSimulations: number;
+  /** Rows kept but whose indicative amounts had to be recomputed. */
+  degraded: number;
+}
+
 export interface ImportResult {
   settings: AppSettings;
   lots: StockLot[];
@@ -68,6 +82,12 @@ export interface ImportResult {
   savedSimulations: SavedSimulation[];
   grants: GrantInfo[];
   warnings: string[];
+  /** Structured tallies so the UI can show a before/after preview. */
+  counts: ImportCounts;
+  /** Backup format version the file was written with. */
+  version: number;
+  /** When the backup was exported, when the file carries a valid date. */
+  exportedAt?: Date;
 }
 
 /**
@@ -104,6 +124,19 @@ export function buildBackupFilename(now: Date = new Date()): string {
   return `stock-tax-simulator-backup-${y}-${m}-${d}.json`;
 }
 
+/** Serialize the current state and trigger a browser download. */
+export function downloadBackup(input: BackupInput): void {
+  const blob = new Blob([exportToJsonString(input)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = buildBackupFilename();
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ---- Import / validation ----
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -116,34 +149,64 @@ function parseDate(v: unknown): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
-function validateLot(raw: unknown): StockLot | null {
+/**
+ * JSON.parse accepts `1e999` and yields Infinity, so `typeof === 'number'`
+ * alone is not enough to trust a value coming from a file.
+ */
+function finiteOrUndefined(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+function validateRateSource(raw: unknown): RateSource | undefined {
+  // Absent on v1-v3 backups: those rates always came from the ECB feed.
+  if (raw === undefined) return undefined;
+  return raw === 'manual' || raw === 'ecb' ? raw : undefined;
+}
+
+export function validateLot(raw: unknown): StockLot | null {
   if (!isObj(raw)) return null;
   const acq = parseDate(raw.acquisitionDate);
   if (!acq) return null;
   if (typeof raw.id !== 'string' || typeof raw.quantity !== 'number' || raw.quantity <= 0) return null;
   if (!isValidOrigin(raw.origin) || !isValidPlanType(raw.planType)) return null;
 
+  // Amounts feeding the tax computation: a non-numeric value would silently
+  // become a plausible-looking 0 €, so the whole lot is rejected instead.
+  const costBasisPerShare = finiteOrUndefined(raw.costBasisPerShare);
+  const totalCostBasis = finiteOrUndefined(raw.totalCostBasis);
+  if (costBasisPerShare === undefined || totalCostBasis === undefined) return null;
+
+  // Indicative amounts: recomputed from a live quote, so they are degraded
+  // and flagged rather than costing the user the whole position.
+  const rawCurrentValue = finiteOrUndefined(raw.currentValue);
+  const rawUnrealized = finiteOrUndefined(raw.unrealizedGainLoss);
+  const currentValue = rawCurrentValue ?? 0;
+  const unrealizedGainLoss = rawUnrealized ?? currentValue - totalCostBasis;
+
   return {
     id: raw.id,
     broker: validateBroker(raw.broker),
     acquisitionDate: acq,
     quantity: raw.quantity,
-    costBasisPerShare: Number(raw.costBasisPerShare) || 0,
-    totalCostBasis: Number(raw.totalCostBasis) || 0,
-    currentValue: Number(raw.currentValue) || 0,
-    unrealizedGainLoss: Number(raw.unrealizedGainLoss) || 0,
+    costBasisPerShare,
+    totalCostBasis,
+    currentValue,
+    unrealizedGainLoss,
+    hasUnreliableAmounts:
+      rawCurrentValue === undefined || rawUnrealized === undefined ? true : undefined,
     availableForSaleDate: parseDate(raw.availableForSaleDate),
     availableForTransferDate: parseDate(raw.availableForTransferDate),
     grantDate: parseDate(raw.grantDate),
     origin: raw.origin,
     holdingPeriod: (raw.holdingPeriod === 'Long' ? 'Long' : 'Short'),
     planType: raw.planType,
-    esppFmvPerShare: typeof raw.esppFmvPerShare === 'number' ? raw.esppFmvPerShare : undefined,
-    esppFmvPerShareUsd: typeof raw.esppFmvPerShareUsd === 'number' ? raw.esppFmvPerShareUsd : undefined,
-    costBasisPerShareUsd: typeof raw.costBasisPerShareUsd === 'number' ? raw.costBasisPerShareUsd : undefined,
-    totalCostBasisUsd: typeof raw.totalCostBasisUsd === 'number' ? raw.totalCostBasisUsd : undefined,
-    currentValueUsd: typeof raw.currentValueUsd === 'number' ? raw.currentValueUsd : undefined,
-    eurUsdRate: typeof raw.eurUsdRate === 'number' ? raw.eurUsdRate : undefined,
+    esppFmvPerShare: finiteOrUndefined(raw.esppFmvPerShare),
+    esppFmvPerShareUsd: finiteOrUndefined(raw.esppFmvPerShareUsd),
+    costBasisPerShareUsd: finiteOrUndefined(raw.costBasisPerShareUsd),
+    totalCostBasisUsd: finiteOrUndefined(raw.totalCostBasisUsd),
+    currentValueUsd: finiteOrUndefined(raw.currentValueUsd),
+    eurUsdRate: finiteOrUndefined(raw.eurUsdRate),
+    rateSource: validateRateSource(raw.rateSource),
     importCurrency: raw.importCurrency === 'USD' || raw.importCurrency === 'EUR' ? raw.importCurrency : undefined,
     // v3 — Microsoft StockExport reconciliation (absent on v1/v2 backups).
     reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
@@ -154,7 +217,7 @@ function validateLot(raw: unknown): StockLot | null {
   };
 }
 
-function validateSoldLot(raw: unknown): SoldLot | null {
+export function validateSoldLot(raw: unknown): SoldLot | null {
   if (!isObj(raw)) return null;
   const acq = parseDate(raw.acquisitionDate);
   const sale = parseDate(raw.saleDate);
@@ -162,21 +225,30 @@ function validateSoldLot(raw: unknown): SoldLot | null {
   if (typeof raw.id !== 'string' || typeof raw.quantity !== 'number' || raw.quantity <= 0) return null;
   if (!isValidOrigin(raw.origin) || !isValidPlanType(raw.planType)) return null;
 
+  // Proceeds and cost basis drive the capital-gain tax: reject rather than zero.
+  const proceeds = finiteOrUndefined(raw.proceeds);
+  const costBasis = finiteOrUndefined(raw.costBasis);
+  if (proceeds === undefined || costBasis === undefined) return null;
+
+  const rawGainLoss = finiteOrUndefined(raw.gainLoss);
+
   return {
     id: raw.id,
     broker: validateBroker(raw.broker),
     acquisitionDate: acq,
     saleDate: sale,
     quantity: raw.quantity,
-    proceeds: Number(raw.proceeds) || 0,
-    costBasis: Number(raw.costBasis) || 0,
-    gainLoss: Number(raw.gainLoss) || 0,
+    proceeds,
+    costBasis,
+    gainLoss: rawGainLoss ?? proceeds - costBasis,
+    hasUnreliableAmounts: rawGainLoss === undefined ? true : undefined,
     holdingPeriod: (raw.holdingPeriod === 'Long' ? 'Long' : 'Short'),
     origin: raw.origin,
     planType: raw.planType,
-    proceedsUsd: typeof raw.proceedsUsd === 'number' ? raw.proceedsUsd : undefined,
-    costBasisUsd: typeof raw.costBasisUsd === 'number' ? raw.costBasisUsd : undefined,
-    eurUsdRate: typeof raw.eurUsdRate === 'number' ? raw.eurUsdRate : undefined,
+    proceedsUsd: finiteOrUndefined(raw.proceedsUsd),
+    costBasisUsd: finiteOrUndefined(raw.costBasisUsd),
+    eurUsdRate: finiteOrUndefined(raw.eurUsdRate),
+    rateSource: validateRateSource(raw.rateSource),
     importCurrency: raw.importCurrency === 'USD' || raw.importCurrency === 'EUR' ? raw.importCurrency : undefined,
     // v3 — Microsoft StockExport reconciliation (absent on v1/v2 backups).
     reconciled: typeof raw.reconciled === 'boolean' ? raw.reconciled : undefined,
@@ -252,5 +324,33 @@ export function importFromJsonString(text: string, defaults: AppSettings): Impor
     warnings.push(`${rawGrants.length - grants.length} grant(s) ignoré(s) car invalide(s).`);
   }
 
-  return { settings, lots, soldLots, savedSimulations, grants, warnings };
+  const degraded =
+    lots.filter((l) => l.hasUnreliableAmounts).length +
+    soldLots.filter((sl) => sl.hasUnreliableAmounts).length;
+  if (degraded > 0) {
+    warnings.push(
+      `${degraded} ligne(s) conservée(s) avec des montants indicatifs recalculés (valeur actuelle / plus-value).`
+    );
+  }
+
+  return {
+    settings,
+    lots,
+    soldLots,
+    savedSimulations,
+    grants,
+    warnings,
+    counts: {
+      lotsKept: lots.length,
+      lotsRejected: rawLots.length - lots.length,
+      soldLotsKept: soldLots.length,
+      soldLotsRejected: rawSold.length - soldLots.length,
+      grantsKept: grants.length,
+      grantsRejected: rawGrants.length - grants.length,
+      savedSimulations: savedSimulations.length,
+      degraded,
+    },
+    version: parsed.version,
+    exportedAt: parseDate(parsed.exportedAt),
+  };
 }

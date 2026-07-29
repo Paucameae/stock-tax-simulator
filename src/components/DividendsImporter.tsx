@@ -4,6 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Alert } from './ui/alert';
 import { FileDropZone } from './ui/FileDropZone';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
+import { ConfirmDeleteDialog } from './ui/ConfirmDeleteDialog';
 import { transactionHistoryGuide } from './guides/transaction-history-steps';
 import { DividendsSummary } from './DividendsSummary';
 import { parseTransactionHistoryCsv, type DividendEvent, type CashInterestEvent } from '../lib/transaction-parser';
@@ -37,6 +38,7 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
   const [warnings, setWarnings] = React.useState<string[]>([]);
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showGuide, setShowGuide] = React.useState(false);
+  const [confirmClear, setConfirmClear] = React.useState(false);
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -66,6 +68,7 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
     setFileName(null);
     setWarnings([]);
     setError(null);
+    setConfirmClear(false);
   };
 
   const helpButton = (
@@ -84,7 +87,7 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
   const clearButton = hasImports ? (
     <button
       type="button"
-      onClick={handleClear}
+      onClick={() => setConfirmClear(true)}
       aria-label="Supprimer les dividendes importés"
       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors whitespace-nowrap shrink-0"
     >
@@ -119,6 +122,23 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
         onClose={() => setShowGuide(false)}
         guides={[transactionHistoryGuide]}
         title="Comment exporter votre historique des transactions"
+      />
+
+      <ConfirmDeleteDialog
+        open={confirmClear}
+        title={`Supprimer les dividendes ${brokerLabel(broker)} ?`}
+        recap={[
+          dividends.length > 0
+            ? `${dividends.length.toLocaleString('fr-FR')} dividende${dividends.length > 1 ? 's' : ''}`
+            : null,
+          cashInterest.length > 0
+            ? `${cashInterest.length.toLocaleString('fr-FR')} ligne${cashInterest.length > 1 ? 's' : ''} d'intérêts`
+            : null,
+        ].filter((x): x is string => x !== null)}
+        body="Vos positions et vos ventes ne sont pas affectées, mais votre déclaration de dividendes (2047 / 2042) devra être recalculée. Cette action est irréversible — vous pourrez ré-importer votre historique des transactions à tout moment."
+        confirmLabel="Supprimer les dividendes"
+        onCancel={() => setConfirmClear(false)}
+        onConfirm={handleClear}
       />
 
       {error && (

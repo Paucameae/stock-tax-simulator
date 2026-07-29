@@ -46,9 +46,31 @@ function trackInstalling(worker: ServiceWorker | null): void {
   });
 }
 
+/**
+ * The SW serves every same-origin GET cache-first, which in dev freezes Vite's
+ * module graph: stale `/src/*.tsx` modules get mixed with freshly optimized
+ * deps, ending in two React copies and a null hook dispatcher. Tear it down.
+ */
+async function unregisterInDev(): Promise<void> {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((r) => r.unregister()));
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+  }
+  // A still-controlled page keeps its stale module graph. One reload drops it —
+  // and does not loop, since the next load finds no registration.
+  if (registrations.length > 0) window.location.reload();
+}
+
 /** Register the service worker and wire up update detection. */
 export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return;
+
+  if (import.meta.env.DEV) {
+    void unregisterInDev();
+    return;
+  }
 
   window.addEventListener('load', () => {
     navigator.serviceWorker

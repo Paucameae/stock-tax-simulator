@@ -2,11 +2,19 @@ import React, { useCallback } from 'react';
 import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, CheckCircle2, Trash2, Layers, TrendingUp } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { Dialog, DialogFooter } from './ui/dialog';
+import { ConfirmDeleteDialog } from './ui/ConfirmDeleteDialog';
 import { Alert } from './ui/alert';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsActivityXlsx } from '../lib/brokers/morgan-stanley';
 import { useEcbConversion } from '../hooks/useEcbConversion';
+import {
+  formatDateKey,
+  nearestRate,
+  convertLotWithRate,
+  convertSoldLotWithRate,
+  type RateCache,
+} from '../lib/ecb-rates';
+import { ManualRateDialog, type MissingRateEntry } from './ManualRateDialog';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { brokerLabel, formatEUR, formatUSD, originLabel } from '../lib/utils';
 import type { Broker, StockLot, SoldLot } from '../lib/types';
@@ -111,7 +119,26 @@ interface SummaryProps {
   onClearDividends?: () => void;
 }
 
-type ClearTarget = 'lots' | 'sales' | 'dividends';
+type ClearTarget = 'lots' | 'sales' | 'dividends' | 'all';
+
+/** Group the rows still missing a rate by the date whose rate is missing. */
+function buildMissingRateEntries(
+  lots: StockLot[],
+  sold: SoldLot[],
+  rates: RateCache
+): MissingRateEntry[] {
+  const counts = new Map<string, number>();
+  const bump = (key: string) => counts.set(key, (counts.get(key) ?? 0) + 1);
+  for (const l of lots) if (!l.eurUsdRate) bump(formatDateKey(l.acquisitionDate));
+  for (const s of sold) if (!s.eurUsdRate) bump(formatDateKey(s.saleDate));
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dateKey, rowCount]) => ({
+      dateKey,
+      rowCount,
+      suggested: nearestRate(rates, new Date(dateKey)),
+    }));
+}
 
 /**
  * Aggregated, persistence-backed summary of what is currently loaded for a
@@ -250,6 +277,26 @@ function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividends
       <ClearConfirmDialog
         target={pendingClear}
         broker={broker}
+        recap={
+          pendingClear === 'lots'
+            ? [
+                `${lots!.length.toLocaleString('fr-FR')} lot${lots!.length > 1 ? 's' : ''} ouvert${lots!.length > 1 ? 's' : ''}`,
+                `${lotsTotalShares.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`,
+                lotsTotalEur > 0 ? formatEUR(lotsTotalEur) : lotsTotalUsd > 0 ? formatUSD(lotsTotalUsd) : null,
+              ].filter((x): x is string => x !== null)
+            : pendingClear === 'sales'
+            ? [
+                `${soldLots!.length.toLocaleString('fr-FR')} vente${soldLots!.length > 1 ? 's' : ''}`,
+                `${salesQty.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions`,
+                salesYears.length > 0 ? `année${salesYears.length > 1 ? 's' : ''} ${salesYears.join(', ')}` : null,
+              ].filter((x): x is string => x !== null)
+            : pendingClear === 'dividends'
+            ? [
+                `${dividendsCount.toLocaleString('fr-FR')} évènement${dividendsCount > 1 ? 's' : ''} de dividende`,
+                dividendsGrossUsd > 0 ? `${formatUSD(dividendsGrossUsd)} brut` : null,
+              ].filter((x): x is string => x !== null)
+            : []
+        }
         onCancel={() => setPendingClear(null)}
         onConfirm={() => {
           if (pendingClear === 'lots') onClearLots?.();
@@ -263,48 +310,56 @@ function BrokerImportSummary({ broker, lots, soldLots, dividendsCount, dividends
 }
 
 /** Inline confirmation dialog for the per-slice clear actions. Closed when
- *  `target` is null. Wording is tailored per slice so the user knows exactly
- *  which subset of their data is about to disappear. */
+ *  `target` is null. Wording is tailored per slice and quantified with `recap`
+ *  so the user knows exactly which subset of their data is about to disappear. */
 function ClearConfirmDialog({
   target,
   broker,
+  recap,
   onCancel,
   onConfirm,
 }: {
   target: ClearTarget | null;
   broker: Broker;
+  recap: string[];
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   const open = target !== null;
-  const labelByTarget: Record<ClearTarget, { title: string; body: string }> = {
+  const labelByTarget: Record<ClearTarget, { title: string; body: string; action: string }> = {
     lots: {
       title: `Effacer les positions ${brokerLabel(broker)} ?`,
       body: 'Vos ventes et dividendes ne sont pas affectés. Cette action est irréversible — vous pourrez ré-importer le fichier à tout moment.',
+      action: 'Effacer les positions',
     },
     sales: {
       title: `Effacer les ventes ${brokerLabel(broker)} ?`,
       body: 'Vos positions et dividendes ne sont pas affectés. Cette action est irréversible — vous pourrez ré-importer le fichier à tout moment.',
+      action: 'Effacer les ventes',
     },
     dividends: {
       title: `Effacer les dividendes ${brokerLabel(broker)} ?`,
       body: 'Vos positions et ventes ne sont pas affectées. Cette action est irréversible — vous pourrez ré-importer le fichier à tout moment.',
+      action: 'Effacer les dividendes',
+    },
+    all: {
+      title: `Supprimer toutes les données ${brokerLabel(broker)} ?`,
+      body: 'Les données des autres courtiers ne sont pas affectées. Cette action est irréversible — vous pourrez ré-importer vos fichiers à tout moment.',
+      action: 'Tout supprimer',
     },
   };
   const content = target ? labelByTarget[target] : null;
+  if (!content) return null;
   return (
-    <Dialog open={open} onClose={onCancel}>
-      {content && (
-        <>
-          <h2 className="text-base font-semibold mb-2">{content.title}</h2>
-          <p className="text-sm text-gray-600 mb-4">{content.body}</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={onCancel}>Annuler</Button>
-            <Button variant="destructive" onClick={onConfirm}>Effacer</Button>
-          </DialogFooter>
-        </>
-      )}
-    </Dialog>
+    <ConfirmDeleteDialog
+      open={open}
+      title={content.title}
+      recap={recap}
+      body={content.body}
+      confirmLabel={content.action}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }
 
@@ -338,6 +393,15 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   const [importedFiles, setImportedFiles] = React.useState<ImportedFile[]>([]);
   const [importMode, setImportMode] = React.useState<ImportMode>('positions');
   const [showGuide, setShowGuide] = React.useState(false);
+  const [confirmClearAll, setConfirmClearAll] = React.useState(false);
+  // Rows held back because their EUR/USD rate could not be resolved. They are
+  // NOT published until the user supplies a rate: publishing them would show
+  // 0 € amounts that look legitimate on the declaration.
+  const [pendingRates, setPendingRates] = React.useState<{
+    lots: StockLot[];
+    sold: SoldLot[];
+    entries: MissingRateEntry[];
+  } | null>(null);
   // Total count of lots whose ECB rate could not be resolved during the
   // most recent import. Drives the destructive alert + retry button: a
   // failed BCE lookup leaves proceeds/costBasis at 0, which is what users
@@ -456,15 +520,20 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         }
 
         let totalMissing = 0;
+        let convertedLots: StockLot[] = [];
+        let convertedSold: SoldLot[] = [];
+        let rates: RateCache = {};
         if (collectedLots.length > 0) {
-          const { converted, missingCount } = await convertLots(collectedLots);
-          totalMissing += missingCount;
-          onImport(converted);
+          const r = await convertLots(collectedLots);
+          convertedLots = r.converted;
+          totalMissing += r.missingCount;
+          rates = { ...rates, ...r.rates };
         }
         if (collectedSold.length > 0) {
-          const { converted, missingCount } = await convertSoldLots(collectedSold);
-          totalMissing += missingCount;
-          onImportSales?.(converted);
+          const r = await convertSoldLots(collectedSold);
+          convertedSold = r.converted;
+          totalMissing += r.missingCount;
+          rates = { ...rates, ...r.rates };
         }
         if (collectedDividends.length > 0) {
           onImportDividends?.(collectedDividends);
@@ -478,12 +547,56 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         // slice (handlers use mergeByBroker).
         lastBatchRef.current = { lots: collectedLots, sold: collectedSold };
         setHasRetryableBatch(collectedLots.length > 0 || collectedSold.length > 0);
+
+        if (totalMissing > 0) {
+          // Hold the whole batch back: mergeByBroker replaces the broker slice
+          // wholesale, so a partial publish would be undone by the second one.
+          setPendingRates({
+            lots: convertedLots,
+            sold: convertedSold,
+            entries: buildMissingRateEntries(convertedLots, convertedSold, rates),
+          });
+          return;
+        }
+        if (convertedLots.length > 0) onImport(convertedLots);
+        if (convertedSold.length > 0) onImportSales?.(convertedSold);
       } catch (err) {
         setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
       }
     },
     [onImport, onImportSales, onImportDividends, importMode, convertLots, convertSoldLots, isAutoDetect]
   );
+
+  /** Publish the held-back batch once the user has supplied the missing rates. */
+  const applyManualRates = useCallback(
+    (manual: Record<string, number>) => {
+      if (!pendingRates) return;
+      const lots = pendingRates.lots.map((lot) => {
+        if (lot.eurUsdRate) return lot;
+        const rate = manual[formatDateKey(lot.acquisitionDate)];
+        return rate ? convertLotWithRate(lot, rate, rate, 'manual') : lot;
+      });
+      const sold = pendingRates.sold.map((sl) => {
+        if (sl.eurUsdRate) return sl;
+        const rate = manual[formatDateKey(sl.saleDate)];
+        return rate ? convertSoldLotWithRate(sl, rate, rate, 'manual') : sl;
+      });
+      if (lots.length > 0) onImport(lots);
+      if (sold.length > 0) onImportSales?.(sold);
+      setPendingRates(null);
+      setEcbMissingCount(0);
+    },
+    [pendingRates, onImport, onImportSales]
+  );
+
+  /** Drop the held-back batch: nothing reaches the portfolio. */
+  const cancelManualRates = useCallback(() => {
+    setPendingRates(null);
+    setImportedFiles([]);
+    setError(
+      'Import annulé : aucun taux de change n\u2019a été appliqué, donc aucune ligne n\u2019a été enregistrée.'
+    );
+  }, []);
 
   /**
    * Re-run the ECB conversion on the most recent raw batch and re-publish
@@ -497,17 +610,28 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
     setRetrying(true);
     try {
       let totalMissing = 0;
+      let lots: StockLot[] = [];
+      let sold: SoldLot[] = [];
+      let rates: RateCache = {};
       if (batch.lots.length > 0) {
-        const { converted, missingCount } = await convertLots(batch.lots);
-        totalMissing += missingCount;
-        onImport(converted);
+        const r = await convertLots(batch.lots);
+        lots = r.converted;
+        totalMissing += r.missingCount;
+        rates = { ...rates, ...r.rates };
       }
       if (batch.sold.length > 0) {
-        const { converted, missingCount } = await convertSoldLots(batch.sold);
-        totalMissing += missingCount;
-        onImportSales?.(converted);
+        const r = await convertSoldLots(batch.sold);
+        sold = r.converted;
+        totalMissing += r.missingCount;
+        rates = { ...rates, ...r.rates };
       }
       setEcbMissingCount(totalMissing);
+      if (totalMissing > 0) {
+        setPendingRates({ lots, sold, entries: buildMissingRateEntries(lots, sold, rates) });
+        return;
+      }
+      if (lots.length > 0) onImport(lots);
+      if (sold.length > 0) onImportSales?.(sold);
     } finally {
       setRetrying(false);
     }
@@ -572,7 +696,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   const clearButton = hasImports && onClear ? (
     <button
       type="button"
-      onClick={handleClear}
+      onClick={() => setConfirmClearAll(true)}
       aria-label="Supprimer les données importées"
       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors whitespace-nowrap shrink-0"
     >
@@ -745,7 +869,8 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
                   </p>
                   <p className="text-xs mt-1">
                     Les taux de change BCE n'ont pas pu être récupérés (problème réseau ou indisponibilité du flux BCE).
-                    Les montants en euros restent à 0&nbsp;€ pour ces lots — les valeurs en dollars sont conservées.
+                    Ces lignes ne sont pas enregistrées tant qu'aucun taux n'est appliqué — réessayez la conversion ou
+                    saisissez le taux manuellement.
                   </p>
                 </div>
                 {hasRetryableBatch && (
@@ -766,6 +891,35 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         )}
 
         <BrokerExportGuide open={showGuide && guideAvailable} onClose={() => setShowGuide(false)} />
+
+        <ManualRateDialog
+          open={pendingRates !== null}
+          entries={pendingRates?.entries ?? []}
+          onCancel={cancelManualRates}
+          onConfirm={applyManualRates}
+        />
+
+        <ClearConfirmDialog
+          target={confirmClearAll ? 'all' : null}
+          broker={broker}
+          recap={[
+            lots && lots.length > 0
+              ? `${lots.length.toLocaleString('fr-FR')} lot${lots.length > 1 ? 's' : ''} ouvert${lots.length > 1 ? 's' : ''}`
+              : null,
+            soldLots && soldLots.length > 0
+              ? `${soldLots.length.toLocaleString('fr-FR')} vente${soldLots.length > 1 ? 's' : ''}`
+              : null,
+            dividendsCount > 0
+              ? `${dividendsCount.toLocaleString('fr-FR')} évènement${dividendsCount > 1 ? 's' : ''} de dividende`
+              : null,
+            `${importedFiles.length.toLocaleString('fr-FR')} fichier${importedFiles.length > 1 ? 's' : ''} importé${importedFiles.length > 1 ? 's' : ''}`,
+          ].filter((x): x is string => x !== null)}
+          onCancel={() => setConfirmClearAll(false)}
+          onConfirm={() => {
+            setConfirmClearAll(false);
+            handleClear();
+          }}
+        />
     </>
   );
 

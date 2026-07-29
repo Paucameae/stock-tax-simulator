@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { ExplainButton } from './ui/ExplainButton';
-import { FileText, Copy, Check, Download } from 'lucide-react';
+import { FileText, Copy, Check, Download, Printer } from 'lucide-react';
 import type { TaxSimulationResult, SaleLotEntry } from '../lib/types';
 import { generateDeclaration, formatDeclarationText, groupForm2074Lines, buildForm2074Rows } from '../lib/declaration';
 import { FORM_2042, FORM_2042C_AGA_MACRON, FORM_2074_CADRE_510 } from '../lib/tax-forms';
@@ -59,7 +59,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
     downloadBlob(blob, `formulaire-2074-${fiscalYear}${suffix}.xlsx`);
   };
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-print-root>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -67,7 +67,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
               <FileText className="h-5 w-5" />
               Instructions de déclaration — Revenus {fiscalYear}
             </span>
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 print:hidden">
               <ExplainButton
                 topic="Instructions de déclaration"
                 label="Expliquer"
@@ -92,11 +92,33 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? 'Copié !' : 'Copier'}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.print()}
+                className="gap-1"
+                title="Imprimer ces instructions ou les enregistrer en PDF"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimer
+              </Button>
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
+            {/* En-tête d'archivage, visible uniquement sur la version imprimée. */}
+            <div className="hidden print:block border-b border-gray-400 pb-2 mb-2 text-xs">
+              <p>
+                Simulateur fiscal — Actions Microsoft · Revenus {fiscalYear} · édité le{' '}
+                {new Date().toLocaleDateString('fr-FR')}
+              </p>
+              <p>
+                Document indicatif ne constituant pas un conseil fiscal. Montants à vérifier avant report
+                sur votre déclaration.
+              </p>
+            </div>
+
             {/* Rappel CSG déductible */}
             <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-900">
               <span aria-hidden className="mt-0.5">💡</span>
@@ -179,7 +201,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 automatiquement (lecture seule). Pour les salariés MSFT, <strong>522 = 0</strong> (pas de frais d'acquisition),
                 donc 521 = 523.
               </p>
-              <div className="flex flex-wrap items-center gap-3 mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
+              <div className="flex flex-wrap items-center gap-3 mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm print:hidden">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -222,7 +244,7 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                   en annexe au formulaire 2074.
                 </p>
               )}
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto print:overflow-visible">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-100">

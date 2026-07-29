@@ -1,5 +1,5 @@
 import React from 'react';
-import { Briefcase, Calculator, FileText, Settings as SettingsIcon, Database, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen } from 'lucide-react';
+import { Briefcase, Calculator, FileText, Settings as SettingsIcon, Database, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen, X } from 'lucide-react';
 import { TaxRulesPanel } from './components/TaxRulesPanel';
 import { SoldLotsTable } from './components/SoldLotsTable';
 import { SaleSimulator } from './components/SaleSimulator';
@@ -9,15 +9,17 @@ import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, saveGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
+import { loadPortfolio, savePortfolio } from './lib/portfolio-storage';
 import { reconcileLots, reconcileSoldLots } from './lib/stockexport-reconciliation';
 import { applyBulkChoiceToLots, applyBulkChoiceToSoldLots, countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from './lib/bulk-qualify';
 import { buildDemoData } from './lib/demo-data';
-import type { ImportResult } from './lib/backup';
+import { downloadBackup, type ImportResult } from './lib/backup';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo, Broker } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
 import { DividendsDeclaration } from './components/DividendsDeclaration';
 import { BulkQualifyPanel } from './components/BulkQualifyPanel';
 import { UpdateBanner } from './components/UpdateBanner';
+import { StorageAlertBanner } from './components/StorageAlertBanner';
 import { generateId, mergeByBroker } from './lib/utils';
 
 // Lazy-load heavy components (pdfjs-dist via Settings, recharts via Portfolio)
@@ -61,6 +63,21 @@ function loadPersistedTab(): Tab | null {
   } catch {
     return null;
   }
+}
+
+/** URL fragment per tab, so a tab can be bookmarked, shared and navigated back to. */
+const TAB_SLUGS: Record<Tab, string> = {
+  settings: 'parametres',
+  data: 'donnees',
+  portfolio: 'portefeuille',
+  simulator: 'simulation',
+  declaration: 'declaration',
+};
+
+function readTabFromHash(): Tab | null {
+  const slug = window.location.hash.replace(/^#/, '');
+  const entry = (Object.entries(TAB_SLUGS) as [Tab, string][]).find(([, s]) => s === slug);
+  return entry ? entry[0] : null;
 }
 
 function isSettingsConfigured(s: AppSettings, defaults: AppSettings): boolean {
@@ -191,25 +208,76 @@ function getSaleYears(soldLots: SoldLot[]): number[] {
 }
 
 function App() {
+  // Everything restorable is read once, synchronously, before the first render:
+  // positions and sales used to live in memory only, so a simple refresh wiped
+  // the whole session and forced the user to re-import a backup.
+  const [restored] = React.useState(() => {
+    const settings = loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
+    const portfolio = loadPortfolio();
+    return {
+      settings,
+      ...portfolio,
+      decl: computeDeclarationFor(portfolio.soldLots, settings, 'pfu'),
+    };
+  });
+
   const [activeTab, setActiveTab] = React.useState<Tab>(() => {
+    const fromHash = readTabFromHash();
+    if (fromHash) return fromHash;
     const persisted = loadPersistedTab();
     if (persisted) return persisted;
-    const saved = loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
-    return isSettingsConfigured(saved, DEFAULT_SETTINGS) ? 'portfolio' : 'settings';
+    return isSettingsConfigured(restored.settings, DEFAULT_SETTINGS) ? 'portfolio' : 'settings';
   });
   const [legalOpen, setLegalOpen] = React.useState(false);
+  const [restoreNoticeOpen, setRestoreNoticeOpen] = React.useState(restored.rejected > 0);
+
+  // Panels stay mounted once visited (so their state survives tab switches),
+  // but an unvisited tab never renders — which keeps its lazy chunk unloaded.
+  const [mountedTabs, setMountedTabs] = React.useState<ReadonlySet<Tab>>(
+    () => new Set<Tab>([activeTab])
+  );
+
+  const showTab = React.useCallback((tab: Tab) => {
+    setMountedTabs((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
+    setActiveTab(tab);
+  }, []);
+
+  const goToTab = React.useCallback((tab: Tab) => {
+    showTab(tab);
+    const hash = `#${TAB_SLUGS[tab]}`;
+    if (window.location.hash !== hash) {
+      window.history.pushState({ tab }, '', hash);
+    }
+  }, [showTab]);
+
+  // Give the very first history entry a slug so Back returns to a known tab
+  // instead of an ambiguous hash-less entry.
+  const initialTabRef = React.useRef(activeTab);
+  React.useEffect(() => {
+    const tab = initialTabRef.current;
+    if (!readTabFromHash()) {
+      window.history.replaceState({ tab }, '', `#${TAB_SLUGS[tab]}`);
+    }
+  }, []);
+
+  // Back/Forward navigate between tabs rather than leaving the app.
+  React.useEffect(() => {
+    const onPopState = () => showTab(readTabFromHash() ?? initialTabRef.current);
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [showTab]);
 
   // Persist active tab across reloads
   React.useEffect(() => {
-    safeSetItem(TAB_STORAGE_KEY, activeTab);
+    safeSetItem(TAB_STORAGE_KEY, activeTab, { transient: true });
   }, [activeTab]);
-  const [lots, setLots] = React.useState<StockLot[]>([]);
-  const [soldLots, setSoldLots] = React.useState<SoldLot[]>([]);
+  const [lots, setLots] = React.useState<StockLot[]>(restored.lots);
+  const [soldLots, setSoldLots] = React.useState<SoldLot[]>(restored.soldLots);
   // Declaration workflow state (tab "Ma déclaration"): driven by imported soldLots.
-  const [saleYear, setSaleYear] = React.useState<number | null>(null);
-  const [declEntries, setDeclEntries] = React.useState<SaleLotEntry[]>([]);
+  const [saleYear, setSaleYear] = React.useState<number | null>(restored.decl.saleYear);
+  const [declEntries, setDeclEntries] = React.useState<SaleLotEntry[]>(restored.decl.entries);
   const [declTaxMode, setDeclTaxMode] = React.useState<TaxMode>('pfu');
-  const [declResult, setDeclResult] = React.useState<TaxSimulationResult | null>(null);
+  const [declResult, setDeclResult] = React.useState<TaxSimulationResult | null>(restored.decl.result);
   // Simulation workflow state (tab "Simuler"): driven by current portfolio lots.
   const [simEntries, setSimEntries] = React.useState<SaleLotEntry[]>([]);
   const [simTaxMode, setSimTaxMode] = React.useState<TaxMode>('pfu');
@@ -223,13 +291,21 @@ function App() {
   // after a simulation has already been computed; rendered as a discreet
   // "relancer la simulation" hint on the result card.
   const [simStale, setSimStale] = React.useState(false);
-  const [settings, setSettings] = React.useState<AppSettings>(() => {
-    return loadVersionedSettings('appSettings', DEFAULT_SETTINGS);
-  });
+  const [settings, setSettings] = React.useState<AppSettings>(restored.settings);
   const [grants, setGrants] = React.useState<GrantInfo[]>(() => loadGrants());
   const [dividends, setDividends] = React.useState<DividendEvent[]>(() => loadDividends()?.dividends ?? []);
   const [cashInterest, setCashInterest] = React.useState<CashInterestEvent[]>(() => loadDividends()?.cashInterest ?? []);
   const [showRules, setShowRules] = React.useState(false);
+  // Dates the fallback valuation shown in the portfolio when the live quote is unavailable.
+  const [lotsImportedAt, setLotsImportedAt] = React.useState<string | null>(restored.importedAt);
+
+  // Persist positions and sales on every change. The identity check skips the
+  // redundant write-back of what we just read on mount.
+  React.useEffect(() => {
+    if (lots === restored.lots && soldLots === restored.soldLots) return;
+    savePortfolio(lots, soldLots, lotsImportedAt);
+  }, [lots, soldLots, lotsImportedAt, restored]);
+
   const [showSalesImportDialog, setShowSalesImportDialog] = React.useState(false);
   const [savedSimulations, setSavedSimulations] = React.useState<SavedSimulation[]>(() => {
     try {
@@ -286,6 +362,7 @@ function App() {
     // 3. Merge by broker: re-importing one courtier replaces only its slice and
     //    leaves positions imported from any other courtier untouched.
     setLots((prev) => mergeByBroker(prev, prepared));
+    setLotsImportedAt(new Date().toISOString());
     // Reset only the simulation state — freshly imported positions invalidate any
     // previous simulation. Declaration data (soldLots) lives independently.
     setSimEntries([]);
@@ -637,7 +714,7 @@ function App() {
     setSavedSimulations(updatedSimulations);
     safeSetItem('savedSimulations', JSON.stringify(updatedSimulations));
 
-    setActiveTab('simulator');
+    goToTab('simulator');
 
     // Defer until after the TaxCalculator has rendered the new result so the
     // scroll target's height is correct, then briefly flash it to confirm
@@ -647,7 +724,7 @@ function App() {
       setSimResultFlash(true);
       window.setTimeout(() => setSimResultFlash(false), 1200);
     });
-  }, [simTaxMode, simFiscalYear, settings, savedSimulations]);
+  }, [simTaxMode, simFiscalYear, settings, savedSimulations, goToTab]);
 
   const handleSimTaxModeChange = React.useCallback((mode: TaxMode) => {
     setSimTaxMode(mode);
@@ -694,6 +771,7 @@ function App() {
     saveVersionedSettings('appSettings', imported.settings);
     setLots(imported.lots);
     setSoldLots(imported.soldLots);
+    setLotsImportedAt(new Date().toISOString());
     setSavedSimulations(imported.savedSimulations);
     safeSetItem('savedSimulations', JSON.stringify(imported.savedSimulations));
     // v3 backups carry StockExport grants. v1/v2 backups arrive with grants=[];
@@ -731,6 +809,7 @@ function App() {
     saveVersionedSettings('appSettings', demo.settings);
     setLots(demo.lots);
     setSoldLots(demo.soldLots);
+    setLotsImportedAt(new Date().toISOString());
     setGrants([]);
     setDividends(demo.dividends);
     setCashInterest([]);
@@ -745,8 +824,12 @@ function App() {
     setSaleYear(decl.saleYear);
     setDeclEntries(decl.entries);
     setDeclResult(decl.result);
-    setActiveTab('portfolio');
-  }, [declTaxMode]);
+    goToTab('portfolio');
+  }, [declTaxMode, goToTab]);
+
+  const handleEmergencyExport = React.useCallback(() => {
+    downloadBackup({ settings, lots, soldLots, savedSimulations, grants });
+  }, [settings, lots, soldLots, savedSimulations, grants]);
 
   const settingsDone = isSettingsConfigured(settings, DEFAULT_SETTINGS);
   const portfolioDone = lots.length > 0;
@@ -761,9 +844,49 @@ function App() {
     { id: 'declaration' as const, step: 5, label: 'Ma déclaration', icon: FileText, done: declarationDone },
   ];
 
+  const handleTabKeyDown = (e: React.KeyboardEvent, index: number) => {
+    const offsets: Record<string, number | 'first' | 'last'> = {
+      ArrowRight: 1,
+      ArrowLeft: -1,
+      Home: 'first',
+      End: 'last',
+    };
+    const move = offsets[e.key];
+    if (move === undefined) return;
+    e.preventDefault();
+    const next =
+      move === 'first' ? 0
+      : move === 'last' ? tabs.length - 1
+      : (index + move + tabs.length) % tabs.length;
+    goToTab(tabs[next].id);
+    document.getElementById(`tab-${tabs[next].id}`)?.focus();
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <UpdateBanner />
+      <StorageAlertBanner onExport={handleEmergencyExport} />
+      {restoreNoticeOpen && (
+        <div role="alert" className="bg-amber-50 border-b border-amber-200 text-amber-900">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-start gap-3 text-sm">
+            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="flex-1">
+              {restored.rejected > 1
+                ? `${restored.rejected} lignes enregistrées dans ce navigateur ont été écartées car leurs données étaient illisibles.`
+                : 'Une ligne enregistrée dans ce navigateur a été écartée car ses données étaient illisibles.'}{' '}
+              Réimportez le fichier du courtier concerné ou restaurez une sauvegarde pour les retrouver.
+            </p>
+            <button
+              type="button"
+              onClick={() => setRestoreNoticeOpen(false)}
+              aria-label="Masquer cet avertissement"
+              className="shrink-0 rounded p-1 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-white border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
@@ -794,13 +917,20 @@ function App() {
       <div className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4">
           <nav className="flex items-center gap-1 overflow-x-auto">
-            {tabs.map((tab) => {
+            <div role="tablist" aria-label="Étapes de la déclaration" className="flex items-center gap-1">
+            {tabs.map((tab, index) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  id={`tab-${tab.id}`}
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`panel-${tab.id}`}
+                  tabIndex={isActive ? 0 : -1}
+                  onClick={() => goToTab(tab.id)}
+                  onKeyDown={(e) => handleTabKeyDown(e, index)}
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     isActive
                       ? 'border-primary text-primary'
@@ -809,7 +939,8 @@ function App() {
                 >
                   {tab.done && !isActive ? (
                     <span className="flex items-center justify-center h-5 w-5 rounded-full bg-green-100 text-green-600 shrink-0">
-                      <Check className="h-3 w-3" />
+                      <Check className="h-3 w-3" aria-hidden="true" />
+                      <span className="sr-only">Étape {tab.step}, terminée :</span>
                     </span>
                   ) : (
                     <span
@@ -818,15 +949,19 @@ function App() {
                           ? 'bg-primary text-white'
                           : 'bg-gray-200 text-gray-500'
                       }`}
+                      aria-hidden="true"
                     >
                       {tab.step}
                     </span>
                   )}
-                  <Icon className="h-4 w-4 sm:hidden" />
+                  <Icon className="h-4 w-4 sm:hidden" aria-hidden="true" />
+                  {/* The label is icon-only below `sm`, so name the tab explicitly. */}
                   <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="sr-only sm:hidden">{tab.label}</span>
                 </button>
               );
             })}
+            </div>
             <div className="ml-auto">
               <button
                 onClick={() => setShowRules(true)}
@@ -842,7 +977,8 @@ function App() {
 
       {/* Main content */}
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
-        <div hidden={activeTab !== 'portfolio'}>
+        <div id="panel-portfolio" role="tabpanel" aria-labelledby="tab-portfolio" hidden={activeTab !== 'portfolio'}>
+          {mountedTabs.has('portfolio') && (
           <div className="space-y-6">
             {!settingsDone && (
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 flex items-start gap-3 text-sm">
@@ -852,7 +988,7 @@ function App() {
                     <strong>Conseil :</strong> configurez d'abord vos paramètres fiscaux (situation familiale, revenus, parts) pour des calculs précis.
                   </p>
                   <button
-                    onClick={() => setActiveTab('settings')}
+                    onClick={() => goToTab('settings')}
                     className="mt-2 inline-flex items-center gap-1 text-primary font-medium hover:underline"
                   >
                     Configurer mes paramètres →
@@ -868,7 +1004,7 @@ function App() {
                   Pour visualiser votre portefeuille, importez d'abord vos fichiers depuis l'onglet <strong>Mes données</strong>.
                 </p>
                 <button
-                  onClick={() => setActiveTab('data')}
+                  onClick={() => goToTab('data')}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
                   <Upload className="h-4 w-4" />
@@ -878,13 +1014,15 @@ function App() {
             )}
             {lots.length > 0 && (
               <React.Suspense fallback={<LazyFallback />}>
-                <Portfolio lots={lots} onLotsChange={setLots} onBulkQualify={handleBulkQualifyLots} hasGrants={grants.length > 0} grants={grants} dividends={dividends} cashInterest={cashInterest} />
+                <Portfolio lots={lots} onLotsChange={setLots} onBulkQualify={handleBulkQualifyLots} hasGrants={grants.length > 0} grants={grants} dividends={dividends} cashInterest={cashInterest} importedAt={lotsImportedAt} />
               </React.Suspense>
             )}
           </div>
+          )}
         </div>
 
-        <div hidden={activeTab !== 'simulator'}>
+        <div id="panel-simulator" role="tabpanel" aria-labelledby="tab-simulator" hidden={activeTab !== 'simulator'}>
+          {mountedTabs.has('simulator') && (
           <div className="space-y-6">
             {lots.length === 0 ? (
               <div className="text-center py-16">
@@ -894,7 +1032,7 @@ function App() {
                   Importez vos positions actuelles pour simuler une vente.
                 </p>
                 <button
-                  onClick={() => setActiveTab('data')}
+                  onClick={() => goToTab('data')}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
                   <Upload className="h-4 w-4" />
@@ -944,9 +1082,11 @@ function App() {
               </>
             )}
           </div>
+          )}
         </div>
 
-        <div hidden={activeTab !== 'declaration'}>
+        <div id="panel-declaration" role="tabpanel" aria-labelledby="tab-declaration" hidden={activeTab !== 'declaration'}>
+          {mountedTabs.has('declaration') && (
           <div className="space-y-6">
             {soldLots.length === 0 && dividends.length === 0 ? (
               <div className="text-center py-16">
@@ -956,7 +1096,7 @@ function App() {
                   Importez votre historique de ventes ou de dividendes pour préparer votre déclaration.
                 </p>
                 <button
-                  onClick={() => setActiveTab('data')}
+                  onClick={() => goToTab('data')}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
                   <Upload className="h-4 w-4" />
@@ -997,9 +1137,11 @@ function App() {
               </>
             )}
           </div>
+          )}
         </div>
 
-        <div hidden={activeTab !== 'data'}>
+        <div id="panel-data" role="tabpanel" aria-labelledby="tab-data" hidden={activeTab !== 'data'}>
+          {mountedTabs.has('data') && (
           <React.Suspense fallback={<LazyFallback />}>
             <DataPanel
             settings={settings}
@@ -1026,9 +1168,11 @@ function App() {
             onLoadDemo={handleLoadDemo}
           />
           </React.Suspense>
+          )}
         </div>
 
-        <div hidden={activeTab !== 'settings'}>
+        <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden={activeTab !== 'settings'}>
+          {mountedTabs.has('settings') && (
           <React.Suspense fallback={<LazyFallback />}>
             <Settings
               settings={settings}
@@ -1041,6 +1185,7 @@ function App() {
               onBackupImport={handleBackupImport}
             />
           </React.Suspense>
+          )}
         </div>
       </main>
 
@@ -1051,6 +1196,7 @@ function App() {
       <Dialog
         open={showSalesImportDialog}
         onClose={() => setShowSalesImportDialog(false)}
+        label="Vérification nécessaire après import des ventes"
         className="max-w-xl"
       >
         <DialogHeader>
@@ -1076,7 +1222,7 @@ function App() {
               onApply={(choice, options) => {
                 handleBulkQualifySoldLots(choice, options);
                 setShowSalesImportDialog(false);
-                setActiveTab('declaration');
+                goToTab('declaration');
               }}
               compact
             />
@@ -1089,7 +1235,7 @@ function App() {
           <button
             onClick={() => {
               setShowSalesImportDialog(false);
-              setActiveTab('declaration');
+              goToTab('declaration');
             }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
           >
@@ -1127,7 +1273,7 @@ function App() {
         </div>
       </footer>
 
-      <Dialog open={legalOpen} onClose={() => setLegalOpen(false)}>
+      <Dialog open={legalOpen} onClose={() => setLegalOpen(false)} label="Mentions légales">
         <DialogHeader>Mentions légales</DialogHeader>
         <div className="space-y-3 text-sm text-gray-700">
           <div>

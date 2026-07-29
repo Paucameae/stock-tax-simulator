@@ -95,17 +95,62 @@ function isPositiveNumber(val: unknown): val is number {
   return typeof val === 'number' && Number.isFinite(val) && val > 0;
 }
 
+// ---------------------------------------------------------------------------
+// Persistence failure reporting
+// ---------------------------------------------------------------------------
+
+export type StorageFailureReason = 'quota' | 'unavailable';
+
+export interface StorageFailure {
+  key: string;
+  reason: StorageFailureReason;
+}
+
+type StorageFailureListener = (failure: StorageFailure) => void;
+
+const storageFailureListeners = new Set<StorageFailureListener>();
+
 /**
- * Safely write to localStorage, catching QuotaExceededError.
- * Returns true on success, false on failure.
+ * Subscribe to persistence failures so the UI can warn the user *before* they
+ * lose work. Returns an unsubscribe function.
  */
-export function safeSetItem(key: string, value: string): boolean {
+export function onStorageFailure(listener: StorageFailureListener): () => void {
+  storageFailureListeners.add(listener);
+  return () => {
+    storageFailureListeners.delete(listener);
+  };
+}
+
+/** Firefox and legacy Safari report a full quota under different names/codes. */
+function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof DOMException)) return false;
+  return (
+    err.name === 'QuotaExceededError' ||
+    err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    err.code === 22 ||
+    err.code === 1014
+  );
+}
+
+export interface SafeSetItemOptions {
+  /** Regenerable data (caches, UI state): a write failure is not surfaced to the user. */
+  transient?: boolean;
+}
+
+/**
+ * Safely write to localStorage, catching quota and availability errors.
+ * Returns true on success, false on failure. Non-transient failures are
+ * broadcast to `onStorageFailure` subscribers.
+ */
+export function safeSetItem(key: string, value: string, options: SafeSetItemOptions = {}): boolean {
   try {
     localStorage.setItem(key, value);
     return true;
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'QuotaExceededError') {
-      console.warn('localStorage quota exceeded for key:', key);
+    const reason: StorageFailureReason = isQuotaError(err) ? 'quota' : 'unavailable';
+    console.warn(`localStorage write failed (${reason}) for key:`, key);
+    if (!options.transient) {
+      for (const listener of storageFailureListeners) listener({ key, reason });
     }
     return false;
   }

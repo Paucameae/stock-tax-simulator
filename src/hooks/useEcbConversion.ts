@@ -1,17 +1,32 @@
 import { useState, useCallback } from 'react';
-import { fetchECBRates, convertUsdToEur, formatDateKey } from '../lib/ecb-rates';
+import {
+  fetchECBRates,
+  formatDateKey,
+  convertLotWithRate,
+  convertSoldLotWithRate,
+  type RateCache,
+} from '../lib/ecb-rates';
 import type { StockLot, SoldLot } from '../lib/types';
 
+interface ConversionOutcome<T> {
+  converted: T[];
+  missingCount: number;
+  /** Rates actually resolved, so the caller can suggest a value for the missing dates. */
+  rates: RateCache;
+}
+
 interface EcbConversionResult {
-  convertLots: (lots: StockLot[]) => Promise<{ converted: StockLot[]; missingCount: number }>;
-  convertSoldLots: (lots: SoldLot[]) => Promise<{ converted: SoldLot[]; missingCount: number }>;
+  convertLots: (lots: StockLot[]) => Promise<ConversionOutcome<StockLot>>;
+  convertSoldLots: (lots: SoldLot[]) => Promise<ConversionOutcome<SoldLot>>;
   loading: boolean;
   error: string | null;
 }
 
 /**
  * Hook to convert USD-imported stock lots to EUR using ECB historical rates.
- * Fetches rates for each lot's acquisition date and today's rate for current value.
+ * Lots whose rate could not be resolved keep `eurUsdRate` undefined and their
+ * EUR amounts untouched, so the caller can hold them back rather than publish
+ * 0 € amounts.
  */
 export function useEcbConversion(): EcbConversionResult {
   const [loading, setLoading] = useState(false);
@@ -21,46 +36,24 @@ export function useEcbConversion(): EcbConversionResult {
     setLoading(true);
     setError(null);
     try {
-      const dates = lots.map((l) => l.acquisitionDate);
       const today = new Date();
-      const allDates = [...dates, today];
-      const rates = await fetchECBRates(allDates);
-      const todayKey = formatDateKey(today);
-      const todayRate = rates[todayKey];
+      const rates = await fetchECBRates([...lots.map((l) => l.acquisitionDate), today]);
+      const todayRate = rates[formatDateKey(today)];
 
       const converted = lots.map((lot) => {
-        const dateKey = formatDateKey(lot.acquisitionDate);
-        const acqRate = rates[dateKey];
-        if (!acqRate) {
-          return { ...lot, eurUsdRate: undefined };
-        }
-        const costBasisPerShare = convertUsdToEur(lot.costBasisPerShareUsd || 0, acqRate);
-        const totalCostBasis = convertUsdToEur(lot.totalCostBasisUsd || 0, acqRate);
-        const esppFmvPerShare = lot.esppFmvPerShareUsd
-          ? convertUsdToEur(lot.esppFmvPerShareUsd, acqRate)
-          : undefined;
-        const rateForCurrentValue = todayRate || acqRate;
-        const currentValue = convertUsdToEur(lot.currentValueUsd || 0, rateForCurrentValue);
-        const unrealizedGainLoss = currentValue - totalCostBasis;
-        return {
-          ...lot,
-          eurUsdRate: acqRate,
-          costBasisPerShare,
-          totalCostBasis,
-          esppFmvPerShare,
-          currentValue,
-          unrealizedGainLoss,
-        };
+        const acqRate = rates[formatDateKey(lot.acquisitionDate)];
+        if (!acqRate) return { ...lot, eurUsdRate: undefined, rateSource: undefined };
+        return convertLotWithRate(lot, acqRate, todayRate || acqRate, 'ecb');
       });
 
       const missingCount = converted.filter((l) => !l.eurUsdRate).length;
       if (missingCount > 0) {
         setError(`Taux BCE introuvable pour ${missingCount} lot(s). Vérifiez les dates ou renseignez manuellement.`);
       }
-      return { converted, missingCount };
+      return { converted, missingCount, rates };
     } catch {
       setError('Erreur lors de la récupération des taux BCE. Vérifiez votre connexion.');
-      return { converted: lots, missingCount: lots.length };
+      return { converted: lots, missingCount: lots.length, rates: {} };
     } finally {
       setLoading(false);
     }
@@ -70,40 +63,26 @@ export function useEcbConversion(): EcbConversionResult {
     setLoading(true);
     setError(null);
     try {
-      // For sold lots, we need rates for the sale date (conversion of proceeds at sale date)
-      const saleDates = lots.map((l) => l.saleDate);
-      const acqDates = lots.map((l) => l.acquisitionDate);
-      const allDates = [...saleDates, ...acqDates];
-      const rates = await fetchECBRates(allDates);
+      const rates = await fetchECBRates([
+        ...lots.map((l) => l.saleDate),
+        ...lots.map((l) => l.acquisitionDate),
+      ]);
 
       const converted = lots.map((lot) => {
-        const saleDateKey = formatDateKey(lot.saleDate);
-        const acqDateKey = formatDateKey(lot.acquisitionDate);
-        const saleRate = rates[saleDateKey];
-        const acqRate = rates[acqDateKey];
-        if (!saleRate) {
-          return { ...lot, eurUsdRate: undefined };
-        }
-        const proceeds = convertUsdToEur(lot.proceedsUsd || 0, saleRate);
-        const costBasis = convertUsdToEur(lot.costBasisUsd || 0, acqRate || saleRate);
-        const gainLoss = proceeds - costBasis;
-        return {
-          ...lot,
-          eurUsdRate: saleRate,
-          proceeds,
-          costBasis,
-          gainLoss,
-        };
+        const saleRate = rates[formatDateKey(lot.saleDate)];
+        if (!saleRate) return { ...lot, eurUsdRate: undefined, rateSource: undefined };
+        const acqRate = rates[formatDateKey(lot.acquisitionDate)] || saleRate;
+        return convertSoldLotWithRate(lot, saleRate, acqRate, 'ecb');
       });
 
       const missingCount = converted.filter((l) => !l.eurUsdRate).length;
       if (missingCount > 0) {
         setError(`Taux BCE introuvable pour ${missingCount} lot(s). Vérifiez les dates ou renseignez manuellement.`);
       }
-      return { converted, missingCount };
+      return { converted, missingCount, rates };
     } catch {
       setError('Erreur lors de la récupération des taux BCE. Vérifiez votre connexion.');
-      return { converted: lots, missingCount: lots.length };
+      return { converted: lots, missingCount: lots.length, rates: {} };
     } finally {
       setLoading(false);
     }

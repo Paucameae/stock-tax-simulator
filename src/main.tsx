@@ -12,3 +12,7 @@ createRoot(document.getElementById('root')!).render(
 
 // Register service worker for PWA / offline support, with in-app update prompts.
 registerServiceWorker();
+
+// All user data lives in localStorage, which browsers may evict under storage
+// pressure. Asking for persistent storage makes that eviction opt-in.
+void navigator.storage?.persist?.();

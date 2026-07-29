@@ -43,7 +43,25 @@ export default defineConfig({
   plugins: [react(), tailwindcss(), swVersionPlugin(resolveBuildVersion())],
   server: {
     proxy: {
-      '/api': 'http://localhost:7071',
+      '/api': {
+        target: 'http://localhost:7071',
+        // Without this, an unreachable Functions host surfaces as an opaque
+        // socket hang-up and the UI silently falls back to frozen amounts.
+        configure(proxy) {
+          proxy.on('error', (err, _req, res) => {
+            if ('writeHead' in res && !res.headersSent) {
+              res.writeHead(503, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  error:
+                    "API locale injoignable sur http://localhost:7071 — lancez `npm run dev` (front + API) ou `npm run dev:api`.",
+                  cause: err.message,
+                })
+              );
+            }
+          });
+        },
+      },
     },
   },
   build: {

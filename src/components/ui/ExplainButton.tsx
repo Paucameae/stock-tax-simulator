@@ -48,7 +48,7 @@ export function ExplainButton({ topic, facts, label = 'Expliquer ce calcul', cla
         {label}
       </Button>
 
-      <Dialog open={open} onClose={handleClose} className="max-w-lg">
+      <Dialog open={open} onClose={handleClose} label={topic} className="max-w-lg">
         <div className="flex items-start justify-between gap-3 mb-3">
           <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
             <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
