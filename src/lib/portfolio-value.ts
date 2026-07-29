@@ -23,22 +23,34 @@ export function lotUnrealizedGain(lot: StockLot, eurPrice: number | null): numbe
   return hasExportedMarketValue(lot) ? lot.unrealizedGainLoss : null;
 }
 
+export interface PortfolioTotals {
+  /** Sum over the lots whose value is known — `unknownCount` says what it leaves out. */
+  value: number;
+  gainLoss: number;
+  knownCount: number;
+  unknownCount: number;
+}
+
 /**
- * Portfolio-wide totals. A single lot with an unknown value makes the whole
- * total unknown: a partial sum would silently under-report the portfolio.
+ * Portfolio-wide totals. Lots with an unknown value are excluded from the sum
+ * and counted separately, so the UI can show what it does know while saying
+ * out loud how much of the portfolio the figure ignores.
  */
-export function portfolioTotals(
-  lots: StockLot[],
-  eurPrice: number | null
-): { value: number | null; gainLoss: number | null } {
+export function portfolioTotals(lots: StockLot[], eurPrice: number | null): PortfolioTotals {
   let value = 0;
   let gainLoss = 0;
+  let knownCount = 0;
+  let unknownCount = 0;
   for (const lot of lots) {
     const v = lotMarketValue(lot, eurPrice);
     const g = lotUnrealizedGain(lot, eurPrice);
-    if (v === null || g === null) return { value: null, gainLoss: null };
+    if (v === null || g === null) {
+      unknownCount += 1;
+      continue;
+    }
     value += v;
     gainLoss += g;
+    knownCount += 1;
   }
-  return { value, gainLoss };
+  return { value, gainLoss, knownCount, unknownCount };
 }

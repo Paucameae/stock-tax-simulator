@@ -131,14 +131,14 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   }, [lots, filterOrigin, filterHolding, filterBroker, filterDrip, sortKey, sortDir, eurPrice]);
 
   const totalQuantity = lots.reduce((sum, l) => sum + l.quantity, 0);
-  const { value: totalValue, gainLoss: totalGainLoss } = portfolioTotals(lots, eurPrice);
+  const totals = portfolioTotals(lots, eurPrice);
 
   // When the lot table is open AND filtered, swap the header KPIs to reflect
   // the filtered slice — that's the question the user is currently asking
   // ("how much weight do my Macron AGAs carry?"). When closed/unfiltered we
   // keep the global totals so the card is always a snapshot of the whole.
   const filteredQuantity = filteredLots.reduce((sum, l) => sum + l.quantity, 0);
-  const { value: filteredValue, gainLoss: filteredGainLoss } = portfolioTotals(filteredLots, eurPrice);
+  const filteredTotals = portfolioTotals(filteredLots, eurPrice);
 
   const [groupBy, setGroupBy] = React.useState<GroupBy>('origin');
 
@@ -196,7 +196,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
 
   // Hide the treemap when it would degenerate to a single full-width tile —
   // it adds visual noise without conveying any breakdown.
-  const showTreemap = treemapData.length >= 2 && totalValue !== null && totalValue > 0;
+  const showTreemap = treemapData.length >= 2 && totals.value > 0;
 
   const handlePlanTypeChange = (lotId: string, planType: string) => {
     const updated = lots.map((l) => {
@@ -245,8 +245,12 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   // Header KPIs reflect filters only when the lot table is open AND a filter is
   // active; otherwise the card stays a global snapshot of the whole portfolio.
   const showFilteredKpis = tableOpen && isFiltered;
-  const displayedValue = showFilteredKpis ? filteredValue : totalValue;
-  const displayedGainLoss = showFilteredKpis ? filteredGainLoss : totalGainLoss;
+  const displayed = showFilteredKpis ? filteredTotals : totals;
+  const hasKnownValue = displayed.knownCount > 0;
+  const unknownHint =
+    displayed.unknownCount > 0
+      ? `hors ${displayed.unknownCount} lot${displayed.unknownCount > 1 ? 's' : ''} sans valeur connue`
+      : undefined;
   const toggleTable = () => {
     setTableOpen((v) => {
       const next = !v;
@@ -297,7 +301,8 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
             />
             <Kpi
               label={showFilteredKpis ? 'Valeur filtrée' : 'Valeur totale'}
-              value={displayedValue === null ? '—' : formatEUR(displayedValue)}
+              value={hasKnownValue ? formatEUR(displayed.value) : '—'}
+              hint={unknownHint}
             />
             <Kpi
               label={
@@ -309,14 +314,15 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                 </span>
               }
               value={
-                displayedGainLoss === null
-                  ? '—'
-                  : `${displayedGainLoss >= 0 ? '+' : ''}${formatEUR(displayedGainLoss)}`
+                hasKnownValue
+                  ? `${displayed.gainLoss >= 0 ? '+' : ''}${formatEUR(displayed.gainLoss)}`
+                  : '—'
               }
+              hint={unknownHint}
               valueClassName={
-                displayedGainLoss === null
+                !hasKnownValue
                   ? 'text-gray-400'
-                  : displayedGainLoss >= 0
+                  : displayed.gainLoss >= 0
                     ? 'text-green-600'
                     : 'text-red-600'
               }
@@ -356,7 +362,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                     aspectRatio={4 / 3}
                     stroke="#fff"
                     isAnimationActive={false}
-                    content={<TreemapTile total={totalValue} />}
+                    content={<TreemapTile total={totals.value} />}
                   />
                 </ResponsiveContainer>
               </div>
@@ -512,16 +518,19 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
 function Kpi({
   label,
   value,
+  hint,
   valueClassName,
 }: {
   label: React.ReactNode;
   value: React.ReactNode;
+  hint?: React.ReactNode;
   valueClassName?: string;
 }) {
   return (
     <div className="rounded-md bg-gray-50 px-3 py-2">
       <div className="text-xs text-gray-500">{label}</div>
       <div className={`text-base font-semibold ${valueClassName ?? ''}`}>{value}</div>
+      {hint && <div className="text-[11px] text-amber-700">{hint}</div>}
     </div>
   );
 }

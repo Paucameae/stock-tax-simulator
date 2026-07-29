@@ -54,15 +54,30 @@ describe('portfolio-value', () => {
 
   it('sums totals across lots at the live price', () => {
     const lots = [makeLot({ id: 'a', quantity: 100 }), makeLot({ id: 'b', quantity: 50, totalCostBasis: 10000 })];
-    expect(portfolioTotals(lots, 400)).toEqual({ value: 60000, gainLoss: 30000 });
+    expect(portfolioTotals(lots, 400)).toEqual({ value: 60000, gainLoss: 30000, knownCount: 2, unknownCount: 0 });
   });
 
-  it('returns null totals when a single lot has no known value', () => {
+  it('sums the lots it knows and counts the ones it does not', () => {
     const lots = [makeLot({ id: 'a' }), makeLot({ id: 'b', broker: 'morgan_stanley' })];
-    expect(portfolioTotals(lots, null)).toEqual({ value: null, gainLoss: null });
+    expect(portfolioTotals(lots, null)).toEqual({
+      value: 35000,
+      gainLoss: 15000,
+      knownCount: 1,
+      unknownCount: 1,
+    });
+  });
+
+  it('reports no known lot when every value is unknown', () => {
+    const lots = [makeLot({ id: 'a', broker: 'morgan_stanley' })];
+    expect(portfolioTotals(lots, null)).toEqual({
+      value: 0,
+      gainLoss: 0,
+      knownCount: 0,
+      unknownCount: 1,
+    });
   });
 
   it('returns zero totals for an empty portfolio', () => {
-    expect(portfolioTotals([], null)).toEqual({ value: 0, gainLoss: 0 });
+    expect(portfolioTotals([], null)).toEqual({ value: 0, gainLoss: 0, knownCount: 0, unknownCount: 0 });
   });
 });
