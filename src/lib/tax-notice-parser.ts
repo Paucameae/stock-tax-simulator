@@ -6,7 +6,9 @@ let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | undefined;
 function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
   pdfjsPromise ??= import('pdfjs-dist')
     .then((lib) => {
-      // Local worker file: a CDN would be a supply-chain risk.
+      // Local worker file: a CDN would be a supply-chain risk. It is a copy of
+      // node_modules/pdfjs-dist/build/pdf.worker.min.mjs and must be refreshed
+      // on every upgrade — pdf.js refuses a worker whose version differs.
       lib.GlobalWorkerOptions.workerSrc = new URL('/pdf.worker.min.mjs', import.meta.url).href;
       return lib;
     })
