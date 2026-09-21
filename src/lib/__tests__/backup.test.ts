@@ -433,4 +433,26 @@ describe('importFromJsonString — strict numeric validation', () => {
     expect(result.lots[0].rateSource).toBe('manual');
     expect(result.lots[1].rateSource).toBeUndefined();
   });
+
+  it('realigns a stored plan type that contradicts the origin', () => {
+    // Origin is authoritative (broker plan code); a contradicting planType
+    // would silently move the acquisition gain to the wrong regime.
+    const result = importFromJsonString(
+      payload(
+        [{ ...rawLot, origin: 'FQ', planType: 'qualified_macron' }],
+        [{ ...rawSold, origin: 'SP', planType: 'qualified_macron' }]
+      ),
+      DEFAULTS
+    );
+    expect(result.lots[0].planType).toBe('qualified_pre_macron');
+    expect(result.soldLots[0].planType).toBe('non_qualified');
+  });
+
+  it('leaves the plan type of a Stock Award alone', () => {
+    const result = importFromJsonString(
+      payload([{ ...rawLot, origin: 'DO', planType: 'qualified_pre_macron' }]),
+      DEFAULTS
+    );
+    expect(result.lots[0].planType).toBe('qualified_pre_macron');
+  });
 });

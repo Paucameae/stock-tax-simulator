@@ -1,9 +1,64 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { QualificationReason, StockOrigin } from './types';
+import type { PlanType, QualificationReason, StockOrigin } from './types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/**
+ * Plan type implied by a lot's origin.
+ *
+ * `origin` is authoritative: it comes from the broker's plan code (or from a
+ * StockExport reconciliation), and the tax engine routes FM / FQ / SP on the
+ * origin alone — `planType` is only consulted for DO lots
+ * (see `isQualifiedStockAward` in tax-engine.ts). A `planType` that
+ * contradicts the origin is therefore not a second opinion, it is corrupt
+ * data: it silently flips the acquisition-gain regime (50 % abatement or not,
+ * PS patrimoine vs activité, 10 % contribution salariale, case 1TZ vs 1TT).
+ *
+ * Returns `null` for DO — the only origin whose regime a broker export cannot
+ * determine. There the caller decides (user choice, app default, StockExport).
+ */
+export function planTypeForOrigin(origin: StockOrigin): PlanType | null {
+  switch (origin) {
+    case 'FM':
+      return 'qualified_macron';
+    case 'FQ':
+      return 'qualified_pre_macron';
+    case 'SP':
+      return 'non_qualified';
+    case 'DO':
+      return null;
+  }
+}
+
+/**
+ * Shown wherever a lot's regime is displayed read-only. Only DO lots leave the
+ * regime open, and nothing in the UI says so otherwise.
+ */
+export const DERIVED_PLAN_TYPE_HINT =
+  "Régime déduit de l'origine du lot : seuls les Stock Awards laissent le choix. Pour les AGA (Macron / pré-Macron) et l'ESPP, l'origine détermine à elle seule le traitement fiscal du gain d'acquisition.";
+
+/** True when `planType` contradicts `origin`. Always false for DO lots. */export function isOriginPlanTypeInconsistent(lot: {
+  origin: StockOrigin;
+  planType: PlanType;
+}): boolean {
+  const implied = planTypeForOrigin(lot.origin);
+  return implied !== null && lot.planType !== implied;
+}
+
+/**
+ * Coerce `planType` to the value implied by `origin`. No-op for DO lots and
+ * for lots already consistent (returns the same reference, so callers can use
+ * it on hot paths without churning React props).
+ */
+export function normalizeLotQualification<T extends { origin: StockOrigin; planType: PlanType }>(
+  lot: T,
+): T {
+  const implied = planTypeForOrigin(lot.origin);
+  if (implied === null || lot.planType === implied) return lot;
+  return { ...lot, planType: implied };
 }
 
 /**

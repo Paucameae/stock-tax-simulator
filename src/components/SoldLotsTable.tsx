@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import { Select } from './ui/select';
 import { ShoppingCart, ArrowUpRight, ArrowDownRight, Calendar, CheckCircle2 } from 'lucide-react';
 import type { Broker, SoldLot, StockOrigin, PlanType } from '../lib/types';
-import { brokerLabel, formatEUR, formatUSD, formatDate, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, planTypeLabel, planTypeForOrigin, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent, DERIVED_PLAN_TYPE_HINT } from '../lib/utils';
 import { BrokerLogo } from './BrokerLogo';
 import { BulkQualifyPanel } from './BulkQualifyPanel';
 import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '../lib/bulk-qualify';
@@ -79,15 +79,12 @@ export function SoldLotsTable({
   const manualRateCount = filteredLots.filter((l) => l.rateSource === 'manual').length;
 
   const handleOriginChange = (lotId: string, origin: StockOrigin) => {
-    const planMap: Record<StockOrigin, PlanType> = {
-      FM: 'qualified_macron',
-      FQ: 'qualified_pre_macron',
-      SP: 'non_qualified',
-      DO: defaultPlanType === 'non_qualified' ? 'non_qualified' : 'qualified_macron',
-    };
+    // DO is the only origin that leaves the regime open; the others imply it.
+    const planType: PlanType = planTypeForOrigin(origin)
+      ?? (defaultPlanType === 'non_qualified' ? 'non_qualified' : 'qualified_macron');
     onSoldLotsChange(
       soldLots.map((l) =>
-        l.id === lotId ? { ...l, origin, planType: planMap[origin], qualificationReason: 'manual' } : l
+        l.id === lotId ? { ...l, origin, planType, qualificationReason: 'manual' } : l
       )
     );
   };
@@ -332,9 +329,7 @@ export function SoldLotsTable({
                     )}
                   </td>
                   <td className="py-2">
-                    {lot.origin === 'SP' ? (
-                      <Badge variant="outline">ESPP</Badge>
-                    ) : (
+                    {lot.origin === 'DO' ? (
                       <Select
                         value={lot.planType}
                         aria-label={`Régime fiscal du lot acquis le ${formatDate(lot.acquisitionDate)}`}
@@ -344,6 +339,10 @@ export function SoldLotsTable({
                         <option value="qualified_pre_macron">Qualifié (pré-Macron)</option>
                         <option value="non_qualified">Non qualifié</option>
                       </Select>
+                    ) : (
+                      <Badge variant="outline" title={DERIVED_PLAN_TYPE_HINT}>
+                        {planTypeLabel(lot.planType)}
+                      </Badge>
                     )}
                   </td>
                 </tr>
@@ -444,9 +443,7 @@ export function SoldLotsTable({
                   </div>
                 )}
                 </div>
-                {lot.origin === 'SP' ? (
-                  <Badge variant="outline" className="justify-center">ESPP</Badge>
-                ) : (
+                {lot.origin === 'DO' ? (
                   <Select
                     value={lot.planType}
                     aria-label={`Régime fiscal du lot acquis le ${formatDate(lot.acquisitionDate)}`}
@@ -457,6 +454,10 @@ export function SoldLotsTable({
                     <option value="qualified_pre_macron">Qualifié (pré-Macron)</option>
                     <option value="non_qualified">Non qualifié</option>
                   </Select>
+                ) : (
+                  <Badge variant="outline" className="justify-center" title={DERIVED_PLAN_TYPE_HINT}>
+                    {planTypeLabel(lot.planType)}
+                  </Badge>
                 )}
               </div>
             </div>

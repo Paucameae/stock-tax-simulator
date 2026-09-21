@@ -8,7 +8,7 @@ import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight, Arr
 import { Treemap, ResponsiveContainer } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
-import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent } from '../lib/utils';
+import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent, DERIVED_PLAN_TYPE_HINT } from '../lib/utils';
 import { safeSetItem } from '../lib/storage';
 import { UnvestedView } from './UnvestedView';
 import { DividendsView } from './DividendsView';
@@ -869,7 +869,9 @@ function PortfolioTableAndCards({
                             <option value="non_qualified">Non qualifié</option>
                           </Select>
                         ) : (
-                          <span className="text-xs">{planTypeLabel(lot.planType)}</span>
+                          <span className="text-xs text-gray-600 underline decoration-dotted underline-offset-2 cursor-help" title={DERIVED_PLAN_TYPE_HINT}>
+                            {planTypeLabel(lot.planType)}
+                          </span>
                         )}
                       </td>
                       <td className="px-2.5 py-2 text-center">
@@ -1226,7 +1228,9 @@ function LotDetailsDialog({
               <option value="non_qualified">Non qualifié</option>
             </Select>
           ) : (
-            <span className="text-xs">{planTypeLabel(lot.planType)}</span>
+            <span className="text-xs text-gray-600 underline decoration-dotted underline-offset-2 cursor-help" title={DERIVED_PLAN_TYPE_HINT}>
+              {planTypeLabel(lot.planType)}
+            </span>
           )}
         </dd>
       </dl>

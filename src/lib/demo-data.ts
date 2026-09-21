@@ -45,7 +45,7 @@ export function buildDemoData(): DemoDataset {
       unrealizedGainLoss: 24600,
       origin: 'FQ',
       holdingPeriod: 'Long',
-      planType: 'qualified_macron',
+      planType: 'qualified_pre_macron',
       qualificationReason: 'broker_default',
     },
     {
@@ -73,7 +73,7 @@ export function buildDemoData(): DemoDataset {
       unrealizedGainLoss: 7650,
       origin: 'SP',
       holdingPeriod: 'Short',
-      planType: 'qualified_macron',
+      planType: 'non_qualified',
       esppFmvPerShare: 280 / 0.9, // FMV before the 10% discount
       qualificationReason: 'broker_default',
     },
@@ -92,7 +92,7 @@ export function buildDemoData(): DemoDataset {
       gainLoss: 15000,
       holdingPeriod: 'Long',
       origin: 'FQ',
-      planType: 'qualified_macron',
+      planType: 'qualified_pre_macron',
       qualificationReason: 'broker_default',
     },
     {
@@ -106,7 +106,7 @@ export function buildDemoData(): DemoDataset {
       gainLoss: 5940,
       holdingPeriod: 'Long',
       origin: 'SP',
-      planType: 'qualified_macron',
+      planType: 'non_qualified',
       qualificationReason: 'broker_default',
     },
   ];

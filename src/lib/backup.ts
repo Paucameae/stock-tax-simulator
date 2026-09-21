@@ -6,6 +6,7 @@
 
 import type { AppSettings, Broker, GrantInfo, QualificationReason, RateSource, StockLot, SoldLot, SavedSimulation } from './types';
 import { isValidOrigin, isValidPlanType, validateGrant, validateSettings } from './storage';
+import { planTypeForOrigin } from './utils';
 
 const KNOWN_QUALIFICATION_REASONS: QualificationReason[] = [
   'broker_default',
@@ -199,7 +200,9 @@ export function validateLot(raw: unknown): StockLot | null {
     grantDate: parseDate(raw.grantDate),
     origin: raw.origin,
     holdingPeriod: (raw.holdingPeriod === 'Long' ? 'Long' : 'Short'),
-    planType: raw.planType,
+    // Origin wins: a stored planType contradicting it would silently flip the
+    // acquisition-gain regime (legacy backups, hand-edited JSON).
+    planType: planTypeForOrigin(raw.origin) ?? raw.planType,
     esppFmvPerShare: finiteOrUndefined(raw.esppFmvPerShare),
     esppFmvPerShareUsd: finiteOrUndefined(raw.esppFmvPerShareUsd),
     costBasisPerShareUsd: finiteOrUndefined(raw.costBasisPerShareUsd),
@@ -244,7 +247,7 @@ export function validateSoldLot(raw: unknown): SoldLot | null {
     hasUnreliableAmounts: rawGainLoss === undefined ? true : undefined,
     holdingPeriod: (raw.holdingPeriod === 'Long' ? 'Long' : 'Short'),
     origin: raw.origin,
-    planType: raw.planType,
+    planType: planTypeForOrigin(raw.origin) ?? raw.planType,
     proceedsUsd: finiteOrUndefined(raw.proceedsUsd),
     costBasisUsd: finiteOrUndefined(raw.costBasisUsd),
     eurUsdRate: finiteOrUndefined(raw.eurUsdRate),

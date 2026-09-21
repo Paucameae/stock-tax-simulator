@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeByBroker, isLikelyReinvestedDividend, isLikelyEsppPurchase, qualificationReasonLabel, isDripQualifiedInconsistent } from '../utils';
+import { mergeByBroker, isLikelyReinvestedDividend, isLikelyEsppPurchase, qualificationReasonLabel, isDripQualifiedInconsistent, planTypeForOrigin, isOriginPlanTypeInconsistent, normalizeLotQualification } from '../utils';
 
 describe('qualificationReasonLabel', () => {
   it('returns a non-empty French sentence for every known reason', () => {
@@ -40,6 +40,60 @@ describe('isDripQualifiedInconsistent', () => {
   it('does not flag a non-DRIP lot regardless of the plan type', () => {
     expect(isDripQualifiedInconsistent({ isReinvestedDividend: false, planType: 'qualified_macron' })).toBe(false);
     expect(isDripQualifiedInconsistent({ planType: 'qualified_macron' })).toBe(false);
+  });
+});
+
+describe('planTypeForOrigin', () => {
+  it('maps each broker-determined origin to its regime', () => {
+    expect(planTypeForOrigin('FM')).toBe('qualified_macron');
+    expect(planTypeForOrigin('FQ')).toBe('qualified_pre_macron');
+    expect(planTypeForOrigin('SP')).toBe('non_qualified');
+  });
+
+  it('leaves the regime open for Stock Awards', () => {
+    expect(planTypeForOrigin('DO')).toBeNull();
+  });
+});
+
+describe('isOriginPlanTypeInconsistent', () => {
+  it('flags a pré-Macron origin carrying the Macron regime', () => {
+    // The exact defect that gave demo FQ lots a 50% abatement they are not entitled to.
+    expect(isOriginPlanTypeInconsistent({ origin: 'FQ', planType: 'qualified_macron' })).toBe(true);
+  });
+
+  it('flags an ESPP lot carrying a qualified regime', () => {
+    expect(isOriginPlanTypeInconsistent({ origin: 'SP', planType: 'qualified_macron' })).toBe(true);
+  });
+
+  it('accepts every consistent pair', () => {
+    expect(isOriginPlanTypeInconsistent({ origin: 'FM', planType: 'qualified_macron' })).toBe(false);
+    expect(isOriginPlanTypeInconsistent({ origin: 'FQ', planType: 'qualified_pre_macron' })).toBe(false);
+    expect(isOriginPlanTypeInconsistent({ origin: 'SP', planType: 'non_qualified' })).toBe(false);
+  });
+
+  it('never flags a Stock Award, whatever its regime', () => {
+    expect(isOriginPlanTypeInconsistent({ origin: 'DO', planType: 'qualified_macron' })).toBe(false);
+    expect(isOriginPlanTypeInconsistent({ origin: 'DO', planType: 'qualified_pre_macron' })).toBe(false);
+    expect(isOriginPlanTypeInconsistent({ origin: 'DO', planType: 'non_qualified' })).toBe(false);
+  });
+});
+
+describe('normalizeLotQualification', () => {
+  it('coerces the regime to the one implied by the origin', () => {
+    expect(normalizeLotQualification({ origin: 'FQ', planType: 'qualified_macron' }))
+      .toEqual({ origin: 'FQ', planType: 'qualified_pre_macron' });
+  });
+
+  it('preserves the other fields of the lot', () => {
+    const lot = { id: 'a', origin: 'SP', planType: 'qualified_macron', quantity: 10 } as const;
+    expect(normalizeLotQualification(lot)).toEqual({ ...lot, planType: 'non_qualified' });
+  });
+
+  it('returns the same reference when nothing needs changing', () => {
+    const consistent = { origin: 'FM', planType: 'qualified_macron' } as const;
+    expect(normalizeLotQualification(consistent)).toBe(consistent);
+    const stockAward = { origin: 'DO', planType: 'non_qualified' } as const;
+    expect(normalizeLotQualification(stockAward)).toBe(stockAward);
   });
 });
 

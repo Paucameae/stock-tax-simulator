@@ -1,4 +1,5 @@
 import type { PlanType, QualificationReason, SoldLot, StockLot, StockOrigin } from './types';
+import { normalizeLotQualification } from './utils';
 
 /**
  * User intent for bulk-requalifying a set of lots:
@@ -93,11 +94,15 @@ export function applyBulkChoice<T extends QualifiableLot>(
 ): T[] {
   return items.map((item) => {
     if (!isEligibleForBulk(item, options)) return item;
-    if (choice.kind === 'uniform') {
-      return { ...item, origin: choice.origin, planType: choice.planType, qualificationReason: 'bulk_qualify' };
-    }
-    const target = item.acquisitionDate.getTime() < choice.pivotDate.getTime() ? choice.before : choice.after;
-    return { ...item, origin: target.origin, planType: target.planType, qualificationReason: 'bulk_qualify' };
+    const target = choice.kind === 'uniform'
+      ? choice
+      : item.acquisitionDate.getTime() < choice.pivotDate.getTime() ? choice.before : choice.after;
+    return normalizeLotQualification({
+      ...item,
+      origin: target.origin,
+      planType: target.planType,
+      qualificationReason: 'bulk_qualify',
+    });
   });
 }
 
