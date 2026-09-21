@@ -190,7 +190,6 @@ export function BackupPanel({ current, defaults, onImport, embedded = false }: B
                   ['Positions', current.lots.length, pendingImport.counts.lotsKept],
                   ['Ventes', current.soldLots.length, pendingImport.counts.soldLotsKept],
                   ['Grants StockExport', current.grants?.length ?? 0, pendingImport.counts.grantsKept],
-                  ['Simulations enregistrées', current.savedSimulations.length, pendingImport.counts.savedSimulations],
                 ] as const
               ).map(([label, before, after]) => (
                 <tr key={label} className="border-t border-gray-100">

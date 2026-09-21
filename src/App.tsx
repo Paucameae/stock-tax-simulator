@@ -14,15 +14,20 @@ import { reconcileLots, reconcileSoldLots } from './lib/stockexport-reconciliati
 import { applyBulkChoiceToLots, applyBulkChoiceToSoldLots, countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from './lib/bulk-qualify';
 import { buildDemoData } from './lib/demo-data';
 import { downloadBackup, type ImportResult } from './lib/backup';
-import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, SavedSimulation, GrantInfo, Broker } from './lib/types';
+import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, GrantInfo, Broker } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
 import { DividendsDeclaration } from './components/DividendsDeclaration';
 import { BulkQualifyPanel } from './components/BulkQualifyPanel';
 import { UpdateBanner } from './components/UpdateBanner';
 import { StorageAlertBanner } from './components/StorageAlertBanner';
-import { generateId, mergeByBroker } from './lib/utils';
+import { mergeByBroker, formatDate } from './lib/utils';
+import { TAX_DATA_VERIFIED_ON } from './lib/tax-forms';
 
-// Lazy-load heavy components (pdfjs-dist via Settings, recharts via Portfolio)
+// Parsed as local time (no trailing Z) so the displayed day never shifts.
+const TAX_DATA_VERIFIED_ON_LABEL = formatDate(new Date(`${TAX_DATA_VERIFIED_ON}T00:00:00`));
+
+// Lazy-load the three heaviest panels; each also defers its own heavy deps
+// (pdfjs on first PDF drop, recharts on first treemap render).
 const Portfolio = React.lazy(() =>
   import('./components/Portfolio').then((m) => ({ default: m.Portfolio }))
 );
@@ -307,14 +312,13 @@ function App() {
   }, [lots, soldLots, lotsImportedAt, restored]);
 
   const [showSalesImportDialog, setShowSalesImportDialog] = React.useState(false);
-  const [savedSimulations, setSavedSimulations] = React.useState<SavedSimulation[]>(() => {
-    try {
-      const saved = localStorage.getItem('savedSimulations');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+
+  // Simulation history was written on every run but never surfaced anywhere;
+  // each entry carried a full result + settings + lots, so 20 of them ate into
+  // the storage quota that the portfolio actually needs.
+  React.useEffect(() => {
+    localStorage.removeItem('savedSimulations');
+  }, []);
 
   // Fiscal years: simulations always use the current year; the declaration view
   // uses the year selected via SoldLotsTable (defaults to most recent sale year).
@@ -702,18 +706,6 @@ function App() {
     setSimResult(res);
     setSimStale(false);
 
-    const saved: SavedSimulation = {
-      id: generateId(),
-      date: new Date().toISOString(),
-      name: `Simulation du ${new Date().toLocaleDateString('fr-FR')}`,
-      result: res,
-      settings,
-      lots: entries,
-    };
-    const updatedSimulations = [saved, ...savedSimulations].slice(0, 20);
-    setSavedSimulations(updatedSimulations);
-    safeSetItem('savedSimulations', JSON.stringify(updatedSimulations));
-
     goToTab('simulator');
 
     // Defer until after the TaxCalculator has rendered the new result so the
@@ -724,7 +716,7 @@ function App() {
       setSimResultFlash(true);
       window.setTimeout(() => setSimResultFlash(false), 1200);
     });
-  }, [simTaxMode, simFiscalYear, settings, savedSimulations, goToTab]);
+  }, [simTaxMode, simFiscalYear, settings, goToTab]);
 
   const handleSimTaxModeChange = React.useCallback((mode: TaxMode) => {
     setSimTaxMode(mode);
@@ -772,8 +764,6 @@ function App() {
     setLots(imported.lots);
     setSoldLots(imported.soldLots);
     setLotsImportedAt(new Date().toISOString());
-    setSavedSimulations(imported.savedSimulations);
-    safeSetItem('savedSimulations', JSON.stringify(imported.savedSimulations));
     // v3 backups carry StockExport grants. v1/v2 backups arrive with grants=[];
     // we then leave any existing localStorage grants untouched rather than wipe
     // them — mirroring how we don't clear other unrelated state.
@@ -828,8 +818,8 @@ function App() {
   }, [declTaxMode, goToTab]);
 
   const handleEmergencyExport = React.useCallback(() => {
-    downloadBackup({ settings, lots, soldLots, savedSimulations, grants });
-  }, [settings, lots, soldLots, savedSimulations, grants]);
+    downloadBackup({ settings, lots, soldLots, grants });
+  }, [settings, lots, soldLots, grants]);
 
   const settingsDone = isSettingsConfigured(settings, DEFAULT_SETTINGS);
   const portfolioDone = lots.length > 0;
@@ -899,8 +889,11 @@ function App() {
                 Calculez vos impôts sur la vente d'actions MSFT acquises via ESPP et Stock Awards
               </p>
             </div>
-            <span className="text-xs text-gray-400">
-              Données fiscales à jour du {new Date().toLocaleDateString('fr-FR')}
+            <span
+              className="text-xs text-gray-400"
+              title="Date du dernier recoupement des barèmes, seuils et numéros de case avec impots.gouv.fr."
+            >
+              Données fiscales vérifiées le {TAX_DATA_VERIFIED_ON_LABEL}
             </span>
           </div>
         </div>
@@ -1180,7 +1173,6 @@ function App() {
               defaults={DEFAULT_SETTINGS}
               lots={lots}
               soldLots={soldLots}
-              savedSimulations={savedSimulations}
               grants={grants}
               onBackupImport={handleBackupImport}
             />

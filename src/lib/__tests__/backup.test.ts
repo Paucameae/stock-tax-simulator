@@ -50,7 +50,6 @@ function makeInput(overrides: Partial<BackupInput> = {}): BackupInput {
     settings: DEFAULTS,
     lots: [LOT],
     soldLots: [SOLD],
-    savedSimulations: [],
     ...overrides,
   };
 }
@@ -142,7 +141,6 @@ describe('importFromJsonString', () => {
       settings: DEFAULTS,
       lots: [v1Lot],
       soldLots: [v1Sold],
-      savedSimulations: [],
     });
 
     const result = importFromJsonString(payload, DEFAULTS);
@@ -169,7 +167,6 @@ describe('importFromJsonString', () => {
         { acquisitionDate: 'not-a-date' }, // invalid
       ],
       soldLots: [],
-      savedSimulations: [],
     });
 
     const result = importFromJsonString(payload, DEFAULTS);
@@ -189,7 +186,6 @@ describe('importFromJsonString', () => {
         { ...SOLD, acquisitionDate: SOLD.acquisitionDate.toISOString(), saleDate: SOLD.saleDate.toISOString() },
         { id: 'bad' }, // invalid
       ],
-      savedSimulations: [],
     });
 
     const result = importFromJsonString(payload, DEFAULTS);
@@ -211,7 +207,6 @@ describe('importFromJsonString', () => {
       soldLots: [
         { ...SOLD, acquisitionDate: SOLD.acquisitionDate.toISOString(), saleDate: SOLD.saleDate.toISOString(), origin: 'ZZ' }, // bad origin
       ],
-      savedSimulations: [],
     });
 
     const result = importFromJsonString(payload, DEFAULTS);
@@ -246,7 +241,6 @@ describe('importFromJsonString', () => {
     const result = importFromJsonString(payload, DEFAULTS);
     expect(result.lots).toEqual([]);
     expect(result.soldLots).toEqual([]);
-    expect(result.savedSimulations).toEqual([]);
     expect(result.grants).toEqual([]);
   });
 
@@ -323,7 +317,6 @@ describe('importFromJsonString', () => {
       settings: DEFAULTS,
       lots: [v2Lot],
       soldLots: [],
-      savedSimulations: [],
     });
 
     const result = importFromJsonString(payload, DEFAULTS);
@@ -342,7 +335,6 @@ describe('importFromJsonString', () => {
       settings: DEFAULTS,
       lots: [],
       soldLots: [],
-      savedSimulations: [],
       grants: [
         { grantIdHash: 'incomplete' }, // missing required fields
         null,
@@ -364,7 +356,6 @@ describe('importFromJsonString — strict numeric validation', () => {
       settings: DEFAULTS,
       lots,
       soldLots,
-      savedSimulations: [],
     });
   }
 

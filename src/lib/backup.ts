@@ -4,7 +4,7 @@
 // Dates are stored as ISO strings and re-hydrated on import. Unknown/invalid
 // fields are rejected to keep the runtime state consistent.
 
-import type { AppSettings, Broker, GrantInfo, QualificationReason, RateSource, StockLot, SoldLot, SavedSimulation } from './types';
+import type { AppSettings, Broker, GrantInfo, QualificationReason, RateSource, StockLot, SoldLot } from './types';
 import { isValidOrigin, isValidPlanType, validateGrant, validateSettings } from './storage';
 import { planTypeForOrigin } from './utils';
 
@@ -50,7 +50,6 @@ export interface BackupPayload {
   settings: AppSettings;
   lots: StockLot[];
   soldLots: SoldLot[];
-  savedSimulations: SavedSimulation[];
   /** Microsoft StockExport grants (since v3). Optional in input/output to keep
    *  v1/v2 backups roundtrippable. */
   grants?: GrantInfo[];
@@ -60,7 +59,6 @@ export interface BackupInput {
   settings: AppSettings;
   lots: StockLot[];
   soldLots: SoldLot[];
-  savedSimulations: SavedSimulation[];
   grants?: GrantInfo[];
 }
 
@@ -71,7 +69,6 @@ export interface ImportCounts {
   soldLotsRejected: number;
   grantsKept: number;
   grantsRejected: number;
-  savedSimulations: number;
   /** Rows kept but whose indicative amounts had to be recomputed. */
   degraded: number;
 }
@@ -80,7 +77,6 @@ export interface ImportResult {
   settings: AppSettings;
   lots: StockLot[];
   soldLots: SoldLot[];
-  savedSimulations: SavedSimulation[];
   grants: GrantInfo[];
   warnings: string[];
   /** Structured tallies so the UI can show a before/after preview. */
@@ -105,7 +101,6 @@ export function buildBackup(input: BackupInput): BackupPayload {
     settings: input.settings,
     lots: input.lots,
     soldLots: input.soldLots,
-    savedSimulations: input.savedSimulations,
     // Always emit `grants` (possibly []) so v3 readers can distinguish
     // "no grants imported" from "older backup that didn't carry grants".
     grants: input.grants ?? [],
@@ -308,13 +303,6 @@ export function importFromJsonString(text: string, defaults: AppSettings): Impor
     warnings.push(`${rawSold.length - soldLots.length} vente(s) ignorée(s) car invalide(s).`);
   }
 
-  // SavedSimulations are advisory history; we accept them as-is if they look
-  // like objects with an id, since they're not used for calculations.
-  const rawSims = Array.isArray(parsed.savedSimulations) ? parsed.savedSimulations : [];
-  const savedSimulations = rawSims.filter(
-    (s): s is SavedSimulation => isObj(s) && typeof (s as { id?: unknown }).id === 'string'
-  );
-
   // v3+: StockExport grants. Re-validated with the same shape used by storage.ts.
   // Absent on v1/v2 backups → empty array.
   const rawGrants = Array.isArray(parsed.grants) ? parsed.grants : [];
@@ -340,7 +328,6 @@ export function importFromJsonString(text: string, defaults: AppSettings): Impor
     settings,
     lots,
     soldLots,
-    savedSimulations,
     grants,
     warnings,
     counts: {
@@ -350,7 +337,6 @@ export function importFromJsonString(text: string, defaults: AppSettings): Impor
       soldLotsRejected: rawSold.length - soldLots.length,
       grantsKept: grants.length,
       grantsRejected: rawGrants.length - grants.length,
-      savedSimulations: savedSimulations.length,
       degraded,
     },
     version: parsed.version,

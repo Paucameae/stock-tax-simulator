@@ -18,7 +18,6 @@ const CURRENT = {
   settings: DEFAULTS,
   lots: [],
   soldLots: [],
-  savedSimulations: [],
 };
 
 beforeEach(() => {
@@ -106,7 +105,6 @@ describe('BackupPanel', () => {
       settings: DEFAULTS,
       lots: [],
       soldLots: [],
-      savedSimulations: [],
     });
     const file = new File([valid], 'backup.json', { type: 'application/json' });
     fireEvent.change(input, { target: { files: [file] } });
@@ -152,9 +150,8 @@ describe('BackupPanel', () => {
   it('previews the before/after counts of the restore', async () => {
     const current = {
       settings: DEFAULTS,
-      lots: [],
+      lots: [{ id: 'a' }, { id: 'b' }] as never,
       soldLots: [],
-      savedSimulations: [{ id: 'a' }, { id: 'b' }] as never,
     };
     render(<BackupPanel current={current} defaults={DEFAULTS} onImport={vi.fn()} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -166,13 +163,12 @@ describe('BackupPanel', () => {
       settings: DEFAULTS,
       lots: [],
       soldLots: [],
-      savedSimulations: [],
     });
     fireEvent.change(input, {
       target: { files: [new File([valid], 'backup.json', { type: 'application/json' })] },
     });
 
-    const row = (await screen.findByRole('rowheader', { name: 'Simulations enregistrées' })).closest('tr')!;
+    const row = (await screen.findByRole('rowheader', { name: 'Positions' })).closest('tr')!;
     // Current 2 → 0 after restore: the loss must be visible in the preview.
     expect(row).toHaveTextContent('2');
     expect(row).toHaveTextContent('0');
@@ -189,7 +185,6 @@ describe('BackupPanel', () => {
       settings: DEFAULTS,
       lots: [{ nope: true }],
       soldLots: [],
-      savedSimulations: [],
     });
     fireEvent.change(input, {
       target: { files: [new File([withJunk], 'backup.json', { type: 'application/json' })] },

@@ -8,6 +8,13 @@
  * Last verified against impots.gouv.fr: 2026-05-10 (revenus 2025).
  */
 
+/**
+ * Date of the last cross-check of the rates, thresholds and case codes against
+ * impots.gouv.fr. Shown in the app header: bump it together with the data,
+ * never derive it from `new Date()`.
+ */
+export const TAX_DATA_VERIFIED_ON = '2026-05-10';
+
 export interface TaxCase {
   /** Code de la case telle qu'elle apparaît sur le formulaire officiel. */
   code: string;

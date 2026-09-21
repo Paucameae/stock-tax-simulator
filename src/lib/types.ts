@@ -262,15 +262,6 @@ export interface AppSettings {
   priorLosses: number;
 }
 
-export interface SavedSimulation {
-  id: string;
-  date: string;
-  name: string;
-  result: TaxSimulationResult;
-  settings: AppSettings;
-  lots: SaleLotEntry[];
-}
-
 export interface DeclarationData {
   fiscalYear: number;
   case3VG: number;

@@ -3,7 +3,7 @@ import { Input } from './ui/input';
 import { Select } from './ui/select';
 import { Button } from './ui/button';
 import { Settings as SettingsIcon, Check, FileText, ShieldCheck, Users } from 'lucide-react';
-import type { AppSettings, FamilyStatus, GrantInfo, StockLot, SoldLot, SavedSimulation } from '../lib/types';
+import type { AppSettings, FamilyStatus, GrantInfo, StockLot, SoldLot } from '../lib/types';
 import { Tooltip } from './ui/tooltip';
 import { saveVersionedSettings } from '../lib/storage';
 import { TaxNoticeImporter } from './TaxNoticeImporter';
@@ -16,7 +16,6 @@ interface SettingsProps {
   defaults?: AppSettings;
   lots?: StockLot[];
   soldLots?: SoldLot[];
-  savedSimulations?: SavedSimulation[];
   grants?: GrantInfo[];
   onBackupImport?: (result: ImportResult) => void;
 }
@@ -85,7 +84,7 @@ function AccentCard({ title, icon, stripe, header, iconColor, children, footer }
   );
 }
 
-export function Settings({ settings, onSettingsChange, defaults, lots = [], soldLots = [], savedSimulations = [], grants = [], onBackupImport }: SettingsProps) {
+export function Settings({ settings, onSettingsChange, defaults, lots = [], soldLots = [], grants = [], onBackupImport }: SettingsProps) {
   const [local, setLocal] = React.useState(settings);
   const [lastSyncedSettings, setLastSyncedSettings] = React.useState(settings);
   const [saved, setSaved] = React.useState(false);
@@ -307,7 +306,7 @@ export function Settings({ settings, onSettingsChange, defaults, lots = [], sold
             iconColor="text-slate-600"
           >
             <BackupPanel
-              current={{ settings, lots, soldLots, savedSimulations, grants }}
+              current={{ settings, lots, soldLots, grants }}
               defaults={defaults}
               onImport={onBackupImport}
               embedded
