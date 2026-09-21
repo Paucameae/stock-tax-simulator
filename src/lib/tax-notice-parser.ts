@@ -1,10 +1,23 @@
-import * as pdfjsLib from 'pdfjs-dist';
+// pdfjs-dist weighs ~400 kB and is only needed if the user actually imports an
+// avis d'imposition, so it is fetched on first use instead of riding along with
+// the Settings chunk.
+let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | undefined;
 
-// Configure worker - use local file to avoid supply chain attacks from CDNs
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  '/pdf.worker.min.mjs',
-  import.meta.url
-).href;
+function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
+  pdfjsPromise ??= import('pdfjs-dist')
+    .then((lib) => {
+      // Local worker file: a CDN would be a supply-chain risk.
+      lib.GlobalWorkerOptions.workerSrc = new URL('/pdf.worker.min.mjs', import.meta.url).href;
+      return lib;
+    })
+    // Don't cache a failed load, otherwise a transient network error would make
+    // every later retry fail until the page is reloaded.
+    .catch((err) => {
+      pdfjsPromise = undefined;
+      throw err;
+    });
+  return pdfjsPromise;
+}
 
 export interface TaxNoticeData {
   familyStatus?: 'single' | 'couple';
@@ -21,6 +34,7 @@ export interface TaxNoticeData {
  * Extract text content from a PDF file, reconstructing lines from Y coordinates.
  */
 async function extractTextFromPdf(file: File): Promise<string> {
+  const pdfjsLib = await loadPdfjs();
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 

@@ -5,7 +5,6 @@ import { Alert } from './ui/alert';
 import { Tooltip } from './ui/tooltip';
 import { Select } from './ui/select';
 import { Briefcase, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Info, X, AlertTriangle, RefreshCw } from 'lucide-react';
-import { Treemap, ResponsiveContainer } from 'recharts';
 import type { Broker, StockLot, StockOrigin, GrantInfo } from '../lib/types';
 import type { DividendEvent, CashInterestEvent } from '../lib/transaction-parser';
 import { brokerLabel, formatEUR, formatUSD, formatDate, originLabel, planTypeLabel, qualificationReasonLabel, qualificationReasonShort, isDripQualifiedInconsistent, DERIVED_PLAN_TYPE_HINT } from '../lib/utils';
@@ -20,6 +19,10 @@ import { countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from '
 import { useMsftPrice } from '../hooks/useMsftPrice';
 import { lotMarketValue, lotUnrealizedGain, portfolioTotals } from '../lib/portfolio-value';
 
+// recharts + d3 weigh ~250 kB for one decorative chart, so they are fetched
+// only once a portfolio actually has several buckets to show.
+const PortfolioTreemap = React.lazy(() => import('./PortfolioTreemap'));
+
 interface PortfolioProps {
   lots: StockLot[];
   onLotsChange: (lots: StockLot[]) => void;
@@ -32,6 +35,8 @@ interface PortfolioProps {
   hasGrants?: boolean;
   /** ISO date of the last positions import, used to date the fallback valuation. */
   importedAt?: string | null;
+  /** False while the tab is hidden: a chart measured inside `hidden` gets 0×0. */
+  visible?: boolean;
 }
 
 // Threshold under which the lot table auto-opens — small portfolios fit on one
@@ -58,7 +63,7 @@ const BROKER_COLORS: Record<string, string> = {
 
 type GroupBy = 'origin' | 'holding' | 'broker';
 
-export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [], onBulkQualify, hasGrants = false, importedAt = null }: PortfolioProps) {
+export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [], onBulkQualify, hasGrants = false, importedAt = null, visible = true }: PortfolioProps) {
   const { eurPrice, lastUpdated, loading: priceLoading, error: priceError, retry: retryPrice } = useMsftPrice();
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
   const [filterHolding, setFilterHolding] = React.useState<'all' | 'Short' | 'Long'>('all');
@@ -196,7 +201,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
 
   // Hide the treemap when it would degenerate to a single full-width tile —
   // it adds visual noise without conveying any breakdown.
-  const showTreemap = treemapData.length >= 2 && totals.value > 0;
+  const showTreemap = visible && treemapData.length >= 2 && totals.value > 0;
 
   const handlePlanTypeChange = (lotId: string, planType: string) => {
     const updated = lots.map((l) => {
@@ -355,16 +360,9 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                 </Select>
               </div>
               <div className="h-32 sm:h-36">
-                <ResponsiveContainer width="100%" height="100%">
-                  <Treemap
-                    data={treemapData}
-                    dataKey="value"
-                    aspectRatio={4 / 3}
-                    stroke="#fff"
-                    isAnimationActive={false}
-                    content={<TreemapTile total={totals.value} />}
-                  />
-                </ResponsiveContainer>
+                <React.Suspense fallback={null}>
+                  <PortfolioTreemap data={treemapData} total={totals.value} />
+                </React.Suspense>
               </div>
             </div>
           )}
@@ -600,83 +598,6 @@ function ValuationSource({
         Réessayer
       </button>
     </p>
-  );
-}
-
-interface TreemapTileNodeProps {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  index?: number;
-  // Recharts spreads bucket props at top level (name, value, fill, plus our own
-  // custom fields like `code`) onto the content component.
-  name?: string;
-  value?: number;
-  fill?: string;
-  code?: string;
-  [key: string]: unknown;
-}
-
-// Custom tile renderer for the allocation treemap. Text is rendered through a
-// `<foreignObject>` so the browser uses its native font rasteriser (much
-// crisper than SVG `<text>`). A native `title` attribute provides a tooltip on
-// hover for every tile, including slivers too small to show any inline text.
-function TreemapTile({ total, ...nodeProps }: { total: number } & TreemapTileNodeProps) {
-  const { x = 0, y = 0, width = 0, height = 0 } = nodeProps;
-  const name = nodeProps.name ?? '';
-  const code = nodeProps.code ?? name;
-  const value = nodeProps.value ?? 0;
-  const fill = nodeProps.fill ?? '#888';
-  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-  const tooltip = `${name} · ${formatEUR(value)} · ${pct} %`;
-
-  // Choose what fits inside the rectangle. For unusable sizes we still render
-  // the rect (and keep the tooltip via `title`) so the colour stays visible.
-  const showFull = width > 70 && height > 36;
-  const showAmount = width > 90 && height > 56;
-  const showCodeOnly = !showFull && width > 26 && height > 18;
-
-  return (
-    <g>
-      <title>{tooltip}</title>
-      <rect x={x} y={y} width={width} height={height} fill={fill} stroke="#fff" strokeWidth={2} />
-      {(showFull || showCodeOnly) && (
-        <foreignObject x={x} y={y} width={width} height={height} style={{ pointerEvents: 'none' }}>
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              boxSizing: 'border-box',
-              padding: showFull ? '6px 8px' : '0',
-              color: '#fff',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: showFull ? 'flex-start' : 'center',
-              alignItems: showFull ? 'flex-start' : 'center',
-              fontFamily: 'inherit',
-              lineHeight: 1.2,
-              userSelect: 'none',
-            }}
-          >
-            {showFull ? (
-              <>
-                <div style={{ fontSize: '12px', fontWeight: 600 }}>
-                  {name} <span style={{ fontWeight: 400, opacity: 0.85, marginLeft: 4 }}>{pct} %</span>
-                </div>
-                {showAmount && (
-                  <div style={{ fontSize: '11px', opacity: 0.9, marginTop: 2 }}>
-                    {formatEUR(value)}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div style={{ fontSize: '11px', fontWeight: 600 }}>{code}</div>
-            )}
-          </div>
-        </foreignObject>
-      )}
-    </g>
   );
 }
 

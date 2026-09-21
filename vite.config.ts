@@ -69,12 +69,14 @@ export default defineConfig({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        // Keep heavy optional deps in their own chunks so the initial bundle
-        // stays small; lazy-loaded components pull these chunks on demand.
+        // Only deps that are genuinely in the entry's static graph are pinned
+        // to a named chunk, for long-term caching. pdfjs-dist and recharts are
+        // deliberately NOT listed: a manual chunk gets hoisted into the entry's
+        // `modulepreload` list even when every path to it is a dynamic import,
+        // which is how 654 kB ended up being fetched on first paint. Left
+        // alone, Rollup splits them naturally at their `import()` boundary.
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('pdfjs-dist')) return 'pdf';
-            if (id.includes('recharts') || id.includes('/d3-')) return 'charts';
             if (id.includes('lucide-react')) return 'icons';
             if (id.includes('react-dom') || /\/react\//.test(id)) return 'react-vendor';
           }

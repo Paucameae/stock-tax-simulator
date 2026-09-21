@@ -1014,7 +1014,7 @@ function App() {
             )}
             {lots.length > 0 && (
               <React.Suspense fallback={<LazyFallback />}>
-                <Portfolio lots={lots} onLotsChange={setLots} onBulkQualify={handleBulkQualifyLots} hasGrants={grants.length > 0} grants={grants} dividends={dividends} cashInterest={cashInterest} importedAt={lotsImportedAt} />
+                <Portfolio lots={lots} onLotsChange={setLots} onBulkQualify={handleBulkQualifyLots} hasGrants={grants.length > 0} grants={grants} dividends={dividends} cashInterest={cashInterest} importedAt={lotsImportedAt} visible={activeTab === 'portfolio'} />
               </React.Suspense>
             )}
           </div>
