@@ -17,11 +17,25 @@ import {
 import { ManualRateDialog, type MissingRateEntry } from './ManualRateDialog';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { brokerLabel, formatEUR, formatUSD, originLabel } from '../lib/utils';
+import { decodeTextFile } from '../lib/text-decoding';
 import type { Broker, StockLot, SoldLot } from '../lib/types';
 import type { DividendEvent } from '../lib/transaction-parser';
 
 type ImportMode = 'positions' | 'sales';
 type FileKind = 'positions' | 'sales' | 'activity';
+
+function readAsArrayBuffer(file: File) {
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as ArrayBuffer);
+    r.onerror = () => reject(new Error('Lecture impossible.'));
+    r.readAsArrayBuffer(file);
+  });
+}
+
+async function readAsText(file: File) {
+  return decodeTextFile(await readAsArrayBuffer(file));
+}
 
 interface CsvImporterProps {
   /**
@@ -420,22 +434,6 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   // route each dropped file by content (no positions/sales toggle).
   const isAutoDetect = broker === 'morgan_stanley';
   const accept = isAutoDetect ? '.csv,.xlsx' : '.csv';
-
-  const readAsText = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.onerror = () => reject(new Error('Lecture impossible.'));
-      r.readAsText(file, 'utf-8');
-    });
-
-  const readAsArrayBuffer = (file: File) =>
-    new Promise<ArrayBuffer>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as ArrayBuffer);
-      r.onerror = () => reject(new Error('Lecture impossible.'));
-      r.readAsArrayBuffer(file);
-    });
 
   const handleFiles = useCallback(
     async (files: File[]) => {

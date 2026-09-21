@@ -9,6 +9,7 @@ import { transactionHistoryGuide } from './guides/transaction-history-steps';
 import { DividendsSummary } from './DividendsSummary';
 import { parseTransactionHistoryCsv, type DividendEvent, type CashInterestEvent } from '../lib/transaction-parser';
 import { brokerLabel } from '../lib/utils';
+import { decodeTextFile } from '../lib/text-decoding';
 import type { Broker } from '../lib/types';
 
 interface DividendsImporterProps {
@@ -46,7 +47,7 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
     setFileName(file.name);
     setLoading(true);
     try {
-      const content = await file.text();
+      const content = decodeTextFile(await file.arrayBuffer());
       const parsed = parseTransactionHistoryCsv(content);
       if (parsed.dividends.length === 0 && parsed.cashInterest.length === 0) {
         setError(`Aucun dividende reconnu dans ce fichier. Vérifiez qu'il s'agit bien d'un historique des transactions ${brokerLabel(broker)}.`);
