@@ -16,7 +16,7 @@ détention, et la conversion USD→EUR au taux BCE historique.
   `/api/msft-quote` (proxy vers Finnhub, cache 5 min, rate-limit 20 req/min/IP)
   et `/api/ai-assistant` (assistant « Expliquer ce calcul » via Azure OpenAI,
   grounded, rate-limit 12 req/min/IP)
-- **Tests** : Vitest + Testing Library (578 tests) + smoke Playwright
+- **Tests** : Vitest + Testing Library (600 tests) + smoke Playwright
 - **CI** : GitHub Actions (lint, type-check, tests, e2e, `npm audit`)
 - **Déploiement** : Azure Static Web Apps, conditionné au succès de la CI
 - **Stockage** : `localStorage` versionné (schéma v2)
@@ -114,7 +114,7 @@ src/
     TaxCalculator.tsx      Résultat fiscal détaillé
     PfuVsBaremeComparator  Comparatif des 2 régimes
     Portfolio.tsx          Vue d'ensemble du portefeuille
-    DeclarationGuide.tsx   Générateur de cases 2042 / 2074
+    DeclarationGuide.tsx   Générateur de cases 2042 / 2074 + exports xlsx / PDF
     Settings.tsx           Paramètres + import PDF avis d'imposition
     BackupPanel.tsx        Export / import JSON de toutes les données
     TaxRulesPanel.tsx      Rappel des règles fiscales
@@ -133,6 +133,8 @@ src/
     thresholds.ts          Détection centralisée des seuils (300k, CEHR)
     lot-ranking.ts         Classement des lots par taux effectif
     declaration.ts         Génération des cases 2042 / 2074 / PS
+    declaration-pdf.ts     Composition du récapitulatif PDF archivable
+    pdf-writer.ts          Écrivain PDF minimal (sans dépendance)
     csv-parser.ts          Parsing CSV (papaparse) + garde-fous
     tax-notice-parser.ts   Extraction PDF avis d'imposition
     ecb-rates.ts           Client API BCE (taux historiques EUR/USD)

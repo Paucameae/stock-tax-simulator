@@ -823,7 +823,12 @@ function App() {
                   <TaxCalculator result={declResult} taxMode={declTaxMode} onTaxModeChange={handleDeclTaxModeChange} fiscalYear={declFiscalYear} familyStatus={settings.familyStatus} />
                 )}
                 {declResult && (
-                  <DeclarationGuide result={declResult} lots={declEntries} fiscalYear={declFiscalYear} />
+                  <DeclarationGuide
+                    result={declResult}
+                    lots={declEntries}
+                    fiscalYear={declFiscalYear}
+                    settings={settings}
+                  />
                 )}
                 {dividends.length > 0 && (
                   <DividendsDeclaration dividends={dividends} fiscalYear={declFiscalYear} />

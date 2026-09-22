@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { ExplainButton } from './ui/ExplainButton';
 import { FileText, Copy, Check, Download, Printer } from 'lucide-react';
-import type { TaxSimulationResult, SaleLotEntry } from '../lib/types';
+import type { TaxSimulationResult, SaleLotEntry, AppSettings } from '../lib/types';
 import { generateDeclaration, formatDeclarationText, groupForm2074Lines, buildForm2074Rows } from '../lib/declaration';
 import { FORM_2042, FORM_2042C_AGA_MACRON, FORM_2074_CADRE_510 } from '../lib/tax-forms';
 import { buildXlsxBlob, downloadBlob } from '../lib/xlsx-writer';
@@ -16,9 +16,10 @@ interface DeclarationGuideProps {
   result: TaxSimulationResult | null;
   lots: SaleLotEntry[];
   fiscalYear: number;
+  settings: AppSettings;
 }
 
-export const DeclarationGuide = React.memo(function DeclarationGuide({ result, lots, fiscalYear }: DeclarationGuideProps) {
+export const DeclarationGuide = React.memo(function DeclarationGuide({ result, lots, fiscalYear, settings }: DeclarationGuideProps) {
   const [copied, setCopied] = React.useState(false);
   const [groupLines, setGroupLines] = React.useState(false);
 
@@ -58,6 +59,27 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
     const suffix = groupLines ? '-regroupe' : '';
     downloadBlob(blob, `formulaire-2074-${fiscalYear}${suffix}.xlsx`);
   };
+
+  // Pièce justificative horodatée : paramètres + calcul + cases + annexe 2074
+  // dans un seul fichier, indépendant de la mise en page de l'écran. Le
+  // générateur est chargé à la demande pour ne pas peser sur le bundle initial.
+  const handleExportPdf = async () => {
+    const [{ buildPdfBlob }, { buildDeclarationPdfDocument, declarationPdfFilename }] = await Promise.all([
+      import('../lib/pdf-writer'),
+      import('../lib/declaration-pdf'),
+    ]);
+    const generatedAt = new Date();
+    const doc = buildDeclarationPdfDocument({
+      declaration: baseDeclaration,
+      result,
+      settings,
+      lines: displayedLines,
+      grouped: groupLines,
+      generatedAt,
+    });
+    downloadBlob(buildPdfBlob(doc), declarationPdfFilename(fiscalYear, generatedAt));
+  };
+
   return (
     <div className="space-y-6" data-print-root>
       <Card>
@@ -91,6 +113,16 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
               <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1">
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? 'Copié !' : 'Copier'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
+                className="gap-1"
+                title="Télécharger un récapitulatif PDF horodaté à archiver"
+              >
+                <Download className="h-4 w-4" />
+                Exporter en PDF
               </Button>
               <Button
                 variant="outline"
