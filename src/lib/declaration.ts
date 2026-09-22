@@ -101,8 +101,13 @@ export function generateDeclaration(
   const option2OP = taxMode === 'bareme';
   const case3SG = capitalGainTax.holdingAbatement;
 
+  // Case 6DE : seules les CSG assises sur des revenus du patrimoine s'y
+  // reportent (PV de cession, gain d'acquisition ≤ 300 k€). La CSG assise sur
+  // la fraction imposée en traitements et salaires se déduit du revenu
+  // catégoriel correspondant, pas du revenu global.
   const deductibleCSGNextYear =
-    acquisitionGainTax.deductibleCSG + capitalGainTax.deductibleCSG;
+    acquisitionGainTax.deductibleCSGPatrimoine + capitalGainTax.deductibleCSG;
+  const deductibleCSGSalaryNextYear = acquisitionGainTax.deductibleCSGActivite;
 
   // Form 2074 lines.
   // Tri déterministe pour que l'affichage soit stable indépendamment de
@@ -165,6 +170,7 @@ export function generateDeclaration(
     option2OP,
     case3SG,
     deductibleCSGNextYear,
+    deductibleCSGSalaryNextYear,
     form2074Lines,
     psDetails,
   };
@@ -227,6 +233,8 @@ export function formatDeclarationText(data: DeclarationData): string {
   text += `- Le gain d'acquisition n'est imposé que l'année de la VENTE des actions, pas au vesting.\n`;
   if (data.deductibleCSGNextYear > 0)
     text += `- La CSG déductible de ${fmt(data.deductibleCSGNextYear)} sera à reporter en case 6DE de la déclaration N+1.\n`;
+  if (data.deductibleCSGSalaryNextYear > 0)
+    text += `- La CSG déductible de ${fmt(data.deductibleCSGSalaryNextYear)} sur la fraction imposée en traitements et salaires se déduit de ce revenu catégoriel en N+1 (pas en case 6DE).\n`;
   if (data.case3VH > 0)
     text += `- La moins-value de ${fmt(data.case3VH)} est reportable pendant 10 ans.\n`;
   // Imputation MV → gain d'acquisition AGA : l'app le fait DÉJÀ automatiquement

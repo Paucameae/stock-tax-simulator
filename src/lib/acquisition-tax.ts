@@ -47,7 +47,8 @@ export function calculateAcquisitionGainTax(
     return {
       below300k: 0, above300k: 0, abatement50: 0,
       irBelow: 0, irAbove: 0, psBelow: 0, psAbove: 0,
-      salaryContribution: 0, deductibleCSG: 0, total: 0,
+      salaryContribution: 0, deductibleCSGPatrimoine: 0, deductibleCSGActivite: 0,
+      deductibleCSG: 0, total: 0,
     };
   }
 
@@ -92,7 +93,17 @@ export function calculateAcquisitionGainTax(
     calculateProgressiveTax(otherIncome + taxableBelow + above, taxShares, config) -
     calculateProgressiveTax(otherIncome + taxableBelow, taxShares, config);
 
-  const deductibleCSG = totalAcquisitionGain * csgDeductible;
+  // CGI art. 154 quinquies, II, b) : pour les avantages de l'article 80
+  // quaterdecies bénéficiant de l'abattement de 50 % (CGI art. 200 A, 3), la
+  // CSG n'est déductible qu'à hauteur du rapport base IR / base sociale.
+  // L'assiette sociale est le gain brut, la base IR le gain après abattement :
+  // appliquer les 6,8 points à l'assiette IR produit exactement ce rapport
+  // (6,8 × 50 % = 3,4 points effectifs pour un abattement de 50 %).
+  const deductibleCSGPatrimoine = taxableBelow * csgDeductible;
+  // Fraction > 300 k€ : CSG sur revenus d'activité, sans abattement donc sans
+  // proratisation. Déductible du revenu catégoriel traitements et salaires
+  // (CGI art. 154 quinquies, I), et non en case 6DE.
+  const deductibleCSGActivite = above * csgDeductible;
 
   return {
     below300k: below,
@@ -103,11 +114,12 @@ export function calculateAcquisitionGainTax(
     psBelow,
     psAbove,
     salaryContribution,
-    deductibleCSG,
+    deductibleCSGPatrimoine,
+    deductibleCSGActivite,
+    deductibleCSG: deductibleCSGPatrimoine + deductibleCSGActivite,
     total: irBelow + irAbove + psBelow + psAbove + salaryContribution,
   };
 }
-
 function calculatePreMacronAcquisitionGainTax(
   totalAcquisitionGain: number,
   otherIncome: number,
@@ -142,6 +154,8 @@ function calculatePreMacronAcquisitionGainTax(
       calculateProgressiveTax(otherIncome, taxShares, config);
     const ps = totalAcquisitionGain * psPatrimoine;
     const salaryContribution = isPre2007Grant ? 0 : totalAcquisitionGain * salaryRate;
+    // PS patrimoine et aucun abattement : pas de proratisation (CGI art. 154
+    // quinquies, II) — 6,8 points de l'assiette, à reporter en case 6DE.
     const deductibleCSG = totalAcquisitionGain * csgDeductible;
 
     return {
@@ -153,6 +167,8 @@ function calculatePreMacronAcquisitionGainTax(
       psBelow: ps,
       psAbove: 0,
       salaryContribution,
+      deductibleCSGPatrimoine: deductibleCSG,
+      deductibleCSGActivite: 0,
       deductibleCSG,
       total: ir + ps + salaryContribution,
     };
@@ -162,6 +178,8 @@ function calculatePreMacronAcquisitionGainTax(
       calculateProgressiveTax(otherIncome, taxShares, config);
     const ps = totalAcquisitionGain * psActivite;
     const salaryContribution = totalAcquisitionGain * salaryRate;
+    // Gain imposé en traitements et salaires : CSG d'activité, 6,8 points
+    // déductibles du revenu catégoriel (CGI art. 154 quinquies, I), pas en 6DE.
     const deductibleCSG = totalAcquisitionGain * csgDeductible;
 
     return {
@@ -173,6 +191,8 @@ function calculatePreMacronAcquisitionGainTax(
       psBelow: ps,
       psAbove: 0,
       salaryContribution,
+      deductibleCSGPatrimoine: 0,
+      deductibleCSGActivite: deductibleCSG,
       deductibleCSG,
       total: ir + ps + salaryContribution,
     };

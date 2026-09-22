@@ -312,8 +312,14 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
           {/* CSG déductible reminder */}
           {(r.acquisitionGainTax.deductibleCSG > 0 || r.capitalGainTax.deductibleCSG > 0) && (
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-800">
-              💡 CSG déductible à reporter l'année suivante :{' '}
+              💡 CSG déductible l'année suivante :{' '}
               <strong>{formatEUR(r.acquisitionGainTax.deductibleCSG + r.capitalGainTax.deductibleCSG)}</strong>
+              {r.acquisitionGainTax.deductibleCSGActivite > 0 && (
+                <>
+                  {' '}— dont <strong>{formatEUR(r.acquisitionGainTax.deductibleCSGActivite)}</strong> déductibles du revenu
+                  catégoriel traitements et salaires, et non en case 6DE.
+                </>
+              )}
             </div>
           )}
         </CardContent>
