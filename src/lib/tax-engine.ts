@@ -215,6 +215,8 @@ export function runSimulation(simulation: SaleSimulation): TaxSimulationResult {
     psBelow: macronTax.psBelow + fqTax.psBelow,
     psAbove: macronTax.psAbove + fqTax.psAbove,
     salaryContribution: macronTax.salaryContribution + fqTax.salaryContribution,
+    deductibleCSGPatrimoine: macronTax.deductibleCSGPatrimoine + fqTax.deductibleCSGPatrimoine,
+    deductibleCSGActivite: macronTax.deductibleCSGActivite + fqTax.deductibleCSGActivite,
     deductibleCSG: macronTax.deductibleCSG + fqTax.deductibleCSG,
     total: macronTax.total + fqTax.total,
   };

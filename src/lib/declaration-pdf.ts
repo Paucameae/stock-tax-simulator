@@ -212,6 +212,12 @@ function reminderBlocks(data: DeclarationData): PdfBlock[] {
         `des revenus ${data.fiscalYear + 1}.`
     );
   }
+  if (data.deductibleCSGSalaryNextYear > 0) {
+    reminders.push(
+      `La CSG de ${formatEUR(data.deductibleCSGSalaryNextYear)} assise sur la fraction imposée en traitements et ` +
+        `salaires se déduit de ce revenu catégoriel en ${data.fiscalYear + 1}, et non en case 6DE.`
+    );
+  }
   if (data.case3VH > 0) {
     reminders.push(`La moins-value de ${formatEUR(data.case3VH)} est reportable pendant 10 ans.`);
   }

@@ -156,9 +156,11 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
               <span aria-hidden className="mt-0.5">💡</span>
               <p>
                 <strong>Pensez à la CSG déductible.</strong> La CSG (6,8 %) acquittée sur vos revenus
-                du patrimoine et de placement de {fiscalYear - 1} est déductible de votre revenu global de{' '}
+                du patrimoine de {fiscalYear - 1} est déductible de votre revenu global de{' '}
                 {fiscalYear}, à reporter en case <strong>6DE</strong> du formulaire 2042. Ce montant est en
-                principe pré-rempli par l'administration ; vérifiez-le.
+                principe pré-rempli par l'administration ; vérifiez-le. La CSG sur vos revenus de
+                placement (dividendes), prélevée à la source, est quant à elle déduite automatiquement
+                l'année de son prélèvement.
               </p>
             </div>
 
@@ -367,6 +369,12 @@ export const DeclarationGuide = React.memo(function DeclarationGuide({ result, l
                 {declaration.deductibleCSGNextYear > 0 && (
                   <li>
                     La CSG déductible de <strong>{formatEUR(declaration.deductibleCSGNextYear)}</strong> sera à reporter en <strong>case 6DE</strong> de la déclaration N+1.
+                  </li>
+                )}
+                {declaration.deductibleCSGSalaryNextYear > 0 && (
+                  <li>
+                    La CSG de <strong>{formatEUR(declaration.deductibleCSGSalaryNextYear)}</strong> assise sur la fraction imposée en
+                    traitements et salaires se déduit de ce revenu catégoriel en N+1 — <strong>pas</strong> en case 6DE.
                   </li>
                 )}
                 {declaration.case3SG > 0 && (

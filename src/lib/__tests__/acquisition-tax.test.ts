@@ -60,15 +60,33 @@ describe('calculateAcquisitionGainTax', () => {
     it('applies PS activité (not patrimoine) on fraction above 300k€', () => {
       const gain = 400000;
       const r = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_macron', undefined, 0.5, cfg2025);
-      // psAbove uses psActivite (11.1% in 2025), not psPatrimoine (18.6%)
+      // psAbove uses psActivite (9.7%), not psPatrimoine (18.6%)
       expect(r.psAbove).toBeCloseTo(100000 * cfg2025.psActivite, 2);
       expect(r.psBelow).toBeCloseTo(AGA_THRESHOLD * cfg2025.psPatrimoine, 2);
     });
 
-    it('computes deductible CSG on the full gain', () => {
+    it('proratise la CSG déductible avec l\'abattement (CGI 154 quinquies II b)', () => {
       const gain = 100000;
       const r = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_macron', undefined, 0.5, cfg2025);
-      expect(r.deductibleCSG).toBeCloseTo(gain * cfg2025.csgDeductible, 2);
+      // Assiette sociale = gain brut, base IR = gain après abattement : la CSG
+      // n'est déductible qu'au prorata, soit 6,8 × 50 % = 3,4 points effectifs.
+      expect(r.deductibleCSGPatrimoine).toBeCloseTo(gain * 0.5 * cfg2025.csgDeductible, 2);
+      expect(r.deductibleCSGActivite).toBe(0);
+      expect(r.deductibleCSG).toBeCloseTo(r.deductibleCSGPatrimoine, 2);
+    });
+
+    it('ne proratise pas la fraction > 300 k€ et la classe en CSG d\'activité', () => {
+      const gain = 400000;
+      const r = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_macron', undefined, 0.5, cfg2025);
+      // Aucun abattement au-delà du seuil : rapport base IR / base sociale = 1.
+      expect(r.deductibleCSGActivite).toBeCloseTo(100000 * cfg2025.csgDeductible, 2);
+      expect(r.deductibleCSGPatrimoine).toBeCloseTo(AGA_THRESHOLD * 0.5 * cfg2025.csgDeductible, 2);
+    });
+
+    it('déduit la totalité des 6,8 points quand aucun abattement ne s\'applique', () => {
+      const gain = 100000;
+      const r = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_macron', undefined, 0, cfg2025);
+      expect(r.deductibleCSGPatrimoine).toBeCloseTo(gain * cfg2025.csgDeductible, 2);
     });
 
     it('IR stacks on top of other income (progressive)', () => {
@@ -144,6 +162,23 @@ describe('calculateAcquisitionGainTax', () => {
       const grantDate = new Date(2010, 5, 15); // before sep-28-2012
       const r = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_pre_macron', grantDate, 0.5, cfg2025);
       expect(r.psBelow).toBeCloseTo(gain * cfg2025.psPatrimoine, 2);
+    });
+
+    it("classe la CSG déductible selon l'assiette sociale du sous-régime", () => {
+      const gain = 100000;
+      const expected = gain * cfg2025.csgDeductible;
+
+      // Post-28/09/2012 : gain imposé en traitements et salaires → CSG
+      // d'activité, déductible du revenu catégoriel, jamais en case 6DE.
+      const activite = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_pre_macron', new Date(2015, 0, 1), 0.5, cfg2025);
+      expect(activite.deductibleCSGActivite).toBeCloseTo(expected, 2);
+      expect(activite.deductibleCSGPatrimoine).toBe(0);
+
+      // Avant le 28/09/2012 : PS patrimoine → case 6DE. Aucun abattement dans
+      // les deux cas, donc aucune proratisation.
+      const patrimoine = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_pre_macron', new Date(2010, 5, 15), 0.5, cfg2025);
+      expect(patrimoine.deductibleCSGPatrimoine).toBeCloseTo(expected, 2);
+      expect(patrimoine.deductibleCSGActivite).toBe(0);
     });
 
     it('applies salary contribution on full gain', () => {

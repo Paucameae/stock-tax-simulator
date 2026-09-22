@@ -235,9 +235,11 @@ describe('calculateAcquisitionGainTax', () => {
     });
   });
 
-  it('computes deductible CSG on total acquisition gain', () => {
+  it('computes deductible CSG prorated by the abatement', () => {
     const result = calculateAcquisitionGainTax(200000, 80000, 2, 'qualified_macron', undefined, 0.5);
-    expect(result.deductibleCSG).toBeCloseTo(200000 * 0.068, 2);
+    // 6,8 points appliqués à la base IR (200 000 − 50 % d'abattement).
+    expect(result.deductibleCSG).toBeCloseTo(100000 * 0.068, 2);
+    expect(result.deductibleCSGActivite).toBe(0);
   });
 });
 

@@ -10,7 +10,8 @@ function makeResult(overrides: Partial<TaxSimulationResult> = {}): TaxSimulation
     acquisitionGainTax: {
       below300k: 0, above300k: 0, abatement50: 0,
       irBelow: 0, irAbove: 0, psBelow: 0, psAbove: 0,
-      salaryContribution: 0, deductibleCSG: 0, total: 0,
+      salaryContribution: 0, deductibleCSGPatrimoine: 0, deductibleCSGActivite: 0,
+      deductibleCSG: 0, total: 0,
     },
     capitalGainTax: {
       grossGain: 0, netGain: 0, ir: 0, ps: 0,

@@ -220,6 +220,21 @@ export interface AcquisitionGainTaxResult {
   psBelow: number;
   psAbove: number;
   salaryContribution: number;
+  /**
+   * CSG déductible on the fraction taxed as "revenus du patrimoine" (Macron
+   * ≤ 300 k€, grants before 28/09/2012). Charge du revenu global de l'année de
+   * paiement du rôle, pré-remplie en case 6DE. Prorated per CGI art. 154
+   * quinquies, II, b) when the 50 % abatement applies.
+   */
+  deductibleCSGPatrimoine: number;
+  /**
+   * CSG déductible on the fraction taxed as "revenus d'activité" (Macron
+   * > 300 k€, pre-Macron grants 28/09/2012 → 07/08/2015). Deducted from the
+   * "traitements et salaires" catégoriel income (CGI art. 154 quinquies, I),
+   * NOT reported in case 6DE.
+   */
+  deductibleCSGActivite: number;
+  /** Sum of both fractions, for callers that only display a total. */
   deductibleCSG: number;
   total: number;
 }
@@ -271,7 +286,13 @@ export interface DeclarationData {
   case1TT: number;
   option2OP: boolean;
   case3SG: number;
+  /** CSG déductible du revenu global en N+1 — case 6DE (fraction patrimoine). */
   deductibleCSGNextYear: number;
+  /**
+   * CSG déductible du revenu catégoriel traitements & salaires en N+1
+   * (gain d'acquisition imposé comme du salaire). Ne se reporte pas en 6DE.
+   */
+  deductibleCSGSalaryNextYear: number;
   form2074Lines: Form2074Line[];
   psDetails: PSDetails;
 }

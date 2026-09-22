@@ -96,6 +96,18 @@ describe('calculateCapitalGainTax', () => {
       expect(r.deductibleCSG).toBeCloseTo(10000 * cfg2025.csgDeductible, 2);
     });
 
+    it("ne proratise PAS la CSG déductible avec l'abattement pour durée de détention", () => {
+      // CGI art. 154 quinquies, II, al. 2 : la proratisation ne vise que
+      // l'abattement renforcé PME (150-0 D, 1 quater) et l'abattement fixe
+      // dirigeant (150-0 D ter). L'abattement de droit commun du 1 ter n'y
+      // figure pas : la CSG reste déductible sur l'assiette sociale entière.
+      const withAbatement = calculateCapitalGainTax(10000, 0, 'bareme', 50000, 1, 0, 6500, cfg2025);
+      const without = calculateCapitalGainTax(10000, 0, 'bareme', 50000, 1, 0, 0, cfg2025);
+      expect(withAbatement.holdingAbatement).toBe(6500);
+      expect(withAbatement.deductibleCSG).toBeCloseTo(without.deductibleCSG, 2);
+      expect(withAbatement.deductibleCSG).toBeCloseTo(10000 * cfg2025.csgDeductible, 2);
+    });
+
     it('IR stacks on top of other income (progressive)', () => {
       const low = calculateCapitalGainTax(10000, 0, 'bareme', 0, 1, 0, 0, cfg2025);
       const high = calculateCapitalGainTax(10000, 0, 'bareme', 100000, 1, 0, 0, cfg2025);

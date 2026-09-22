@@ -33,6 +33,8 @@ function makeResult(overrides: Partial<TaxSimulationResult> = {}): TaxSimulation
       psBelow: 1720,
       psAbove: 0,
       salaryContribution: 0,
+      deductibleCSGPatrimoine: 680,
+      deductibleCSGActivite: 0,
       deductibleCSG: 680,
       total: 3220,
     },
@@ -128,6 +130,23 @@ describe('generateDeclaration', () => {
   it('computes deductibleCSGNextYear', () => {
     const decl = generateDeclaration(result, [entry], 2024);
     expect(decl.deductibleCSGNextYear).toBe(680 + 340);
+  });
+
+  it("exclut de la case 6DE la CSG assise sur la fraction salariale", () => {
+    // La CSG sur la fraction > 300 k€ se déduit du revenu catégoriel
+    // traitements et salaires, pas du revenu global : elle ne doit jamais
+    // gonfler la case 6DE.
+    const withSalaryFraction = makeResult({
+      acquisitionGainTax: {
+        ...result.acquisitionGainTax,
+        deductibleCSGPatrimoine: 680,
+        deductibleCSGActivite: 1360,
+        deductibleCSG: 2040,
+      },
+    });
+    const decl = generateDeclaration(withSalaryFraction, [entry], 2024);
+    expect(decl.deductibleCSGNextYear).toBe(680 + 340);
+    expect(decl.deductibleCSGSalaryNextYear).toBe(1360);
   });
 
   it('clamps case1TZ to 0 if negative', () => {
