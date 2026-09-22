@@ -4,6 +4,9 @@ import {
   calculateCEHR,
   calculateCDHR,
   getTaxConfig,
+  resolveTaxYear,
+  FIRST_TAX_YEAR,
+  LATEST_TAX_YEAR,
 } from '../tax-rates';
 
 describe('calculateProgressiveTax', () => {
@@ -231,6 +234,12 @@ describe('getTaxConfig', () => {
   it('falls back to earliest config for past years', () => {
     const config = getTaxConfig(2020);
     expect(config).toEqual(getTaxConfig(2024));
+  });
+
+  it('reports whether the requested year is actually covered', () => {
+    expect(resolveTaxYear(2025)).toEqual({ covered: true, appliedYear: 2025 });
+    expect(resolveTaxYear(LATEST_TAX_YEAR + 1)).toEqual({ covered: false, appliedYear: LATEST_TAX_YEAR });
+    expect(resolveTaxYear(FIRST_TAX_YEAR - 1)).toEqual({ covered: false, appliedYear: FIRST_TAX_YEAR });
   });
 
   it('uses config in calculateProgressiveTax', () => {

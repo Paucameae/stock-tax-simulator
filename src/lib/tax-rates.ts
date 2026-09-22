@@ -113,16 +113,33 @@ const TAX_CONFIGS: Record<number, TaxConfig> = {
   2026: TAX_CONFIG_2026,
 };
 
+const TAX_YEARS = Object.keys(TAX_CONFIGS).map(Number).sort((a, b) => a - b);
+
+/** Oldest and newest fiscal years whose figures were checked against impots.gouv.fr. */
+export const FIRST_TAX_YEAR = TAX_YEARS[0];
+export const LATEST_TAX_YEAR = TAX_YEARS[TAX_YEARS.length - 1];
+
+/**
+ * Which year's figures `getTaxConfig` will actually apply.
+ *
+ * `covered` is false when the requested year has no verified configuration:
+ * the nearest one is substituted, which yields plausible amounts that are
+ * nonetheless wrong. Callers that display results must say so.
+ */
+export function resolveTaxYear(fiscalYear: number): { covered: boolean; appliedYear: number } {
+  if (TAX_CONFIGS[fiscalYear]) return { covered: true, appliedYear: fiscalYear };
+  return {
+    covered: false,
+    appliedYear: fiscalYear > LATEST_TAX_YEAR ? LATEST_TAX_YEAR : FIRST_TAX_YEAR,
+  };
+}
+
 /**
  * Get the tax configuration for a given fiscal year.
- * Falls back to the nearest available year.
+ * Falls back to the nearest available year — see `resolveTaxYear`.
  */
 export function getTaxConfig(fiscalYear: number): TaxConfig {
-  if (TAX_CONFIGS[fiscalYear]) return TAX_CONFIGS[fiscalYear];
-  const years = Object.keys(TAX_CONFIGS).map(Number).sort((a, b) => a - b);
-  // Use latest available config for future years, earliest for past years
-  if (fiscalYear > years[years.length - 1]) return TAX_CONFIGS[years[years.length - 1]];
-  return TAX_CONFIGS[years[0]];
+  return TAX_CONFIGS[resolveTaxYear(fiscalYear).appliedYear];
 }
 
 // ---- Default exports (latest config) for backward compatibility ----

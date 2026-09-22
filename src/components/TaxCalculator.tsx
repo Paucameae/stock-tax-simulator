@@ -4,7 +4,7 @@ import { Tooltip } from './ui/tooltip';
 import { ExplainButton } from './ui/ExplainButton';
 import { Receipt, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import type { TaxSimulationResult, TaxMode, FamilyStatus } from '../lib/types';
-import { getTaxConfig } from '../lib/tax-rates';
+import { getTaxConfig, resolveTaxYear } from '../lib/tax-rates';
 import { analyzeThresholds } from '../lib/thresholds';
 import { formatEUR, formatPercent } from '../lib/utils';
 
@@ -23,6 +23,7 @@ interface TaxCalculatorProps {
 
 export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode, fiscalYear, familyStatus = 'single' }: TaxCalculatorProps) {
   const cfg = React.useMemo(() => getTaxConfig(fiscalYear), [fiscalYear]);
+  const taxYear = React.useMemo(() => resolveTaxYear(fiscalYear), [fiscalYear]);
   const thresholds = React.useMemo(
     () => (result ? analyzeThresholds(result, fiscalYear, familyStatus) : null),
     [result, fiscalYear, familyStatus]
@@ -58,6 +59,24 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         Simulation mise à jour — montant net {formatEUR(r.netAmount)}, impôt total {formatEUR(r.totalTax)}.
       </div>
+      {!taxYear.covered && (
+        <div
+          className="flex items-start gap-3 p-4 rounded-lg border-2 border-red-300 bg-red-50 text-red-900"
+          role="alert"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="text-sm">
+            <p className="font-semibold">
+              Aucun barème vérifié pour {fiscalYear} — calcul effectué avec celui de {taxYear.appliedYear}
+            </p>
+            <p className="mt-1">
+              Barème de l'impôt, prélèvements sociaux et seuils sont ceux de {taxYear.appliedYear}. Tant que
+              les chiffres {fiscalYear} ne sont pas intégrés, traitez ces montants comme un ordre de grandeur
+              et non comme une estimation de votre imposition.
+            </p>
+          </div>
+        </div>
+      )}
       {exceedsAgaThreshold && (
         <div
           className="flex items-start gap-3 p-4 rounded-lg border-2 border-amber-300 bg-amber-50 text-amber-900"

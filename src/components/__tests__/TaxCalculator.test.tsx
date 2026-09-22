@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TaxCalculator } from '../TaxCalculator';
+import { LATEST_TAX_YEAR } from '../../lib/tax-rates';
 import type { TaxSimulationResult } from '../../lib/types';
 
 function makeResult(overrides: Partial<TaxSimulationResult> = {}): TaxSimulationResult {
@@ -158,5 +159,34 @@ describe('TaxCalculator component', () => {
     const alerts = screen.queryAllByRole('alert');
     const bannerTexts = alerts.map((el) => el.textContent || '').join(' ');
     expect(bannerTexts).not.toMatch(/CEHR/);
+  });
+
+  it('warns when the fiscal year has no verified figures', () => {
+    const result = makeResult();
+    render(
+      <TaxCalculator
+        result={result}
+        taxMode="pfu"
+        onTaxModeChange={vi.fn()}
+        fiscalYear={LATEST_TAX_YEAR + 1}
+      />
+    );
+    const bannerTexts = screen.getAllByRole('alert').map((el) => el.textContent || '').join(' ');
+    expect(bannerTexts).toMatch(new RegExp(`Aucun barème vérifié pour ${LATEST_TAX_YEAR + 1}`));
+    expect(bannerTexts).toMatch(new RegExp(`celui de ${LATEST_TAX_YEAR}`));
+  });
+
+  it('stays silent when the fiscal year is covered', () => {
+    const result = makeResult();
+    render(
+      <TaxCalculator
+        result={result}
+        taxMode="pfu"
+        onTaxModeChange={vi.fn()}
+        fiscalYear={LATEST_TAX_YEAR}
+      />
+    );
+    const bannerTexts = screen.queryAllByRole('alert').map((el) => el.textContent || '').join(' ');
+    expect(bannerTexts).not.toMatch(/Aucun barème vérifié/);
   });
 });
