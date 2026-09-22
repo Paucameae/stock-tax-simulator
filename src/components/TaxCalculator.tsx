@@ -4,7 +4,7 @@ import { Tooltip } from './ui/tooltip';
 import { ExplainButton } from './ui/ExplainButton';
 import { Receipt, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import type { TaxSimulationResult, TaxMode, FamilyStatus } from '../lib/types';
-import { getTaxConfig, resolveTaxYear } from '../lib/tax-rates';
+import { getTaxConfig, resolveTaxYear, CDHR_APPROXIMATION_NOTICE } from '../lib/tax-rates';
 import { analyzeThresholds } from '../lib/thresholds';
 import { formatEUR, formatPercent } from '../lib/utils';
 
@@ -285,6 +285,9 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
                     Contribution différentielle hauts revenus (CDHR)
                     <span className="block text-xs font-normal text-gray-500">
                       Plancher d'IR à 20 % du RFR ajusté (FY 2025+)
+                    </span>
+                    <span className="block text-xs font-normal text-amber-700">
+                      {CDHR_APPROXIMATION_NOTICE}
                     </span>
                   </td>
                   <td className="py-2 text-right text-red-600">{formatEUR(r.cdhr)}</td>

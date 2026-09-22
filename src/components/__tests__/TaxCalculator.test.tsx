@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { TaxCalculator } from '../TaxCalculator';
-import { LATEST_TAX_YEAR } from '../../lib/tax-rates';
+import { LATEST_TAX_YEAR, CDHR_APPROXIMATION_NOTICE } from '../../lib/tax-rates';
 import type { TaxSimulationResult } from '../../lib/types';
 
 function makeResult(overrides: Partial<TaxSimulationResult> = {}): TaxSimulationResult {
@@ -188,5 +188,21 @@ describe('TaxCalculator component', () => {
     );
     const bannerTexts = screen.queryAllByRole('alert').map((el) => el.textContent || '').join(' ');
     expect(bannerTexts).not.toMatch(/Aucun barème vérifié/);
+  });
+
+  it('flags the CDHR amount as an approximation', () => {
+    const result = makeResult({ cdhr: 4200 });
+    render(
+      <TaxCalculator result={result} taxMode="pfu" onTaxModeChange={vi.fn()} fiscalYear={2025} />
+    );
+    expect(screen.getByText(CDHR_APPROXIMATION_NOTICE)).toBeDefined();
+  });
+
+  it('does not mention the CDHR caveat when no CDHR is due', () => {
+    const result = makeResult({ cdhr: 0 });
+    render(
+      <TaxCalculator result={result} taxMode="pfu" onTaxModeChange={vi.fn()} fiscalYear={2025} />
+    );
+    expect(screen.queryByText(CDHR_APPROXIMATION_NOTICE)).toBeNull();
   });
 });

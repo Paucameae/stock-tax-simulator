@@ -235,6 +235,14 @@ export function calculateCEHR(rfi: number, familyStatus: 'single' | 'couple', co
  *                     + libératoires.
  * @param familyStatus 'single' or 'couple'.
  */
+/**
+ * Shown wherever a CDHR amount is displayed, so the simplification documented
+ * on `calculateCDHR` reaches the user instead of staying in the source.
+ */
+export const CDHR_APPROXIMATION_NOTICE =
+  "Estimation indicative : le RFR et l'impôt « ajustés » au sens du CGI art. 224 III comportent des retraitements " +
+  "(réintégration de certains crédits d'impôt, quart des revenus exceptionnels) que le simulateur n'applique pas.";
+
 export function calculateCDHR(
   adjustedRfr: number,
   adjustedIr: number,

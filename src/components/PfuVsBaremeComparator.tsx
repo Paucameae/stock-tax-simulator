@@ -5,7 +5,7 @@ import { ExplainButton } from './ui/ExplainButton';
 import { ThumbsUp, ChevronDown } from 'lucide-react';
 import type { TaxSimulationResult, SaleSimulation, SaleLotEntry, AppSettings, TaxMode } from '../lib/types';
 import { runSimulation } from '../lib/tax-engine';
-import { getTaxConfig } from '../lib/tax-rates';
+import { getTaxConfig, CDHR_APPROXIMATION_NOTICE } from '../lib/tax-rates';
 import { formatEUR, formatPercent } from '../lib/utils';
 
 interface PfuVsBaremeComparatorProps {
@@ -200,17 +200,19 @@ function ComparisonCard({ title, result, selected, recommended, onSelect }: Comp
           <Row label="IR PV cession" value={result.capitalGainTax.ir} />
           <Row label="PS PV cession" value={result.capitalGainTax.ps} />
           {result.cehr > 0 && <Row label="CEHR" value={result.cehr} />}
-          {result.cdhr > 0 && <Row label="CDHR" value={result.cdhr} />}
+          {result.cdhr > 0 && (
+            <Row label="CDHR (estimation)" value={result.cdhr} hint={CDHR_APPROXIMATION_NOTICE} />
+          )}
         </div>
       </details>
     </button>
   );
 }
 
-function Row({ label, value }: { label: string; value: number }) {
+function Row({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
     <div className="flex justify-between">
-      <span className="text-gray-600">{label}</span>
+      <span className="text-gray-600" title={hint}>{label}</span>
       <span className="tabular-nums">{formatEUR(value)}</span>
     </div>
   );
