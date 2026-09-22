@@ -887,8 +887,13 @@ function App() {
         </div>
       </main>
 
-      {/* Tax rules panel */}
-      {showRules && <TaxRulesPanel onClose={() => setShowRules(false)} />}
+      {/* Tax rules panel — rates depend on the year of the tab being consulted. */}
+      {showRules && (
+        <TaxRulesPanel
+          onClose={() => setShowRules(false)}
+          fiscalYear={activeTab === 'declaration' ? declFiscalYear : simFiscalYear}
+        />
+      )}
 
       {/* Sales import requalification dialog */}
       <Dialog
