@@ -1,4 +1,5 @@
 import type { DividendEvent, CashInterestEvent } from './transaction-parser';
+import { getTaxConfig, type TaxConfig } from './tax-rates';
 
 /** A dividend event enriched with EUR amounts at the ECB rate of the payment date. */
 export interface DividendEventEur extends DividendEvent {
@@ -112,6 +113,14 @@ export interface DividendDeclarationLines {
   box2CK: number;
   box8VL: number;
   box8PL: number;
+  /**
+   * CSG déductible du revenu global (CGI art. 154 quinquies, II), en option
+   * barème uniquement. Ce n'est PAS une case à remplir : prélevée à la source
+   * sur les produits de placement, elle est déduite automatiquement l'année du
+   * versement — contrairement à la CSG sur les revenus du patrimoine, qui se
+   * reporte en case 6DE l'année suivante.
+   */
+  csgDeductible: number;
 }
 
 export interface BuildDeclarationLinesOptions {
@@ -127,6 +136,12 @@ export interface BuildDeclarationLinesOptions {
    * ne déposez pas les 2778-DIV.
    */
   pfnlAlreadyPaidEur?: number;
+  /**
+   * Barèmes à appliquer. Par défaut ceux de l'année de VERSEMENT des
+   * dividendes : les produits de placement sont dus au taux en vigueur au fait
+   * générateur, pas à celui de l'année de liquidation.
+   */
+  config?: TaxConfig;
 }
 
 export function buildDeclarationLines(
@@ -158,6 +173,14 @@ export function buildDeclarationLines(
   const box8PL = taxMode === 'bareme'
     ? round2(gross * (1 - DIVIDEND_BAREME_ABATEMENT))
     : gross;
+  // CSG déductible (CGI art. 154 quinquies, II) : réservée à l'option barème
+  // — au PFU, la CSG n'est pas déductible (d'où le libellé de la case 2CG).
+  // Assiette = dividende BRUT : l'abattement de 40 % ne la réduit pas (CSS
+  // art. L. 136-6, I, dernier alinéa), et la proratisation du 2e alinéa du II
+  // ne vise que les abattements des art. 150-0 D, 1 quater, 150-0 D ter et
+  // 200 A, 3 — pas celui de l'art. 158-3-2°.
+  const csgDeductibleRate = (options.config ?? getTaxConfig(summary.year)).csgDeductibleDividends;
+  const csgDeductible = taxMode === 'bareme' ? round2(gross * csgDeductibleRate) : 0;
   return {
     year: summary.year,
     taxMode,
@@ -172,6 +195,7 @@ export function buildDeclarationLines(
     box2CK: pfnl,
     box8VL: cappedCredit,
     box8PL,
+    csgDeductible,
   };
 }
 

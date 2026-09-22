@@ -132,6 +132,11 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
   )
     .toFixed(1)
     .replace('.', ',');
+  const dividendCsgRateLabel = (
+    getTaxConfig(selectedYear).csgDeductibleDividends * 100
+  )
+    .toFixed(1)
+    .replace('.', ',');
 
   return (
     <Card>
@@ -214,6 +219,16 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
             onCopy={() => copyValue('2BH', lines.box2BH)}
             variant="success"
           />
+        )}
+        {taxMode === 'bareme' && lines.csgDeductible > 0 && (
+          <div className="ml-12 p-2 rounded-md border border-green-200 bg-green-50 text-xs text-green-900">
+            <span className="font-medium">CSG déductible :</span>{' '}
+            <span className="font-semibold tabular-nums">{formatEUR(lines.csgDeductible)}</span>
+            {' '}({dividendCsgRateLabel}{'\u202f'}% de 2DC, art. 154 quinquies CGI).{' '}
+            <span className="font-semibold">Aucune case à remplir</span> : prélevée à la source, elle est
+            déduite automatiquement de votre revenu global de {selectedYear}. À ne pas confondre avec la CSG
+            sur les revenus du patrimoine (plus-values), qui se reporte, elle, en case 6DE l'année suivante.
+          </div>
         )}
         <DeclarationLine
           code={FORM_2042_DIVIDENDS.case2CK.code}
