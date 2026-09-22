@@ -215,15 +215,38 @@ describe('getTaxConfig', () => {
   it('returns 2026 config with updated CSG', () => {
     const config = getTaxConfig(2026);
     expect(config.psPatrimoine).toBe(0.186);
-    expect(config.csgDeductible).toBe(0.082);
+    expect(config.csgDeductible).toBe(0.068);
     expect(config.pfuTotalRate).toBe(0.314);
   });
 
-  it('aligns dividends 2026 on the post-LFSS-2025 rates (18,6 % PS / 31,4 % PFU)', () => {
+  it('aligns dividends 2026 on the post-LFSS-2026 rates (18,6 % PS / 31,4 % PFU)', () => {
     const config = getTaxConfig(2026);
     expect(config.psDividends).toBe(0.186);
     expect(config.pfuDividendsTotalRate).toBe(0.314);
-    expect(config.csgDeductibleDividends).toBe(0.082);
+    expect(config.csgDeductibleDividends).toBe(0.068);
+  });
+
+  // --- Garde-fous LFSS 2026 : ce que la hausse de CSG n'a PAS changé ---
+  // La LFSS 2026 (loi n° 2025-1403 du 30/12/2025, art. 12) ne modifie que le
+  // 2° du I de l'article L. 136-8 du CSS. Deux taux voisins ont été dérivés à
+  // tort de cette hausse ; ces tests verrouillent leur valeur légale.
+
+  it('garde la CSG déductible à 6,8 points malgré la CSG portée à 10,6 % (CGI art. 154 quinquies)', () => {
+    // L'article 154 quinquies n'a été modifié ni par la LFSS 2026 ni par la
+    // LF 2026 : le supplément de 1,4 point n'est pas déductible (BOSS, Q/R
+    // « CSG sur les revenus du capital »). 6,8 n'est donc PAS 18,6 − 10,4.
+    for (const year of [2024, 2025, 2026]) {
+      expect(getTaxConfig(year).csgDeductible).toBe(0.068);
+      expect(getTaxConfig(year).csgDeductibleDividends).toBe(0.068);
+    }
+  });
+
+  it("ne fait pas varier les PS sur revenus d'activité avec la LFSS 2026 (CSS art. L. 136-8, I, 1°)", () => {
+    // Le 1° du I (CSG sur revenus d'activité) reste à 9,2 % : PS = 9,2 + 0,5.
+    // Concerne la fraction > 300 k€ des AGA Macron et les gains pré-Macron.
+    for (const year of [2024, 2025, 2026]) {
+      expect(getTaxConfig(year).psActivite).toBe(0.097);
+    }
   });
 
   it('falls back to latest config for future years', () => {

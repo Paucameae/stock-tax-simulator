@@ -211,7 +211,7 @@ describe('calculateAcquisitionGainTax', () => {
       expect(result.above300k).toBe(200000);
       expect(result.abatement50).toBe(150000); // 50% of 300k
       // PS activité on above-300k portion
-      expect(result.psAbove).toBeCloseTo(200000 * 0.111, 2);
+      expect(result.psAbove).toBeCloseTo(200000 * 0.097, 2);
       // Salary contribution on above-300k
       expect(result.salaryContribution).toBeCloseTo(200000 * 0.10, 2);
     });
@@ -231,13 +231,13 @@ describe('calculateAcquisitionGainTax', () => {
     it('handles grant after 28/09/2012 (PS activité)', () => {
       const grantDate = new Date(2013, 0, 1); // Jan 2013
       const result = calculateAcquisitionGainTax(100000, 80000, 2, 'qualified_pre_macron', grantDate);
-      expect(result.psBelow).toBeCloseTo(100000 * 0.111, 2); // PS activité, not patrimoine
+      expect(result.psBelow).toBeCloseTo(100000 * 0.097, 2); // PS activité, not patrimoine
     });
   });
 
   it('computes deductible CSG on total acquisition gain', () => {
     const result = calculateAcquisitionGainTax(200000, 80000, 2, 'qualified_macron', undefined, 0.5);
-    expect(result.deductibleCSG).toBeCloseTo(200000 * 0.082, 2);
+    expect(result.deductibleCSG).toBeCloseTo(200000 * 0.068, 2);
   });
 });
 
@@ -287,7 +287,7 @@ describe('calculateCapitalGainTax', () => {
     it('applies progressive scale and calculates deductible CSG', () => {
       const result = calculateCapitalGainTax(10000, 0, 'bareme', 80000, 2);
       expect(result.ps).toBeCloseTo(10000 * 0.186, 2);
-      expect(result.deductibleCSG).toBeCloseTo(10000 * 0.082, 2);
+      expect(result.deductibleCSG).toBeCloseTo(10000 * 0.068, 2);
       // IR should be the marginal tax on 10,000€ above 80,000€ base (for 2 shares)
       expect(result.ir).toBeGreaterThan(0);
     });

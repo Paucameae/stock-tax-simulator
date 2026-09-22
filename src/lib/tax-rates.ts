@@ -8,11 +8,24 @@ export interface TaxConfig {
   /**
    * PS on "revenus du patrimoine" (capital gains, AGA acquisition gain).
    * Liquidated in the annual 2042 at the rate in force at collection time.
-   * For 2025 income → 18,6 % (LFSS 2025 retroactive CSG increase).
+   * For 2025 income → 18,6 %: LFSS 2026 (loi n° 2025-1403 du 30/12/2025,
+   * art. 12) raised the CSG of CSS art. L. 136-8, I, 2° from 9,2 % to 10,6 %,
+   * applicable "à compter de l'imposition des revenus de l'année 2025".
    */
   psPatrimoine: number;
+  /**
+   * PS on "revenus d'activité" (AGA acquisition gain above 300 k€, pre-Macron
+   * gains taxed as salary). Set by CSS art. L. 136-8, I, **1°**, which the
+   * LFSS 2026 did NOT touch: CSG stays at 9,2 %, so PS stay at 9,7 %.
+   * Do not align this on `psPatrimoine` — they follow different provisions.
+   */
   psActivite: number;
-  /** CSG déductible portion paired with `psPatrimoine` (8,2 % for 18,6 %). */
+  /**
+   * Deductible share of the CSG, in points of income (CGI art. 154 quinquies).
+   * NOT a function of the CSG rate: the LFSS 2026 raised the CSG without
+   * amending art. 154 quinquies, so the extra 1,4 point is not deductible and
+   * the share stays at 6,8 points. Never derive this from `psPatrimoine`.
+   */
   csgDeductible: number;
   pfuIrRate: number;
   pfuTotalRate: number;
@@ -25,8 +38,9 @@ export interface TaxConfig {
    */
   psDividends: number;
   /**
-   * CSG déductible portion paired with `psDividends`. For dividends paid in
-   * 2025 (CSG 9,2 %) → 6,8 %. For 2026+ (CSG 10,6 %) → 8,2 %.
+   * Deductible share of the CSG on dividends taxed under the barème (2OP).
+   * Same 6,8 points as `csgDeductible` (CGI art. 154 quinquies, II), whatever
+   * the CSG rate applied to the dividend.
    */
   csgDeductibleDividends: number;
   /** PFU global rate on dividends = 12,8 % IR + `psDividends`. */
@@ -87,8 +101,12 @@ const TAX_CONFIG_2025: TaxConfig = {
   // the 2026 annual return at the rate in force at collection time. KPMG
   // 2025 deck slide 48 confirms a PFU at 31,4 % on PV de cession 2025.
   psPatrimoine: 0.186,   // CSG 10.6% + CRDS 0.5% + prélèvement solidarité 7.5%
-  psActivite: 0.111,     // CSG 10.6% + CRDS 0.5%
-  csgDeductible: 0.082,  // CSG déductible 8.2%
+  // Unchanged by the LFSS 2026: art. 12 only amends the 2° of CSS L. 136-8, I
+  // (revenus du patrimoine et produits de placement). Salaries stay at 9,2 %.
+  psActivite: 0.097,     // CSG 9.2% + CRDS 0.5%
+  // Stays at 6,8 points despite the CSG rising to 10,6 %: the LFSS 2026 left
+  // CGI art. 154 quinquies untouched, so the extra 1,4 point is not deductible.
+  csgDeductible: 0.068,  // CSG déductible 6.8%
   pfuTotalRate: 0.314,   // 12.8% IR + 18.6% PS
   // Dividends paid during 2025 are taxed at the rate in force at the fait
   // générateur (payment date). KPMG 2025 deck slide 33 confirms 17,2 %.
@@ -101,9 +119,11 @@ const TAX_CONFIG_2025: TaxConfig = {
 
 const TAX_CONFIG_2026: TaxConfig = {
   ...TAX_CONFIG_2025,
-  // From 2026 onwards, dividends paid align with the post-LFSS-2025 rates.
+  // Dividends paid from 2026 onwards bear the CSG raised by the LFSS 2026
+  // (art. 12, II, 2°: produits de placement "à compter du 1er janvier 2026").
+  // The deductible share is unchanged — see `csgDeductible`.
   psDividends: 0.186,
-  csgDeductibleDividends: 0.082,
+  csgDeductibleDividends: 0.068,
   pfuDividendsTotalRate: 0.314,
 };
 

@@ -6,6 +6,8 @@
  *
  * When updating, cross-check with impots.gouv.fr and note the verification date.
  * Last verified against impots.gouv.fr: 2026-05-10 (revenus 2025).
+ * Rates of CSS art. L. 136-8 and CGI art. 154 quinquies re-checked against
+ * Legifrance on 2026-09-22 (post LFSS 2026).
  */
 
 /**
@@ -13,7 +15,7 @@
  * impots.gouv.fr. Shown in the app header: bump it together with the data,
  * never derive it from `new Date()`.
  */
-export const TAX_DATA_VERIFIED_ON = '2026-05-10';
+export const TAX_DATA_VERIFIED_ON = '2026-09-22';
 
 export interface TaxCase {
   /** Code de la case telle qu'elle apparaît sur le formulaire officiel. */
