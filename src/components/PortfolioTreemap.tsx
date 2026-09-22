@@ -9,6 +9,8 @@ import { formatEUR } from '../lib/utils';
 export type TreemapBucket = {
   key: string;
   name: string;
+  /** Human-readable form of `name`, used by the text alternative, not by the tiles. */
+  label: string;
   code: string;
   value: number;
   count: number;

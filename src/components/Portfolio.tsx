@@ -63,6 +63,12 @@ const BROKER_COLORS: Record<string, string> = {
 
 type GroupBy = 'origin' | 'holding' | 'broker';
 
+const GROUP_BY_CAPTION: Record<GroupBy, string> = {
+  origin: 'par origine',
+  holding: 'par durée de détention',
+  broker: 'par courtier',
+};
+
 export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cashInterest = [], onBulkQualify, hasGrants = false, importedAt = null, visible = true }: PortfolioProps) {
   const { eurPrice, lastUpdated, loading: priceLoading, error: priceError, retry: retryPrice } = useMsftPrice();
   const [filterOrigin, setFilterOrigin] = React.useState<StockOrigin | 'all'>('all');
@@ -152,26 +158,30 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
   const treemapData = React.useMemo(() => {
     // recharts Treemap reads the bucket label from the `name` field; we keep
     // `code` as a short identifier (origin code, broker key) for tiny tiles.
-    type Bucket = { key: string; name: string; code: string; value: number; count: number; shares: number; gainLoss: number; fill: string };
+    type Bucket = { key: string; name: string; label: string; code: string; value: number; count: number; shares: number; gainLoss: number; fill: string };
     const buckets = new Map<string, Bucket>();
     for (const lot of lots) {
       let key: string;
       let name: string;
+      let label: string;
       let code: string;
       let fill: string;
       if (groupBy === 'origin') {
         key = lot.origin;
         name = lot.origin;
+        label = originLabel(lot.origin);
         code = lot.origin;
         fill = ORIGIN_COLORS[lot.origin] ?? '#888';
       } else if (groupBy === 'holding') {
         key = lot.holdingPeriod;
         name = lot.holdingPeriod === 'Long' ? '≥ 2 ans' : '< 2 ans';
+        label = name;
         code = lot.holdingPeriod === 'Long' ? 'LT' : 'CT';
         fill = HOLDING_COLORS[lot.holdingPeriod] ?? '#888';
       } else {
         key = lot.broker;
         name = brokerLabel(lot.broker);
+        label = name;
         code = lot.broker === 'fidelity' ? 'FID' : 'MS';
         fill = BROKER_COLORS[lot.broker] ?? '#888';
       }
@@ -187,6 +197,7 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
         buckets.set(key, {
           key,
           name,
+          label,
           code,
           value: Math.max(0, value),
           count: 1,
@@ -359,11 +370,45 @@ export function Portfolio({ lots, onLotsChange, grants = [], dividends = [], cas
                   {hasMultipleBrokers && <option value="broker">par Courtier</option>}
                 </Select>
               </div>
-              <div className="h-32 sm:h-36">
+              <div className="h-32 sm:h-36" aria-hidden="true">
                 <React.Suspense fallback={null}>
                   <PortfolioTreemap data={treemapData} total={totals.value} />
                 </React.Suspense>
               </div>
+              {/* The chart itself carries no accessible text, and its tiles drop
+                  labels when they get small — this table is the real content. */}
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-700">
+                  Voir les chiffres de la répartition
+                </summary>
+                <table className="mt-2 w-full text-xs">
+                  <caption className="sr-only">
+                    Répartition de la valeur du portefeuille {GROUP_BY_CAPTION[groupBy]}
+                  </caption>
+                  <thead>
+                    <tr className="text-gray-500">
+                      <th scope="col" className="py-1 text-left font-medium">Catégorie</th>
+                      <th scope="col" className="py-1 text-right font-medium">Lots</th>
+                      <th scope="col" className="py-1 text-right font-medium">Valeur</th>
+                      <th scope="col" className="py-1 text-right font-medium">Part</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {treemapData.map((bucket) => (
+                      <tr key={bucket.key} className="border-t border-gray-200">
+                        <th scope="row" className="py-1 text-left font-normal text-gray-700">
+                          {bucket.label}
+                        </th>
+                        <td className="py-1 text-right tabular-nums">{bucket.count}</td>
+                        <td className="py-1 text-right tabular-nums">{formatEUR(bucket.value)}</td>
+                        <td className="py-1 text-right tabular-nums">
+                          {Math.round((bucket.value / totals.value) * 100)} %
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
             </div>
           )}
 

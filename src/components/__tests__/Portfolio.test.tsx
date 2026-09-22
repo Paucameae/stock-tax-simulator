@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { Portfolio } from '../Portfolio';
 import type { StockLot } from '../../lib/types';
 
@@ -32,6 +32,12 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+// The allocation breakdown repeats the origin labels, so filter assertions have
+// to look at the lot table only.
+function lotDetail() {
+  return within(document.getElementById('portfolio-lot-detail')!);
+}
+
 describe('Portfolio', () => {
   it('renders summary with totals', () => {
     const lots = [
@@ -58,7 +64,7 @@ describe('Portfolio', () => {
     const originSelect = screen.getByLabelText('Filtrer par type') as HTMLSelectElement;
     fireEvent.change(originSelect, { target: { value: 'SP' } });
     // After filter, "AGA Macron" label should not appear in rows
-    expect(screen.queryAllByText('AGA Macron').length).toBe(0);
+    expect(lotDetail().queryAllByText('AGA Macron').length).toBe(0);
   });
 
   it('fires onLotsChange when a DO lot plan type is changed', () => {
@@ -112,9 +118,25 @@ describe('Portfolio', () => {
     expect(screen.getAllByRole('row').length).toBeGreaterThan(2); // header + 2 rows (×2 for mobile possibly)
     fireEvent.change(dripSelect, { target: { value: 'drip' } });
     // Only DRIP lot remains: AGA Macron label should disappear
-    expect(screen.queryAllByText('AGA Macron').length).toBe(0);
+    expect(lotDetail().queryAllByText('AGA Macron').length).toBe(0);
     fireEvent.change(dripSelect, { target: { value: 'noDrip' } });
     // Only plain lot remains: Stock Award label should disappear
-    expect(screen.queryAllByText('Stock Award').length).toBe(0);
+    expect(lotDetail().queryAllByText('Stock Award').length).toBe(0);
+  });
+
+  it('exposes the allocation treemap figures as a table', () => {
+    const lots = [
+      makeLot({ id: 'fm', origin: 'FM', currentValue: 30000 }),
+      makeLot({ id: 'sp', origin: 'SP', planType: 'non_qualified', currentValue: 10000 }),
+    ];
+    render(<Portfolio lots={lots} onLotsChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('Voir les chiffres de la répartition'));
+    const table = screen.getByRole('table', { name: /Répartition de la valeur/ });
+    const rows = within(table).getAllByRole('row');
+    // Header + one row per bucket, largest first.
+    expect(rows).toHaveLength(3);
+    expect(rows[1].textContent).toContain('75 %');
+    expect(rows[2].textContent).toContain('25 %');
   });
 });
