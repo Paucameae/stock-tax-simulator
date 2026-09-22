@@ -6,6 +6,7 @@ import { Select } from './ui/select';
 import { FileDropZone } from './ui/FileDropZone';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { ConfirmDeleteDialog } from './ui/ConfirmDeleteDialog';
+import { ImportConfirmDialog } from './ui/ImportConfirmDialog';
 import { stockexportGuide } from './guides/stockexport-steps';
 import { parseStockExportFile, hashGrantIds } from '../lib/stockexport-parser';
 import { saveGrants, clearGrants } from '../lib/storage';
@@ -44,10 +45,14 @@ export function StockExportImporter({
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showGuide, setShowGuide] = React.useState(false);
   const [confirmClear, setConfirmClear] = React.useState(false);
+  // Parsed grants held back until the user confirms: an import replaces the
+  // whole grant list rather than merging into it.
+  const [preview, setPreview] = React.useState<{ grants: GrantInfo[]; warnings: string[]; fileName: string } | null>(null);
 
   const handleFile = async (file: File) => {
     setError(null);
     setWarnings([]);
+    setPreview(null);
     setFileName(file.name);
     setLoading(true);
     try {
@@ -57,14 +62,26 @@ export function StockExportImporter({
         return;
       }
       await hashGrantIds(parsed);
-      saveGrants(parsed.grants);
-      onGrantsChange(parsed.grants);
-      setWarnings(parsed.warnings);
+      setPreview({ grants: parsed.grants, warnings: parsed.warnings, fileName: file.name });
     } catch (err) {
       setError('Impossible de lire le fichier : ' + (err as Error).message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmImport = () => {
+    if (!preview) return;
+    saveGrants(preview.grants);
+    onGrantsChange(preview.grants);
+    setWarnings(preview.warnings);
+    setPreview(null);
+  };
+
+  const cancelImport = () => {
+    setPreview(null);
+    setFileName(null);
+    setError('Import annulé : aucun grant n\u2019a été enregistré.');
   };
 
   const handleClear = () => {
@@ -140,10 +157,34 @@ export function StockExportImporter({
           title="Comment télécharger votre StockExport"
         />
 
+        <ImportConfirmDialog
+          open={preview !== null}
+          title={'Confirmer l\u2019import StockExport'}
+          fileNames={preview ? [preview.fileName] : []}
+          rows={[
+            {
+              key: 'grants',
+              label: 'Grants',
+              current: grants.length,
+              next: preview?.grants.length ?? 0,
+              detail: preview
+                ? `${preview.grants
+                    .reduce((sum, g) => sum + g.totalAwarded, 0)
+                    .toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions attribuées`
+                : undefined,
+            },
+          ]}
+          replaceNotice={
+            'L\u2019import remplace la totalité des grants déjà enregistrés. ' +
+            'Vos positions, ventes et dividendes ne sont pas touchés.'
+          }
+          onCancel={cancelImport}
+          onConfirm={confirmImport}
+        />
+
         <ConfirmDeleteDialog
           open={confirmClear}
-          title="Supprimer les grants importés ?"
-          recap={[
+          title="Supprimer les grants importés ?"          recap={[
             `${grants.length.toLocaleString('fr-FR')} grant${grants.length > 1 ? 's' : ''}`,
             `${totals.awarded.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions attribuées`,
             `${totals.unvested.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} actions non acquises`,

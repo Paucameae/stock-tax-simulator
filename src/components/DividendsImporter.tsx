@@ -5,6 +5,7 @@ import { Alert } from './ui/alert';
 import { FileDropZone } from './ui/FileDropZone';
 import { BrokerExportGuide } from './guides/BrokerExportGuide';
 import { ConfirmDeleteDialog } from './ui/ConfirmDeleteDialog';
+import { ImportConfirmDialog } from './ui/ImportConfirmDialog';
 import { transactionHistoryGuide } from './guides/transaction-history-steps';
 import { DividendsSummary } from './DividendsSummary';
 import { parseTransactionHistoryCsv, type DividendEvent, type CashInterestEvent } from '../lib/transaction-parser';
@@ -40,10 +41,19 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [showGuide, setShowGuide] = React.useState(false);
   const [confirmClear, setConfirmClear] = React.useState(false);
+  // Parsed rows held back until the user confirms: an import replaces this
+  // broker's dividends and interest rather than merging into them.
+  const [preview, setPreview] = React.useState<{
+    dividends: DividendEvent[];
+    cashInterest: CashInterestEvent[];
+    warnings: string[];
+    fileName: string;
+  } | null>(null);
 
   const handleFile = async (file: File) => {
     setError(null);
     setWarnings([]);
+    setPreview(null);
     setFileName(file.name);
     setLoading(true);
     try {
@@ -53,15 +63,32 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
         setError(`Aucun dividende reconnu dans ce fichier. Vérifiez qu'il s'agit bien d'un historique des transactions ${brokerLabel(broker)}.`);
         return;
       }
-      // Persistence is handled by the parent via onDividendsChange so that
-      // the merged multi-broker state stays consistent.
-      onDividendsChange({ dividends: parsed.dividends, cashInterest: parsed.cashInterest });
-      setWarnings(parsed.warnings);
+      setPreview({
+        dividends: parsed.dividends,
+        cashInterest: parsed.cashInterest,
+        warnings: parsed.warnings,
+        fileName: file.name,
+      });
     } catch (err) {
       setError('Impossible de lire le fichier : ' + (err as Error).message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmImport = () => {
+    if (!preview) return;
+    // Persistence is handled by the parent via onDividendsChange so that
+    // the merged multi-broker state stays consistent.
+    onDividendsChange({ dividends: preview.dividends, cashInterest: preview.cashInterest });
+    setWarnings(preview.warnings);
+    setPreview(null);
+  };
+
+  const cancelImport = () => {
+    setPreview(null);
+    setFileName(null);
+    setError('Import annul\u00e9 : aucune ligne n\u2019a \u00e9t\u00e9 enregistr\u00e9e.');
   };
 
   const handleClear = () => {
@@ -123,6 +150,32 @@ export function DividendsImporter({ broker = 'fidelity', dividends, cashInterest
         onClose={() => setShowGuide(false)}
         guides={[transactionHistoryGuide]}
         title="Comment exporter votre historique des transactions"
+      />
+
+      <ImportConfirmDialog
+        open={preview !== null}
+        title={`Confirmer l\u2019import ${brokerLabel(broker)}`}
+        fileNames={preview ? [preview.fileName] : []}
+        rows={[
+          {
+            key: 'dividends',
+            label: 'Dividendes',
+            current: dividends.length,
+            next: preview?.dividends.length ?? 0,
+          },
+          {
+            key: 'interest',
+            label: 'Intérêts',
+            current: cashInterest.length,
+            next: preview?.cashInterest.length ?? 0,
+          },
+        ]}
+        replaceNotice={
+          `L\u2019import remplace les dividendes et intérêts ${brokerLabel(broker)} déjà enregistrés. ` +
+          'Vos positions et vos ventes ne sont pas touchées.'
+        }
+        onCancel={cancelImport}
+        onConfirm={confirmImport}
       />
 
       <ConfirmDeleteDialog

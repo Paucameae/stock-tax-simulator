@@ -3,6 +3,7 @@ import { Upload, FileText, RefreshCw, ShoppingCart, DollarSign, HelpCircle, Chec
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ConfirmDeleteDialog } from './ui/ConfirmDeleteDialog';
+import { ImportConfirmDialog } from './ui/ImportConfirmDialog';
 import { Alert } from './ui/alert';
 import { parseCsvFile, parseSalesCsvFile } from '../lib/csv-parser';
 import { parseMsHoldingsCsv, parseMsSalesCsv, parseMsActivityXlsx } from '../lib/brokers/morgan-stanley';
@@ -23,6 +24,18 @@ import type { DividendEvent } from '../lib/transaction-parser';
 
 type ImportMode = 'positions' | 'sales';
 type FileKind = 'positions' | 'sales' | 'activity';
+
+/**
+ * A fully parsed and converted batch waiting for the user's go-ahead. Imports
+ * replace the whole broker slice, so nothing reaches the portfolio until this
+ * is confirmed.
+ */
+type PendingImport = {
+  lots: StockLot[];
+  sold: SoldLot[];
+  dividends: DividendEvent[];
+  files: ImportedFile[];
+};
 
 function readAsArrayBuffer(file: File) {
   return new Promise<ArrayBuffer>((resolve, reject) => {
@@ -377,8 +390,68 @@ function ClearConfirmDialog({
   );
 }
 
-function SummaryCell({ icon, label, value, detail, onClear, clearLabel }: { icon: React.ReactNode; label: string; value: string; detail?: string; onClear?: () => void; clearLabel?: string }) {
+/**
+ * Turns a pending batch into the generic import-confirmation dialog. A slice
+ * absent from the files is left untouched: the caller only invokes the
+ * matching handler when there is something to publish.
+ */
+function ImportPreviewDialog({
+  pending,
+  broker,
+  currentLots,
+  currentSold,
+  currentDividends,
+  onCancel,
+  onConfirm,
+}: {
+  pending: PendingImport | null;
+  broker: Broker;
+  currentLots: number;
+  currentSold: number;
+  currentDividends: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!pending) return null;
+
+  const shares = pending.lots.reduce((sum, lot) => sum + lot.quantity, 0);
+
   return (
+    <ImportConfirmDialog
+      open
+      title={`Confirmer l\u2019import ${brokerLabel(broker)}`}
+      fileNames={pending.files.map(
+        (file) => `${file.name} — ${file.summary ?? (file.kind === 'positions' ? 'positions' : 'ventes')}`
+      )}
+      rows={[
+        {
+          key: 'lots',
+          label: 'Positions ouvertes',
+          current: currentLots,
+          next: pending.lots.length > 0 ? pending.lots.length : currentLots,
+          detail: pending.lots.length > 0 ? `${shares.toLocaleString('fr-FR')} actions` : undefined,
+        },
+        {
+          key: 'sales',
+          label: 'Ventes',
+          current: currentSold,
+          next: pending.sold.length > 0 ? pending.sold.length : currentSold,
+        },
+        {
+          key: 'dividends',
+          label: 'Dividendes',
+          current: currentDividends,
+          next: pending.dividends.length > 0 ? pending.dividends.length : currentDividends,
+        },
+      ]}
+      replaceNotice={`L\u2019import remplace les données ${brokerLabel(broker)} concernées — il ne s\u2019y ajoute pas. Les autres courtiers ne sont pas touchés.`}
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+function SummaryCell({ icon, label, value, detail, onClear, clearLabel }: { icon: React.ReactNode; label: string; value: string; detail?: string; onClear?: () => void; clearLabel?: string }) {  return (
     <div className="bg-white rounded border border-blue-100 p-2 relative">
       {onClear && (
         <button
@@ -414,8 +487,14 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   const [pendingRates, setPendingRates] = React.useState<{
     lots: StockLot[];
     sold: SoldLot[];
+    dividends: DividendEvent[];
+    files: ImportedFile[];
     entries: MissingRateEntry[];
   } | null>(null);
+  // Parsed, converted rows awaiting the user's go-ahead. Nothing is published
+  // before `confirmImport`: an import overwrites the broker slice, and the
+  // files are picked from a file dialog where a mis-click is cheap.
+  const [preview, setPreview] = React.useState<PendingImport | null>(null);
   // Total count of lots whose ECB rate could not be resolved during the
   // most recent import. Drives the destructive alert + retry button: a
   // failed BCE lookup leaves proceeds/costBasis at 0, which is what users
@@ -424,7 +503,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   // Keep the most recent raw batch so the user can retry the BCE
   // conversion without having to re-pick the file (typical cause:
   // transient network failure when fetching ECB rates).
-  const lastBatchRef = React.useRef<{ lots: StockLot[]; sold: SoldLot[] } | null>(null);
+  const lastBatchRef = React.useRef<{ lots: StockLot[]; sold: SoldLot[]; dividends: DividendEvent[]; files: ImportedFile[] } | null>(null);
   const [hasRetryableBatch, setHasRetryableBatch] = React.useState(false);
   const [retrying, setRetrying] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -439,6 +518,7 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
     async (files: File[]) => {
       setError(null);
       setEcbMissingCount(0);
+      setPreview(null);
 
       const MAX_FILE_SIZE = 5 * 1024 * 1024;
       for (const f of files) {
@@ -533,17 +613,18 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           totalMissing += r.missingCount;
           rates = { ...rates, ...r.rates };
         }
-        if (collectedDividends.length > 0) {
-          onImportDividends?.(collectedDividends);
-        }
-        setImportedFiles(processed);
         setEcbMissingCount(totalMissing);
         // Stash the raw batch for the retry button: convertLots /
         // convertSoldLots are pure w.r.t. the input lots, so re-running
         // them on the same raw data after a successful BCE fetch will
         // produce correctly-converted lots that overwrite the broker
         // slice (handlers use mergeByBroker).
-        lastBatchRef.current = { lots: collectedLots, sold: collectedSold };
+        lastBatchRef.current = {
+          lots: collectedLots,
+          sold: collectedSold,
+          dividends: collectedDividends,
+          files: processed,
+        };
         setHasRetryableBatch(collectedLots.length > 0 || collectedSold.length > 0);
 
         if (totalMissing > 0) {
@@ -552,20 +633,42 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           setPendingRates({
             lots: convertedLots,
             sold: convertedSold,
+            dividends: collectedDividends,
+            files: processed,
             entries: buildMissingRateEntries(convertedLots, convertedSold, rates),
           });
           return;
         }
-        if (convertedLots.length > 0) onImport(convertedLots);
-        if (convertedSold.length > 0) onImportSales?.(convertedSold);
+        setPreview({
+          lots: convertedLots,
+          sold: convertedSold,
+          dividends: collectedDividends,
+          files: processed,
+        });
       } catch (err) {
         setError('Erreur lors de la lecture du fichier : ' + (err as Error).message);
       }
     },
-    [onImport, onImportSales, onImportDividends, importMode, convertLots, convertSoldLots, isAutoDetect]
+    [importMode, convertLots, convertSoldLots, isAutoDetect]
   );
 
-  /** Publish the held-back batch once the user has supplied the missing rates. */
+  /** Write the confirmed batch to the portfolio. The only place that publishes. */
+  const confirmImport = useCallback(() => {
+    if (!preview) return;
+    if (preview.dividends.length > 0) onImportDividends?.(preview.dividends);
+    if (preview.lots.length > 0) onImport(preview.lots);
+    if (preview.sold.length > 0) onImportSales?.(preview.sold);
+    setImportedFiles(preview.files);
+    setPreview(null);
+  }, [preview, onImport, onImportSales, onImportDividends]);
+
+  /** Discard the batch: nothing reaches the portfolio. */
+  const cancelImport = useCallback(() => {
+    setPreview(null);
+    setError('Import annulé : aucune ligne n\u2019a été enregistrée.');
+  }, []);
+
+  /** Move the held-back batch to the preview once the missing rates are in. */
   const applyManualRates = useCallback(
     (manual: Record<string, number>) => {
       if (!pendingRates) return;
@@ -579,12 +682,11 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
         const rate = manual[formatDateKey(sl.saleDate)];
         return rate ? convertSoldLotWithRate(sl, rate, rate, 'manual') : sl;
       });
-      if (lots.length > 0) onImport(lots);
-      if (sold.length > 0) onImportSales?.(sold);
+      setPreview({ lots, sold, dividends: pendingRates.dividends, files: pendingRates.files });
       setPendingRates(null);
       setEcbMissingCount(0);
     },
-    [pendingRates, onImport, onImportSales]
+    [pendingRates]
   );
 
   /** Drop the held-back batch: nothing reaches the portfolio. */
@@ -597,10 +699,10 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
   }, []);
 
   /**
-   * Re-run the ECB conversion on the most recent raw batch and re-publish
-   * the results. Used when the initial import couldn't resolve some
-   * EUR/USD rates (typically a transient network failure on the BCE feed)
-   * and the lots show up with proceeds/costBasis at 0.
+   * Re-run the ECB conversion on the most recent raw batch. Used when the
+   * initial import couldn't resolve some EUR/USD rates (typically a transient
+   * network failure on the BCE feed) and the lots show up with
+   * proceeds/costBasis at 0. The result goes back through the preview.
    */
   const handleRetryEcb = useCallback(async () => {
     const batch = lastBatchRef.current;
@@ -625,15 +727,20 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
       }
       setEcbMissingCount(totalMissing);
       if (totalMissing > 0) {
-        setPendingRates({ lots, sold, entries: buildMissingRateEntries(lots, sold, rates) });
+        setPendingRates({
+          lots,
+          sold,
+          dividends: batch.dividends,
+          files: batch.files,
+          entries: buildMissingRateEntries(lots, sold, rates),
+        });
         return;
       }
-      if (lots.length > 0) onImport(lots);
-      if (sold.length > 0) onImportSales?.(sold);
+      setPreview({ lots, sold, dividends: batch.dividends, files: batch.files });
     } finally {
       setRetrying(false);
     }
-  }, [convertLots, convertSoldLots, onImport, onImportSales]);
+  }, [convertLots, convertSoldLots]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -895,6 +1002,16 @@ export const CsvImporter = React.memo(function CsvImporter({ broker = 'fidelity'
           entries={pendingRates?.entries ?? []}
           onCancel={cancelManualRates}
           onConfirm={applyManualRates}
+        />
+
+        <ImportPreviewDialog
+          pending={preview}
+          broker={broker}
+          currentLots={lots?.length ?? 0}
+          currentSold={soldLots?.length ?? 0}
+          currentDividends={dividendsCount}
+          onCancel={cancelImport}
+          onConfirm={confirmImport}
         />
 
         <ClearConfirmDialog

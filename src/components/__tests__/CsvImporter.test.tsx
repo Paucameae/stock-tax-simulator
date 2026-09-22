@@ -31,6 +31,11 @@ function getDropzone(): HTMLElement {
   return screen.getByRole('button', { name: /Zone d'import/i });
 }
 
+/** Nothing is published until the preview dialog is confirmed. */
+async function confirmPreview() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Importer' }));
+}
+
 describe('CsvImporter', () => {
   it('rejects files larger than 5 MB', async () => {
     const onImport = vi.fn();
@@ -70,6 +75,7 @@ describe('CsvImporter', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     fireEvent.change(input, { target: { files: [file] } });
+    await confirmPreview();
 
     await waitFor(() => {
       expect(onImport).toHaveBeenCalledOnce();
@@ -77,6 +83,22 @@ describe('CsvImporter', () => {
     const importedLots = onImport.mock.calls[0][0];
     expect(importedLots).toHaveLength(1);
     expect(importedLots[0].quantity).toBe(100);
+  });
+
+  it('imports nothing when the preview is cancelled', async () => {
+    const onImport = vi.fn();
+    render(<CsvImporter onImport={onImport} />);
+
+    const file = makeFile(VALID_CSV, 'positions.csv');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Annuler' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/annulé/i);
+    });
+    expect(onImport).not.toHaveBeenCalled();
   });
 
   it('shows error when CSV contains no valid positions rows', async () => {
@@ -116,6 +138,7 @@ describe('CsvImporter', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
 
     fireEvent.change(input, { target: { files: [file] } });
+    await confirmPreview();
 
     await waitFor(() => {
       expect(screen.getByText('my-positions.csv')).toBeInTheDocument();
