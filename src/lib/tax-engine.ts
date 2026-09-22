@@ -27,7 +27,6 @@ import {
 // Re-export sub-modules for backward compatibility
 export { calculateAcquisitionGainTax } from './acquisition-tax';
 export { calculateCapitalGainTax } from './capital-gain-tax';
-export { rankLotsForSale, type LotRanking } from './lot-ranking';
 
 export function isQualifiedStockAward(lot: StockLot): boolean {
   return (

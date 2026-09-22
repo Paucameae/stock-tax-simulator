@@ -5,7 +5,6 @@ import {
   calculateAcquisitionGainTax,
   calculateCapitalGainTax,
   runSimulation,
-  rankLotsForSale,
 } from '../tax-engine';
 import type { StockLot, SaleLotEntry, SaleSimulation } from '../types';
 
@@ -550,50 +549,5 @@ describe('runSimulation', () => {
     // PV de cession nette : +1000 (AGA) - 1000 (NQ) = 0
     expect(result.totalCapitalGain).toBe(0);
     expect(result.capitalGainTax.netLoss).toBe(0);
-  });
-});
-
-// ---------- rankLotsForSale ----------
-
-describe('rankLotsForSale', () => {
-  it('returns empty array for empty lots', () => {
-    const result = rankLotsForSale([], 400, 80000, 2, 'couple', 0, 2025);
-    expect(result).toEqual([]);
-  });
-
-  it('returns empty for zero price', () => {
-    const result = rankLotsForSale([makeLot()], 0, 80000, 2, 'couple', 0, 2025);
-    expect(result).toEqual([]);
-  });
-
-  it('ranks lots by effective tax rate ascending', () => {
-    const spLot = makeLot({ id: 'sp', origin: 'SP', costBasisPerShare: 350, planType: 'non_qualified' });
-    const agaLot = makeLot({ id: 'aga', origin: 'FM', costBasisPerShare: 200, planType: 'qualified_macron' });
-    const rankings = rankLotsForSale([spLot, agaLot], 400, 80000, 2, 'couple', 0, 2025);
-
-    expect(rankings).toHaveLength(2);
-    // Should be sorted ascending by bestRate
-    expect(rankings[0].bestRate).toBeLessThanOrEqual(rankings[1].bestRate);
-  });
-
-  it('includes best mode recommendation', () => {
-    const lot = makeLot({ origin: 'SP', costBasisPerShare: 300, planType: 'non_qualified' });
-    const rankings = rankLotsForSale([lot], 400, 80000, 2, 'couple', 0, 2025);
-    expect(rankings[0].bestMode).toMatch(/^(pfu|bareme)$/);
-  });
-
-  it('warns when cumulative acquisition gain exceeds 300k', () => {
-    // Lot with very high acquisition gain (large quantity, high cost basis)
-    const lot = makeLot({
-      id: 'big',
-      origin: 'FM',
-      costBasisPerShare: 350,
-      quantity: 1000,
-      planType: 'qualified_macron',
-    });
-    const rankings = rankLotsForSale([lot], 400, 80000, 2, 'couple', 0, 2025);
-    // Acquisition gain = 1000 * 350 = 350,000 > 300,000
-    const warnings = rankings[0].warnings;
-    expect(warnings.some((w) => /300[\s\u00a0\u202f]000/.test(w))).toBe(true);
   });
 });
