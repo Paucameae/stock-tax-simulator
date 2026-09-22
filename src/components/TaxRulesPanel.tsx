@@ -101,7 +101,7 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
               <p className="font-semibold text-amber-900">Fraction &gt; 300 000 €</p>
               <div className="space-y-1">
                 <Rate label="IR : barème progressif (pas d'abattement)" value="0 → 45 %" />
-                <Rate label="Cotisations sociales (activité)" value="11,1 %" />
+                <Rate label="Cotisations sociales (activité)" value="9,7 %" />
                 <Rate label="Contribution salariale" value="10 %" />
               </div>
             </div>
@@ -217,7 +217,7 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
               <div className="space-y-1">
                 <Rate label="IR barème progressif" value="0 → 45 %" />
                 <Rate label="PS (sur PV avant abattement)" value="18,6 %" />
-                <Rate label="CSG déductible l'année suivante" value="8,2 %" />
+                <Rate label="CSG déductible l'année suivante" value="6,8 %" />
               </div>
               <p className="text-xs text-indigo-700">
                 Abattement durée de détention (titres acquis avant 01/01/2018 uniquement) : 50 % (2–8 ans), 65 % (&gt; 8 ans).
@@ -238,7 +238,7 @@ export function TaxRulesPanel({ onClose }: { onClose: () => void }) {
             </p>
             <div className="rounded bg-gray-50 p-3 space-y-2 text-sm">
               <p className="font-semibold">PFU : 12,8 % IR + 18,6 % PS = 31,4 %</p>
-              <p className="font-semibold">Barème (option) : abattement 40 % sur IR, PS 18,6 % sans abattement, CSG déductible 8,2 %</p>
+              <p className="font-semibold">Barème (option) : abattement 40 % sur IR, PS 18,6 % sans abattement, CSG déductible 6,8 %</p>
             </div>
             <p className="text-xs text-gray-500">
               Si le broker ne prélève pas : formulaire <strong>2778-DIV</strong> + paiement au plus tard le 15 du mois suivant la perception.
