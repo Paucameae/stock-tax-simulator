@@ -214,7 +214,7 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
             code={FORM_2042_DIVIDENDS.case2BH.code}
             label="Revenus déjà soumis aux PS avec CSG déductible si option barème"
             amount={lines.box2BH}
-            note="Reporter le même montant qu'en 2DC (option barème, case 2OP cochée)."
+            note="À reporter impérativement : non pré-remplie pour un compte étranger, c'est elle qui déclenche le calcul de la CSG déductible. Même montant qu'en 2DC (option barème, case 2OP cochée)."
             copied={copied === '2BH'}
             onCopy={() => copyValue('2BH', lines.box2BH)}
             variant="success"
@@ -224,10 +224,12 @@ export function DividendsDeclaration({ dividends, fiscalYear }: DividendsDeclara
           <div className="ml-12 p-2 rounded-md border border-green-200 bg-green-50 text-xs text-green-900">
             <span className="font-medium">CSG déductible :</span>{' '}
             <span className="font-semibold tabular-nums">{formatEUR(lines.csgDeductible)}</span>
-            {' '}({dividendCsgRateLabel}{'\u202f'}% de 2DC, art. 154 quinquies CGI).{' '}
-            <span className="font-semibold">Aucune case à remplir</span> : prélevée à la source, elle est
-            déduite automatiquement de votre revenu global de {selectedYear}. À ne pas confondre avec la CSG
-            sur les revenus du patrimoine (plus-values), qui se reporte, elle, en case 6DE l'année suivante.
+            {' '}({dividendCsgRateLabel}{'\u202f'}% de 2DC, art. 154 quinquies CGI). Ne la reportez{' '}
+            <span className="font-semibold">pas</span> en case 6DE : la DGFiP la calcule et l'ajoute
+            automatiquement au montant pré-rempli, à partir de la case <span className="font-semibold">2BH</span>.
+            {' '}Pour un compte de courtage étranger, <span className="font-semibold">2BH n'est pas pré-remplie</span> :
+            sans ce report, l'administration considère ces dividendes comme non soumis aux prélèvements sociaux et
+            la déduction est perdue.
           </div>
         )}
         <DeclarationLine

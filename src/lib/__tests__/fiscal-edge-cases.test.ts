@@ -65,6 +65,19 @@ describe('Acquisition gain — 300 k€ threshold edge cases', () => {
     expect(r.above300k).toBe(0);
     expect(r.salaryContribution).toBe(0);
   });
+
+  it("apprécie le seuil avant l'abattement, jamais après", () => {
+    // BOI-RSA-ES-20-20-20 § 190 : l'ordre est moins-value → seuil de
+    // 300 000 € → abattement. Appliquer l'abattement en premier ferait
+    // passer un gain de 400 000 € sous le seuil (200 000 € après 50 %) et
+    // ferait disparaître à tort la contribution salariale.
+    const gain = 400000;
+    const r = calculateAcquisitionGainTax(gain, 0, 1, 'qualified_macron', undefined, 0.5, cfg2025);
+    expect(r.below300k).toBe(AGA_THRESHOLD);
+    expect(r.above300k).toBe(gain - AGA_THRESHOLD);
+    expect(r.abatement50).toBe(AGA_THRESHOLD * 0.5);
+    expect(r.salaryContribution).toBeCloseTo((gain - AGA_THRESHOLD) * cfg2025.salaryContributionRate, 2);
+  });
 });
 
 // ---------------------------------------------------------------------------
