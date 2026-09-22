@@ -16,8 +16,8 @@ détention, et la conversion USD→EUR au taux BCE historique.
   `/api/msft-quote` (proxy vers Finnhub, cache 5 min, rate-limit 20 req/min/IP)
   et `/api/ai-assistant` (assistant « Expliquer ce calcul » via Azure OpenAI,
   grounded, rate-limit 12 req/min/IP)
-- **Tests** : Vitest + Testing Library (586 tests)
-- **CI** : GitHub Actions (lint, type-check, tests, `npm audit`)
+- **Tests** : Vitest + Testing Library (578 tests) + smoke Playwright
+- **CI** : GitHub Actions (lint, type-check, tests, e2e, `npm audit`)
 - **Déploiement** : Azure Static Web Apps, conditionné au succès de la CI
 - **Stockage** : `localStorage` versionné (schéma v2)
 - **PDF** : `pdfjs-dist` pour parser les avis d'imposition (N° fiscal, parts, RFR)
@@ -101,6 +101,7 @@ donc une modification TypeScript non recompilée passe inaperçue.
 | `npm run lint` | ESLint flat config |
 | `npm test` | Lancer les tests (Vitest run) |
 | `npm run test:watch` | Vitest en mode watch |
+| `npm run test:e2e` | Smoke Playwright sur le build de production |
 
 ## Structure
 
@@ -138,7 +139,10 @@ src/
     backup.ts              Export/import JSON (validation à l'import)
     storage.ts             localStorage versionné (migration v1→v2)
     types.ts               Types partagés (StockLot, TaxSimulationResult…)
-  __tests__/               Tests unitaires
+  __tests__/               Tests unitaires + parcours de bout en bout
+
+e2e/
+  smoke.spec.ts            Smoke Playwright sur le build de production
 
 api/
   src/functions/
@@ -150,7 +154,7 @@ public/
   sw.js                    Service worker (PWA)
 
 .github/
-  workflows/ci.yml         CI (lint + type-check + tests + audit)
+  workflows/ci.yml         CI (lint + type-check + tests + e2e + audit)
   dependabot.yml           Mises à jour hebdomadaires groupées
 ```
 
@@ -167,12 +171,22 @@ public/
 ```pwsh
 npm test                   # run all
 npm test -- --run --coverage
+npm run test:e2e           # smoke Playwright (build + vite preview)
 ```
 
 Les fichiers `src/lib/__tests__/` couvrent toute la logique métier
 (fiscal, parsing, stockage, backup). Les composants critiques
 (`TaxCalculator`, `CsvImporter`, `Settings`, `BackupPanel`) ont
 des tests de rendu via Testing Library.
+
+`src/__tests__/app-journey.test.tsx` déroule le parcours complet sur le vrai
+`<App />` (charger la démo → simuler → vérifier la case 1TZ), là où les tests
+unitaires ne validaient que des briques isolées.
+
+`e2e/` contient un smoke Playwright qui rejoue ce même parcours dans un vrai
+navigateur, sur le build de production servi par `vite preview` : il couvre ce
+que jsdom ne voit pas (découpage des chunks, chargement des panneaux lazy,
+assets statiques). Première exécution locale : `npx playwright install chromium`.
 
 ## Déploiement
 
