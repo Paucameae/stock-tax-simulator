@@ -1,11 +1,14 @@
 import React from 'react';
-import { Briefcase, Calculator, FileText, Settings as SettingsIcon, Database, AlertTriangle, RefreshCw, Loader2, Check, Upload, BookOpen, X } from 'lucide-react';
+import { Briefcase, Calculator, FileText, Settings as SettingsIcon, Database, AlertTriangle, Loader2, Upload, X } from 'lucide-react';
 import { TaxRulesPanel } from './components/TaxRulesPanel';
 import { SoldLotsTable } from './components/SoldLotsTable';
 import { SaleSimulator } from './components/SaleSimulator';
 import { TaxCalculator } from './components/TaxCalculator';
 import { DeclarationGuide } from './components/DeclarationGuide';
 import { PfuVsBaremeComparator } from './components/PfuVsBaremeComparator';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { AppHeader, type TabDescriptor } from './components/AppHeader';
+import { AppFooter } from './components/AppFooter';
 import { Dialog, DialogHeader, DialogFooter } from './components/ui/dialog';
 import { runSimulation } from './lib/tax-engine';
 import { loadVersionedSettings, safeSetItem, saveVersionedSettings, loadGrants, saveGrants, loadDividends, saveDividends, clearDividends } from './lib/storage';
@@ -14,6 +17,10 @@ import { reconcileLots, reconcileSoldLots } from './lib/stockexport-reconciliati
 import { applyBulkChoiceToLots, applyBulkChoiceToSoldLots, countEligible, type BulkQualifyChoice, type BulkQualifyOptions } from './lib/bulk-qualify';
 import { buildDemoData } from './lib/demo-data';
 import { downloadBackup, type ImportResult } from './lib/backup';
+import { DEFAULT_SETTINGS, isSettingsConfigured } from './lib/settings-defaults';
+import { computeDeclarationFor, getSaleYears, soldLotsToSaleEntries } from './lib/sale-entries';
+import { loadPersistedTab, readTabFromHash, type Tab } from './lib/tabs';
+import { useTabNavigation } from './hooks/useTabNavigation';
 import type { StockLot, SoldLot, SaleLotEntry, AppSettings, TaxSimulationResult, TaxMode, GrantInfo, Broker } from './lib/types';
 import type { DividendEvent, CashInterestEvent } from './lib/transaction-parser';
 import { DividendsDeclaration } from './components/DividendsDeclaration';
@@ -47,171 +54,6 @@ function LazyFallback() {
   );
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
-  familyStatus: 'single',
-  numberOfChildren: 0,
-  taxShares: 1,
-  taxSharesManual: false,
-  otherTaxableIncome: 0,
-  defaultPlanType: 'qualified_macron',
-  priorLosses: 0,
-};
-
-type Tab = 'portfolio' | 'simulator' | 'declaration' | 'data' | 'settings';
-const TAB_STORAGE_KEY = 'activeTab';
-const VALID_TABS: readonly Tab[] = ['portfolio', 'simulator', 'declaration', 'data', 'settings'] as const;
-
-function loadPersistedTab(): Tab | null {
-  try {
-    const saved = localStorage.getItem(TAB_STORAGE_KEY);
-    return saved && (VALID_TABS as readonly string[]).includes(saved) ? saved as Tab : null;
-  } catch {
-    return null;
-  }
-}
-
-/** URL fragment per tab, so a tab can be bookmarked, shared and navigated back to. */
-const TAB_SLUGS: Record<Tab, string> = {
-  settings: 'parametres',
-  data: 'donnees',
-  portfolio: 'portefeuille',
-  simulator: 'simulation',
-  declaration: 'declaration',
-};
-
-function readTabFromHash(): Tab | null {
-  const slug = window.location.hash.replace(/^#/, '');
-  const entry = (Object.entries(TAB_SLUGS) as [Tab, string][]).find(([, s]) => s === slug);
-  return entry ? entry[0] : null;
-}
-
-function isSettingsConfigured(s: AppSettings, defaults: AppSettings): boolean {
-  return s.otherTaxableIncome !== defaults.otherTaxableIncome
-    || s.taxShares !== defaults.taxShares
-    || s.familyStatus !== defaults.familyStatus
-    || s.numberOfChildren !== defaults.numberOfChildren;
-}
-
-/**
- * Recompute the declaration view state from a list of sold lots.
- *
- * Single source of truth for the bootstrap pattern used after every mutation
- * that affects sold lots: sales import, backup restore, grant reconciliation,
- * year switch, qualification toggle. Picking the most recent sale year by
- * default matches what the user is most likely declaring (N-1).
- *
- * Returns the year that was selected, the SaleLotEntry projection used by the
- * UI, and the TaxSimulationResult — so callers can wire all three into state
- * with a single helper instead of duplicating the runSimulation block.
- */
-function computeDeclarationFor(
-  soldLotsList: SoldLot[],
-  settings: AppSettings,
-  taxMode: TaxMode,
-  preferredYear?: number | null,
-): { saleYear: number | null; entries: SaleLotEntry[]; result: TaxSimulationResult | null } {
-  if (soldLotsList.length === 0) {
-    return { saleYear: null, entries: [], result: null };
-  }
-  const availableYears = getSaleYears(soldLotsList);
-  // If the caller has a preferred year (e.g. the year currently selected by the
-  // user) and that year still has at least one sold lot, keep it. Otherwise
-  // fall back to the most recent year present in the data.
-  const year = preferredYear != null && availableYears.includes(preferredYear)
-    ? preferredYear
-    : (availableYears[0] ?? new Date().getFullYear());
-  const yearLots = soldLotsList.filter((sl) => sl.saleDate.getFullYear() === year);
-  const entries = soldLotsToSaleEntries(yearLots);
-  const result = runSimulation({
-    lots: entries,
-    taxMode,
-    otherTaxableIncome: settings.otherTaxableIncome,
-    taxShares: settings.taxShares,
-    familyStatus: settings.familyStatus,
-    priorLosses: settings.priorLosses,
-    fiscalYear: year,
-  });
-  return { saleYear: year, entries, result };
-}
-
-function soldLotsToSaleEntries(soldLots: SoldLot[]): SaleLotEntry[] {
-  return soldLots.map((sl) => {
-    const costBasisPerShare = sl.quantity > 0 ? sl.costBasis / sl.quantity : 0;
-    const salePricePerShare = sl.quantity > 0 ? sl.proceeds / sl.quantity : 0;
-    const syntheticLot: StockLot = {
-      id: sl.id,
-      broker: sl.broker,
-      acquisitionDate: sl.acquisitionDate,
-      quantity: sl.quantity,
-      costBasisPerShare,
-      totalCostBasis: sl.costBasis,
-      currentValue: sl.proceeds,
-      unrealizedGainLoss: sl.gainLoss,
-      origin: sl.origin,
-      holdingPeriod: sl.holdingPeriod,
-      planType: sl.planType,
-      importCurrency: sl.importCurrency,
-      esppFmvPerShare: sl.origin === 'SP' ? costBasisPerShare / 0.90 : undefined,
-    };
-    return {
-      lot: syntheticLot,
-      quantitySold: sl.quantity,
-      salePricePerShare,
-      saleDate: sl.saleDate,
-    };
-  });
-}
-
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error: Error | null }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-lg w-full text-center space-y-4">
-            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto" />
-            <h2 className="text-lg font-bold text-gray-900">Une erreur est survenue</h2>
-            <p className="text-sm text-gray-600">
-              L'application a rencontré un problème inattendu. Vos données sont sauvegardées dans le navigateur.
-            </p>
-            <pre className="text-xs text-left bg-red-50 text-red-700 p-3 rounded-lg overflow-auto max-h-32">
-              {this.state.error?.message}
-            </pre>
-            <button
-              onClick={() => {
-                this.setState({ hasError: false, error: null });
-                window.location.reload();
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-hover transition-colors"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Recharger l'application
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-/** Extract distinct sale years from sold lots. */
-function getSaleYears(soldLots: SoldLot[]): number[] {
-  const years = [...new Set(soldLots.map((sl) => sl.saleDate.getFullYear()))].sort((a, b) => b - a);
-  return years;
-}
-
 function App() {
   // Everything restorable is read once, synchronously, before the first render:
   // positions and sales used to live in memory only, so a simple refresh wiped
@@ -226,56 +68,16 @@ function App() {
     };
   });
 
-  const [activeTab, setActiveTab] = React.useState<Tab>(() => {
+  const [initialTab] = React.useState<Tab>(() => {
     const fromHash = readTabFromHash();
     if (fromHash) return fromHash;
     const persisted = loadPersistedTab();
     if (persisted) return persisted;
     return isSettingsConfigured(restored.settings, DEFAULT_SETTINGS) ? 'portfolio' : 'settings';
   });
-  const [legalOpen, setLegalOpen] = React.useState(false);
+  const { activeTab, mountedTabs, goToTab } = useTabNavigation(initialTab);
   const [restoreNoticeOpen, setRestoreNoticeOpen] = React.useState(restored.rejected > 0);
 
-  // Panels stay mounted once visited (so their state survives tab switches),
-  // but an unvisited tab never renders — which keeps its lazy chunk unloaded.
-  const [mountedTabs, setMountedTabs] = React.useState<ReadonlySet<Tab>>(
-    () => new Set<Tab>([activeTab])
-  );
-
-  const showTab = React.useCallback((tab: Tab) => {
-    setMountedTabs((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
-    setActiveTab(tab);
-  }, []);
-
-  const goToTab = React.useCallback((tab: Tab) => {
-    showTab(tab);
-    const hash = `#${TAB_SLUGS[tab]}`;
-    if (window.location.hash !== hash) {
-      window.history.pushState({ tab }, '', hash);
-    }
-  }, [showTab]);
-
-  // Give the very first history entry a slug so Back returns to a known tab
-  // instead of an ambiguous hash-less entry.
-  const initialTabRef = React.useRef(activeTab);
-  React.useEffect(() => {
-    const tab = initialTabRef.current;
-    if (!readTabFromHash()) {
-      window.history.replaceState({ tab }, '', `#${TAB_SLUGS[tab]}`);
-    }
-  }, []);
-
-  // Back/Forward navigate between tabs rather than leaving the app.
-  React.useEffect(() => {
-    const onPopState = () => showTab(readTabFromHash() ?? initialTabRef.current);
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, [showTab]);
-
-  // Persist active tab across reloads
-  React.useEffect(() => {
-    safeSetItem(TAB_STORAGE_KEY, activeTab, { transient: true });
-  }, [activeTab]);
   const [lots, setLots] = React.useState<StockLot[]>(restored.lots);
   const [soldLots, setSoldLots] = React.useState<SoldLot[]>(restored.soldLots);
   // Declaration workflow state (tab "Ma déclaration"): driven by imported soldLots.
@@ -826,31 +628,13 @@ function App() {
   const simulationDone = simResult !== null;
   const declarationDone = declResult !== null || dividends.length > 0;
 
-  const tabs = [
-    { id: 'settings' as const, step: 1, label: 'Paramètres', icon: SettingsIcon, done: settingsDone },
-    { id: 'data' as const, step: 2, label: 'Mes données', icon: Database, done: lots.length > 0 || soldLots.length > 0 || grants.length > 0 || dividends.length > 0 },
-    { id: 'portfolio' as const, step: 3, label: 'Mon portefeuille', icon: Briefcase, done: portfolioDone },
-    { id: 'simulator' as const, step: 4, label: 'Ma simulation', icon: Calculator, done: simulationDone },
-    { id: 'declaration' as const, step: 5, label: 'Ma déclaration', icon: FileText, done: declarationDone },
+  const tabs: TabDescriptor[] = [
+    { id: 'settings', step: 1, label: 'Paramètres', icon: SettingsIcon, done: settingsDone },
+    { id: 'data', step: 2, label: 'Mes données', icon: Database, done: lots.length > 0 || soldLots.length > 0 || grants.length > 0 || dividends.length > 0 },
+    { id: 'portfolio', step: 3, label: 'Mon portefeuille', icon: Briefcase, done: portfolioDone },
+    { id: 'simulator', step: 4, label: 'Ma simulation', icon: Calculator, done: simulationDone },
+    { id: 'declaration', step: 5, label: 'Ma déclaration', icon: FileText, done: declarationDone },
   ];
-
-  const handleTabKeyDown = (e: React.KeyboardEvent, index: number) => {
-    const offsets: Record<string, number | 'first' | 'last'> = {
-      ArrowRight: 1,
-      ArrowLeft: -1,
-      Home: 'first',
-      End: 'last',
-    };
-    const move = offsets[e.key];
-    if (move === undefined) return;
-    e.preventDefault();
-    const next =
-      move === 'first' ? 0
-      : move === 'last' ? tabs.length - 1
-      : (index + move + tabs.length) % tabs.length;
-    goToTab(tabs[next].id);
-    document.getElementById(`tab-${tabs[next].id}`)?.focus();
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -877,96 +661,13 @@ function App() {
           </div>
         </div>
       )}
-      {/* Header */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                Simulateur fiscal — Actions Microsoft
-              </h1>
-              <p className="text-sm text-gray-500">
-                Calculez vos impôts sur la vente d'actions MSFT acquises via ESPP et Stock Awards
-              </p>
-            </div>
-            <span
-              className="text-xs text-gray-400"
-              title="Date du dernier recoupement des barèmes, seuils et numéros de case avec impots.gouv.fr."
-            >
-              Données fiscales vérifiées le {TAX_DATA_VERIFIED_ON_LABEL}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* Disclaimer banner */}
-      <div className="bg-amber-50 border-b border-amber-200">
-        <div className="max-w-7xl mx-auto px-4 py-2 text-xs text-amber-700">
-          ⚠️ Cet outil est un simulateur indicatif. Il ne constitue pas un conseil fiscal. Consultez un conseiller fiscal ou référez-vous aux instructions de KPMG Avocats fournies par votre employeur.
-        </div>
-      </div>
-
-      {/* Navigation tabs with workflow indicators */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4">
-          <nav className="flex items-center gap-1 overflow-x-auto">
-            <div role="tablist" aria-label="Étapes de la déclaration" className="flex items-center gap-1">
-            {tabs.map((tab, index) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  id={`tab-${tab.id}`}
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`panel-${tab.id}`}
-                  tabIndex={isActive ? 0 : -1}
-                  onClick={() => goToTab(tab.id)}
-                  onKeyDown={(e) => handleTabKeyDown(e, index)}
-                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    isActive
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                  }`}
-                >
-                  {tab.done && !isActive ? (
-                    <span className="flex items-center justify-center h-5 w-5 rounded-full bg-green-100 text-green-600 shrink-0">
-                      <Check className="h-3 w-3" aria-hidden="true" />
-                      <span className="sr-only">Étape {tab.step}, terminée :</span>
-                    </span>
-                  ) : (
-                    <span
-                      className={`flex items-center justify-center h-5 w-5 rounded-full text-[10px] font-bold shrink-0 ${
-                        isActive
-                          ? 'bg-primary text-white'
-                          : 'bg-gray-200 text-gray-500'
-                      }`}
-                      aria-hidden="true"
-                    >
-                      {tab.step}
-                    </span>
-                  )}
-                  <Icon className="h-4 w-4 sm:hidden" aria-hidden="true" />
-                  {/* The label is icon-only below `sm`, so name the tab explicitly. */}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className="sr-only sm:hidden">{tab.label}</span>
-                </button>
-              );
-            })}
-            </div>
-            <div className="ml-auto">
-              <button
-                onClick={() => setShowRules(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-primary transition-colors whitespace-nowrap"
-              >
-                <BookOpen className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Règles fiscales</span>
-              </button>
-            </div>
-          </nav>
-        </div>
-      </div>
+      <AppHeader
+        tabs={tabs}
+        activeTab={activeTab}
+        onSelectTab={goToTab}
+        onShowRules={() => setShowRules(true)}
+        taxDataVerifiedOn={TAX_DATA_VERIFIED_ON_LABEL}
+      />
 
       {/* Main content */}
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
@@ -1236,75 +937,15 @@ function App() {
         </DialogFooter>
       </Dialog>
 
-      {/* Footer */}
-      <footer className={`border-t bg-white mt-12 ${activeTab === 'simulator' ? 'mb-20' : ''}`}>
-        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-gray-400 space-y-1">
-          <div>
-            ⚠️ Cet outil est un simulateur indicatif. Il ne constitue pas un conseil fiscal. Les calculs sont basés sur la législation fiscale française en vigueur et peuvent évoluer. Pour votre déclaration officielle, consultez un conseiller fiscal ou référez-vous aux instructions de KPMG Avocats fournies par votre employeur.
-          </div>
-          <div className="text-gray-300">
-            Édité par Romain Eon-Ollio
-            {' · '}
-            <button
-              type="button"
-              onClick={() => setLegalOpen(true)}
-              className="underline hover:text-gray-500 transition-colors"
-            >
-              Mentions légales
-            </button>
-            {' · '}
-            <a
-              href="https://github.com/Paucameae/stock-tax-simulator/issues/new?template=user-feedback.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-gray-500 transition-colors"
-            >
-              Donner mon avis / signaler un bug
-            </a>
-          </div>
-        </div>
-      </footer>
-
-      <Dialog open={legalOpen} onClose={() => setLegalOpen(false)} label="Mentions légales">
-        <DialogHeader>Mentions légales</DialogHeader>
-        <div className="space-y-3 text-sm text-gray-700">
-          <div>
-            <div className="font-semibold text-gray-900">Éditeur</div>
-            <div>Romain Eon-Ollio</div>
-          </div>
-          <div>
-            <div className="font-semibold text-gray-900">Contact</div>
-            <div className="text-gray-500 italic">À compléter</div>
-          </div>
-          <div>
-            <div className="font-semibold text-gray-900">Hébergement</div>
-            <div>Microsoft Azure Static Web Apps</div>
-          </div>
-          <div>
-            <div className="font-semibold text-gray-900">Données personnelles</div>
-            <div>
-              Cette application ne collecte aucune donnée personnelle. Toutes les informations saisies (positions, ventes, paramètres fiscaux) sont stockées localement dans votre navigateur et ne sont jamais transmises à un serveur.
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <button
-            type="button"
-            onClick={() => setLegalOpen(false)}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm hover:bg-primary-hover transition-colors"
-          >
-            Fermer
-          </button>
-        </DialogFooter>
-      </Dialog>
+      <AppFooter extraBottomMargin={activeTab === 'simulator'} />
     </div>
   );
 }
 
 export default function AppWithErrorBoundary() {
   return (
-    <ErrorBoundary>
+    <AppErrorBoundary>
       <App />
-    </ErrorBoundary>
+    </AppErrorBoundary>
   );
 }
