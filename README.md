@@ -168,6 +168,24 @@ public/
 - Formulaire 2042 (déclaration principale) et 2074 (plus-values)
 - Site officiel : <https://www.impots.gouv.fr>
 
+### Règle : un taux ne se déduit jamais d'un autre taux
+
+Chaque champ de `TaxConfig` doit avoir une entrée dans `TAX_RATE_SOURCES`
+(`src/lib/tax-rates.ts`) citant l'article dont il provient et la date de son
+dernier recoupement. Le type `Record<keyof TaxConfig, RateSource>` rend
+l'oubli impossible : ajouter un taux sans sa source ne compile pas.
+
+Cette règle vient d'un bug réel. Quand la LFSS 2026 a porté la CSG sur le
+capital de 9,2 % à 10,6 %, la fraction déductible de la CSG a été « mise à
+jour » en 8,2 % (6,8 + 1,4) au lieu d'être lue dans le CGI, où elle est restée
+à 6,8 points. Le même raisonnement avait fait passer les PS sur revenus
+d'activité à 11,1 % alors que la LFSS ne modifiait que les revenus du
+patrimoine. Un taux plausible et jamais vérifié ne se voit pas.
+
+La date affichée dans l'en-tête (`TAX_DATA_VERIFIED_ON`) est **dérivée** de la
+plus ancienne de ces vérifications : elle ne peut pas annoncer une fraîcheur
+que le recoupement ne soutient pas.
+
 ## Tests
 
 ```pwsh

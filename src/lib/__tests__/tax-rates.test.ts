@@ -7,7 +7,10 @@ import {
   resolveTaxYear,
   FIRST_TAX_YEAR,
   LATEST_TAX_YEAR,
+  TAX_RATE_SOURCES,
+  TAX_RATES_VERIFIED_ON,
 } from '../tax-rates';
+import { TAX_DATA_VERIFIED_ON, TAX_FORMS_VERIFIED_ON } from '../tax-forms';
 
 describe('calculateProgressiveTax', () => {
   it('returns 0 for zero income', () => {
@@ -259,8 +262,7 @@ describe('getTaxConfig', () => {
     expect(config).toEqual(getTaxConfig(2024));
   });
 
-  it('reports whether the requested year is actually covered', () => {
-    expect(resolveTaxYear(2025)).toEqual({ covered: true, appliedYear: 2025 });
+  it('reports whether the requested year is actually covered', () => {    expect(resolveTaxYear(2025)).toEqual({ covered: true, appliedYear: 2025 });
     expect(resolveTaxYear(LATEST_TAX_YEAR + 1)).toEqual({ covered: false, appliedYear: LATEST_TAX_YEAR });
     expect(resolveTaxYear(FIRST_TAX_YEAR - 1)).toEqual({ covered: false, appliedYear: FIRST_TAX_YEAR });
   });
@@ -272,5 +274,38 @@ describe('getTaxConfig', () => {
     const tax2024 = calculateProgressiveTax(20000, 1, config2024);
     const tax2025 = calculateProgressiveTax(20000, 1, config2025);
     expect(tax2025).toBeLessThan(tax2024);
+  });
+});
+
+describe('TAX_RATE_SOURCES', () => {
+  it('documente la provenance de chaque champ de TaxConfig', () => {
+    // La complétude est déjà garantie à la compilation par le type
+    // Record<keyof TaxConfig, RateSource> ; ce test protège le contenu.
+    const config = getTaxConfig(LATEST_TAX_YEAR);
+    for (const key of Object.keys(config)) {
+      const source = TAX_RATE_SOURCES[key as keyof typeof TAX_RATE_SOURCES];
+      expect(source, `aucune source déclarée pour ${key}`).toBeDefined();
+      expect(source.reference.length).toBeGreaterThan(0);
+      expect(source.label.length).toBeGreaterThan(0);
+      expect(source.verifiedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it('cite le texte lu pour les taux touchés par la LFSS 2026', () => {
+    expect(TAX_RATE_SOURCES.csgDeductible.reference).toContain('154 quinquies');
+    expect(TAX_RATE_SOURCES.csgDeductible.url).toContain('legifrance');
+    expect(TAX_RATE_SOURCES.psActivite.reference).toContain('L. 136-8');
+    expect(TAX_RATE_SOURCES.psPatrimoine.reference).toContain('L. 136-8');
+  });
+
+  it('ne laisse pas la date affichée dépasser la vérification la plus ancienne', () => {
+    // Un seul taux périmé doit tirer la date globale vers le bas : c'est ce
+    // qui manquait quand la constante était écrite à la main.
+    const oldest = Object.values(TAX_RATE_SOURCES)
+      .map((s) => s.verifiedOn)
+      .sort()[0];
+    expect(TAX_RATES_VERIFIED_ON).toBe(oldest);
+    expect(TAX_DATA_VERIFIED_ON <= TAX_RATES_VERIFIED_ON).toBe(true);
+    expect(TAX_DATA_VERIFIED_ON <= TAX_FORMS_VERIFIED_ON).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { X, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import React from 'react';
-import { getTaxConfig, resolveTaxYear } from '../lib/tax-rates';
-import { formatRate, formatEURWhole } from '../lib/utils';
+import { getTaxConfig, resolveTaxYear, TAX_RATE_SOURCES } from '../lib/tax-rates';
+import { formatRate, formatEURWhole, formatDate } from '../lib/utils';
 
 interface SectionProps {
   title: string;
@@ -55,6 +55,16 @@ function irBracketLabel(brackets: { limit: number }[], index: number): string {
  */
 const FLAT_RATE_PRE_2012 = 0.30;
 const FLAT_RATE_PRE_2012_LABEL = formatRate(FLAT_RATE_PRE_2012);
+
+/** Sources sorted oldest-verification-first: what needs re-checking comes up top. */
+const sources = Object.values(TAX_RATE_SOURCES).sort(
+  (a, b) => a.verifiedOn.localeCompare(b.verifiedOn) || a.label.localeCompare(b.label, 'fr')
+);
+
+/** "2026-09-22" → "22/09/2026", parsed as local time so the day never shifts. */
+function formatVerificationDate(iso: string): string {
+  return formatDate(new Date(`${iso}T00:00:00`));
+}
 
 export function TaxRulesPanel({ onClose, fiscalYear }: { onClose: () => void; fiscalYear: number }) {
   const cfg = React.useMemo(() => getTaxConfig(fiscalYear), [fiscalYear]);
@@ -394,6 +404,37 @@ export function TaxRulesPanel({ onClose, fiscalYear }: { onClose: () => void; fi
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800">
             <strong>⚠️ Rappel important :</strong> ce résumé est indicatif et basé sur la législation en vigueur (source : présentation KPMG Avocats). Il ne constitue pas un conseil fiscal. Consultez un professionnel pour votre situation personnelle.
           </div>
+
+          {/* ---- Sources ---- */}
+          <Section title="Sources et dates de vérification">
+            <p className="text-xs text-gray-500">
+              Chaque taux utilisé par le simulateur est rattaché au texte dont il provient et à la date de
+              son dernier recoupement. Un lien signifie que le texte consolidé a été lu à cette date.
+            </p>
+            <div className="space-y-2">
+              {sources.map((source) => (
+                <div key={source.label} className="border-b border-gray-100 pb-2 last:border-0">
+                  <p className="font-medium text-gray-900 text-sm">{source.label}</p>
+                  <p className="text-xs text-gray-600">
+                    {source.url ? (
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-blue-600 hover:text-blue-800"
+                      >
+                        {source.reference}
+                      </a>
+                    ) : (
+                      source.reference
+                    )}
+                    {' — vérifié le '}
+                    {formatVerificationDate(source.verifiedOn)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Section>
         </div>
       </div>
     </div>

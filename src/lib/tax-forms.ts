@@ -5,17 +5,20 @@
  * displayed in the UI or in the exported declaration text MUST come from this file.
  *
  * When updating, cross-check with impots.gouv.fr and note the verification date.
- * Last verified against impots.gouv.fr: 2026-05-10 (revenus 2025).
- * Rates of CSS art. L. 136-8 and CGI art. 154 quinquies re-checked against
- * Legifrance on 2026-09-22 (post LFSS 2026).
  */
+import { TAX_RATES_VERIFIED_ON } from './tax-rates';
+
+/** Last cross-check of the case codes and 2074 line numbers against impots.gouv.fr. */
+export const TAX_FORMS_VERIFIED_ON = '2026-05-10';
 
 /**
- * Date of the last cross-check of the rates, thresholds and case codes against
- * impots.gouv.fr. Shown in the app header: bump it together with the data,
- * never derive it from `new Date()`.
+ * Date until which the whole fiscal data set can be claimed up to date: the
+ * oldest of the form-reference check and of the per-rate checks declared in
+ * `TAX_RATE_SOURCES`. Derived on purpose — the previous hand-written constant
+ * claimed a freshness that no verification supported.
  */
-export const TAX_DATA_VERIFIED_ON = '2026-09-22';
+export const TAX_DATA_VERIFIED_ON =
+  TAX_FORMS_VERIFIED_ON < TAX_RATES_VERIFIED_ON ? TAX_FORMS_VERIFIED_ON : TAX_RATES_VERIFIED_ON;
 
 export interface TaxCase {
   /** Code de la case telle qu'elle apparaît sur le formulaire officiel. */
