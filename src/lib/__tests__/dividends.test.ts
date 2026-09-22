@@ -75,6 +75,9 @@ describe('buildDeclarationLines', () => {
       box8VL: 40.5,
       // 8PL = brut (PFU = pas d'abattement), SANS déduction de l'impôt étranger.
       box8PL: 270,
+      // Au PFU, la CSG n'est pas déductible — c'est le sens même du libellé
+      // de la case 2CG.
+      csgDeductible: 0,
     });
   });
 
@@ -85,6 +88,24 @@ describe('buildDeclarationLines', () => {
     expect(lines.box2CG).toBe(0);
     // Abattement 40 % art. 158-3-2° CGI → 8PL = 270 × 0,60 = 162 €.
     expect(lines.box8PL).toBe(162);
+  });
+
+  it('calcule la CSG déductible sur le brut en option barème', () => {
+    const lines = buildDeclarationLines(summary, { taxMode: 'bareme' });
+    // 6,8 % du brut : l'abattement de 40 % ne réduit PAS l'assiette sociale,
+    // et la proratisation de l'art. 154 quinquies, II, al. 2 ne vise pas
+    // l'abattement de l'art. 158-3-2°.
+    expect(lines.csgDeductible).toBe(18.36);
+    // 11,02 € serait le montant si l'abattement de 40 % s'appliquait.
+    expect(lines.csgDeductible).not.toBe(11.02);
+  });
+
+  it('applique le taux de CSG déductible du millésime de versement', () => {
+    // Le taux suit le fait générateur : 6,8 points quel que soit le taux de
+    // CSG applicable (9,2 % en 2025, 10,6 % en 2026 après la LFSS 2026).
+    const paid2026 = buildDeclarationLines({ ...summary, year: 2026 }, { taxMode: 'bareme' });
+    expect(paid2026.csgDeductible).toBe(18.36);
+    expect(buildDeclarationLines(summary, { taxMode: 'bareme' }).csgDeductible).toBe(18.36);
   });
 
   it('PFNL already paid is reported on 2CK only when provided', () => {
