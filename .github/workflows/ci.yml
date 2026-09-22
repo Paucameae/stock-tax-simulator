@@ -1,11 +1,12 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Called by the deploy workflow so a push to main is validated once, before
+  # anything reaches production.
+  workflow_call:
 
 jobs:
   test:

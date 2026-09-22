@@ -16,9 +16,9 @@ détention, et la conversion USD→EUR au taux BCE historique.
   `/api/msft-quote` (proxy vers Finnhub, cache 5 min, rate-limit 20 req/min/IP)
   et `/api/ai-assistant` (assistant « Expliquer ce calcul » via Azure OpenAI,
   grounded, rate-limit 12 req/min/IP)
-- **Tests** : Vitest + Testing Library (500 tests)
+- **Tests** : Vitest + Testing Library (586 tests)
 - **CI** : GitHub Actions (lint, type-check, tests, `npm audit`)
-- **Déploiement** : Azure Static Web Apps
+- **Déploiement** : Azure Static Web Apps, conditionné au succès de la CI
 - **Stockage** : `localStorage` versionné (schéma v2)
 - **PDF** : `pdfjs-dist` pour parser les avis d'imposition (N° fiscal, parts, RFR)
 - **Taux de change** : API ECB Statistical Data Warehouse (données historiques)

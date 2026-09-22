@@ -10,12 +10,21 @@ on:
       - main
 
 jobs:
+  ci:
+    # Production must never ship a red build. PR previews are not gated: the CI
+    # workflow already runs on the pull_request event.
+    if: github.event_name == 'push' && github.actor != 'dependabot[bot]'
+    uses: ./.github/workflows/ci.yml
+
   build_and_deploy_job:
+    needs: ci
     # Skip Dependabot PRs: they have no access to deployment secrets anyway,
     # and the regular CI workflow already validates lint/types/tests.
     if: |
-      (github.event_name == 'push' ||
-       (github.event_name == 'pull_request' && github.event.action != 'closed'))
+      always()
+      && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
+      && (github.event_name == 'push' ||
+          (github.event_name == 'pull_request' && github.event.action != 'closed'))
       && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: Build and Deploy Job
