@@ -127,6 +127,143 @@ const TAX_CONFIG_2026: TaxConfig = {
   pfuDividendsTotalRate: 0.314,
 };
 
+// ---- Per-rate provenance ----
+
+/**
+ * Where a figure comes from and when it was last checked against that source.
+ *
+ * `url` is only filled when the text itself was opened and read: a reference
+ * without a link means "stated in the cited article, not re-read on that date".
+ */
+export interface RateSource {
+  /** Human-readable name of the figure, shown in the UI. */
+  label: string;
+  /** Legal reference, e.g. "CGI art. 154 quinquies, II". */
+  reference: string;
+  /** ISO date (YYYY-MM-DD) of the last manual check against the source. */
+  verifiedOn: string;
+  /** Direct link to the consolidated text, when it was read first-hand. */
+  url?: string;
+}
+
+const LEGIFRANCE_L136_8 = 'https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000054336623';
+const LEGIFRANCE_154_QUINQUIES = 'https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000054336634';
+const IMPOTS_AGA =
+  'https://www.impots.gouv.fr/particulier/questions/mon-entreprise-ma-attribue-des-actions-gratuites-comment-sera-impose-le-gain';
+
+/**
+ * Provenance of every figure of `TaxConfig`.
+ *
+ * Typed as `Record<keyof TaxConfig, RateSource>` on purpose: adding a rate
+ * without declaring where it comes from is a compile error. This registry
+ * exists because a rate was once *derived* from another (the CSG déductible
+ * was computed as 6,8 + 1,4 when the CSG rose to 10,6 %) and nothing in the
+ * code recorded that no text had ever been read.
+ *
+ * RULE: never derive a rate from another rate. Read the article, cite it here.
+ */
+export const TAX_RATE_SOURCES: Record<keyof TaxConfig, RateSource> = {
+  brackets: {
+    label: "Barème progressif de l'impôt sur le revenu",
+    reference: 'CGI art. 197, I, 1',
+    verifiedOn: '2026-05-10',
+  },
+  qfCapPerHalfShare: {
+    label: 'Plafond du quotient familial par demi-part',
+    reference: 'CGI art. 197, I, 2',
+    verifiedOn: '2026-05-10',
+  },
+  psPatrimoine: {
+    label: 'Prélèvements sociaux sur les revenus du patrimoine',
+    reference: 'CSS art. L. 136-8, I, 2° (CSG 10,6 %) + CRDS 0,5 % + prélèvement de solidarité 7,5 %',
+    verifiedOn: '2026-09-22',
+    url: LEGIFRANCE_L136_8,
+  },
+  psActivite: {
+    label: "Prélèvements sociaux sur les revenus d'activité",
+    reference: 'CSS art. L. 136-8, I, 1° (CSG 9,2 %) + CRDS 0,5 %',
+    verifiedOn: '2026-09-22',
+    url: LEGIFRANCE_L136_8,
+  },
+  psDividends: {
+    label: 'Prélèvements sociaux sur les produits de placement',
+    reference: 'CSS art. L. 136-7 et L. 136-8, I, 2°',
+    verifiedOn: '2026-09-22',
+    url: LEGIFRANCE_L136_8,
+  },
+  csgDeductible: {
+    label: 'CSG déductible (patrimoine)',
+    reference: 'CGI art. 154 quinquies, II',
+    verifiedOn: '2026-09-22',
+    url: LEGIFRANCE_154_QUINQUIES,
+  },
+  csgDeductibleDividends: {
+    label: 'CSG déductible (dividendes au barème)',
+    reference: 'CGI art. 154 quinquies, II',
+    verifiedOn: '2026-09-22',
+    url: LEGIFRANCE_154_QUINQUIES,
+  },
+  pfuIrRate: {
+    label: 'Taux forfaitaire IR du PFU',
+    reference: 'CGI art. 200 A, 1, A',
+    verifiedOn: '2026-05-10',
+  },
+  pfuTotalRate: {
+    label: 'PFU global sur les plus-values de cession',
+    reference: 'CGI art. 200 A, 1, A + CSS art. L. 136-8',
+    verifiedOn: '2026-09-22',
+    url: LEGIFRANCE_L136_8,
+  },
+  pfuDividendsTotalRate: {
+    label: 'PFU global sur les dividendes',
+    reference: 'CGI art. 200 A, 1, A + CSS art. L. 136-8',
+    verifiedOn: '2026-09-22',
+    url: LEGIFRANCE_L136_8,
+  },
+  salaryContributionRate: {
+    label: 'Contribution salariale sur le gain d’acquisition',
+    reference: 'CSS art. L. 137-14',
+    verifiedOn: '2026-09-22',
+  },
+  agaAbatementRateShort: {
+    label: 'Abattement AGA (50 %)',
+    reference: 'CGI art. 200 A, 3 ; CGI art. 150-0 D, 1 ter (régimes antérieurs)',
+    verifiedOn: '2026-05-10',
+    url: IMPOTS_AGA,
+  },
+  agaAbatementRateLong: {
+    label: 'Abattement AGA renforcé (65 %)',
+    reference: 'CGI art. 150-0 D, 1 ter (détention > 8 ans)',
+    verifiedOn: '2026-05-10',
+    url: IMPOTS_AGA,
+  },
+  agaThreshold: {
+    label: 'Seuil annuel du gain d’acquisition AGA',
+    reference: 'CGI art. 200 A, 3 (limite de 300 000 €)',
+    verifiedOn: '2026-05-10',
+    url: IMPOTS_AGA,
+  },
+  cehrSingle: {
+    label: 'CEHR — barème célibataire',
+    reference: 'CGI art. 223 sexies',
+    verifiedOn: '2026-05-10',
+  },
+  cehrCouple: {
+    label: 'CEHR — barème couple',
+    reference: 'CGI art. 223 sexies',
+    verifiedOn: '2026-05-10',
+  },
+};
+
+/**
+ * Oldest verification date across every rate — i.e. the date until which the
+ * whole rate set can honestly be claimed up to date. Derived, never written by
+ * hand: a single stale rate pulls the displayed date back.
+ */
+export const TAX_RATES_VERIFIED_ON = Object.values(TAX_RATE_SOURCES)
+  .map((source) => source.verifiedOn)
+  .sort()[0];
+
 const TAX_CONFIGS: Record<number, TaxConfig> = {
   2024: TAX_CONFIG_2024,
   2025: TAX_CONFIG_2025,

@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TaxRulesPanel } from '../TaxRulesPanel';
-import { getTaxConfig, LATEST_TAX_YEAR } from '../../lib/tax-rates';
+import { getTaxConfig, LATEST_TAX_YEAR, TAX_RATE_SOURCES } from '../../lib/tax-rates';
 
 /**
  * Sections are collapsed by default: open the one under test and return its
@@ -67,5 +67,21 @@ describe('TaxRulesPanel', () => {
   it('reste silencieux quand le millésime est couvert', () => {
     render(<TaxRulesPanel onClose={vi.fn()} fiscalYear={2025} />);
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('expose la provenance et la date de vérification de chaque taux', async () => {
+    render(<TaxRulesPanel onClose={vi.fn()} fiscalYear={2025} />);
+    const section = await openSection(/Sources et dates de vérification/);
+
+    expect(section).toHaveTextContent('CGI art. 154 quinquies, II');
+    expect(section).toHaveTextContent('CSS art. L. 136-8, I, 1°');
+    expect(section).toHaveTextContent('vérifié le 22/09/2026');
+    // Deux taux citent le même article (patrimoine et dividendes) : les deux
+    // doivent pointer vers le texte consolidé.
+    const links = within(section).getAllByRole('link', { name: /154 quinquies/ });
+    expect(links.length).toBe(2);
+    for (const link of links) {
+      expect(link).toHaveAttribute('href', TAX_RATE_SOURCES.csgDeductible.url!);
+    }
   });
 });
