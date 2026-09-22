@@ -6,7 +6,7 @@ import { Receipt, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import type { TaxSimulationResult, TaxMode, FamilyStatus } from '../lib/types';
 import { getTaxConfig, resolveTaxYear, CDHR_APPROXIMATION_NOTICE } from '../lib/tax-rates';
 import { analyzeThresholds } from '../lib/thresholds';
-import { formatEUR, formatPercent } from '../lib/utils';
+import { formatEUR, formatPercent, formatRate } from '../lib/utils';
 
 interface TaxCalculatorProps {
   result: TaxSimulationResult | null;
@@ -41,12 +41,11 @@ export const TaxCalculator = React.memo(function TaxCalculator({ result, taxMode
 
   const r = result;
 
-  const fmtRate = (r: number) => `${(r * 100).toFixed(1).replace('.', ',')}%`;
-  const psRate = fmtRate(cfg.psPatrimoine);
-  const psActiviteRate = fmtRate(cfg.psActivite);
-  const pfuIrRate = fmtRate(cfg.pfuIrRate);
-  const pfuTotalRate = fmtRate(cfg.pfuTotalRate);
-  const salaryRate = fmtRate(cfg.salaryContributionRate);
+  const psRate = formatRate(cfg.psPatrimoine);
+  const psActiviteRate = formatRate(cfg.psActivite);
+  const pfuIrRate = formatRate(cfg.pfuIrRate);
+  const pfuTotalRate = formatRate(cfg.pfuTotalRate);
+  const salaryRate = formatRate(cfg.salaryContributionRate);
 
   // UX: surface the 300k€ AGA threshold overrun prominently — the tax regime
   // changes drastically above this limit (no 50% abatement, +10% salary contrib).

@@ -220,6 +220,22 @@ export function formatPercent(value: number): string {
   }) + ' %';
 }
 
+/**
+ * Formats a rate stored as a fraction (0.186) into "18,6 %".
+ *
+ * Trailing zeros are dropped so round rates read "10 %" and not "10,0 %".
+ * Use this everywhere a `TaxConfig` rate is displayed: hard-coded rate strings
+ * in the UI have already drifted from the engine once.
+ */
+export function formatRate(rate: number): string {
+  return (rate * 100).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' %';
+}
+
+/** Formats a whole-euro threshold ("300 000 €") without the cents of `formatEUR`. */
+export function formatEURWhole(value: number): string {
+  return Math.round(value).toLocaleString('fr-FR') + ' €';
+}
+
 export function originLabel(origin: string): string {
   const labels: Record<string, string> = {
     SP: 'ESPP',
