@@ -115,10 +115,10 @@ export interface DividendDeclarationLines {
   box8PL: number;
   /**
    * CSG déductible du revenu global (CGI art. 154 quinquies, II), en option
-   * barème uniquement. Ce n'est PAS une case à remplir : prélevée à la source
-   * sur les produits de placement, elle est déduite automatiquement l'année du
-   * versement — contrairement à la CSG sur les revenus du patrimoine, qui se
-   * reporte en case 6DE l'année suivante.
+   * barème uniquement. Ce n'est PAS une case à remplir, mais ce n'est pas non
+   * plus automatique : la DGFiP la calcule à partir de la case 2BH et l'ajoute
+   * au montant pré-rempli en 6DE. Or 2BH n'est pas pré-remplie pour un compte
+   * de courtage étranger (pas d'IFU) — sans ce report, la déduction est perdue.
    */
   csgDeductible: number;
 }
