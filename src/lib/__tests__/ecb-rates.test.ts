@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { formatDateKey, convertUsdToEur, fetchECBRates } from '../ecb-rates';
+import { formatDateKey, convertUsdToEur, fetchECBRates, ECB_TIMEOUT_MS } from '../ecb-rates';
 
 beforeEach(() => {
   localStorage.clear();
@@ -83,6 +83,24 @@ describe('fetchECBRates', () => {
     const result = await fetchECBRates([new Date(2024, 0, 1), new Date(2024, 2, 1)]);
 
     expect(result['2024-01-01']).toBe(1.1);
+  });
+
+  it('returns cached data when the ECB request times out', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem('ecbRateCache', JSON.stringify({ '2024-01-01': 1.1 }));
+    localStorage.setItem('ecbRateCacheTimestamp', String(Date.now()));
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => (
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      })
+    ));
+
+    const resultPromise = fetchECBRates([new Date(2024, 0, 1), new Date(2024, 2, 1)]);
+    await vi.advanceTimersByTimeAsync(ECB_TIMEOUT_MS);
+    const result = await resultPromise;
+
+    expect(result['2024-01-01']).toBe(1.1);
+    vi.useRealTimers();
   });
 
   it('returns cache on non-OK response', async () => {

@@ -21,15 +21,12 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      # Use `npm install` instead of `npm ci` to work around the known npm
-      # lockfile issue with platform-specific optional deps (rollup/esbuild)
-      # when the lockfile is generated on Windows.
       - name: Install dependencies (front)
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Install dependencies (api)
         working-directory: api
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Lint
         run: npm run lint
@@ -42,6 +39,10 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Test
+        run: npm test
+
+      - name: Test API
+        working-directory: api
         run: npm test
 
   e2e:
@@ -57,7 +58,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium

@@ -2,6 +2,7 @@
 // API: https://data-api.ecb.europa.eu/
 
 import { safeSetItem } from './storage';
+import { fetchWithTimeout } from './api-client';
 import type { RateSource, StockLot, SoldLot } from './types';
 
 const ECB_API_BASE = 'https://data-api.ecb.europa.eu/service/data/EXR';
@@ -9,6 +10,7 @@ const RATE_CACHE_KEY = 'ecbRateCache';
 const CACHE_EXPIRY_KEY = 'ecbRateCacheTimestamp';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const RECENT_DAYS = 7; // dates within this range are considered "recent"
+export const ECB_TIMEOUT_MS = 8000;
 
 export type RateCache = Record<string, number>; // "YYYY-MM-DD" -> EUR/USD rate
 
@@ -140,7 +142,7 @@ export async function fetchECBRates(dates: Date[]): Promise<RateCache> {
 
   try {
     const url = `${ECB_API_BASE}/D.USD.EUR.SP00.A?startPeriod=${startStr}&endPeriod=${endStr}&format=csvdata`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, ECB_TIMEOUT_MS);
     if (!response.ok) return cache;
 
     const text = await response.text();

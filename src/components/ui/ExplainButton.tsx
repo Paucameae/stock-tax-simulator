@@ -22,15 +22,21 @@ interface ExplainButtonProps {
  */
 export function ExplainButton({ topic, facts, label = 'Expliquer ce calcul', className }: ExplainButtonProps) {
   const [open, setOpen] = useState(false);
+  const [requested, setRequested] = useState(false);
   const { answer, loading, error, explain, reset } = useAiExplain();
 
   const handleOpen = useCallback(() => {
     setOpen(true);
+  }, []);
+
+  const handleExplain = useCallback(() => {
+    setRequested(true);
     void explain({ topic, facts });
   }, [explain, topic, facts]);
 
   const handleClose = useCallback(() => {
     setOpen(false);
+    setRequested(false);
     reset();
   }, [reset]);
 
@@ -65,19 +71,34 @@ export function ExplainButton({ topic, facts, label = 'Expliquer ce calcul', cla
         </div>
 
         <div className="min-h-[4rem] text-sm text-gray-700">
+          {!requested && (
+            <div className="space-y-4">
+              <p>
+                Pour générer cette explication, les montants et libellés calculés affichés dans
+                cette section seront transmis à Azure OpenAI.
+              </p>
+              <p className="text-xs text-gray-500">
+                Aucun fichier importé, texte d'avis fiscal, nom, adresse ou numéro fiscal n'est
+                envoyé.
+              </p>
+              <Button type="button" size="sm" onClick={handleExplain}>
+                Générer l'explication
+              </Button>
+            </div>
+          )}
           {loading && (
             <div className="flex items-center gap-2 text-gray-500">
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               L'assistant rédige une explication…
             </div>
           )}
-          {!loading && error && (
+          {requested && !loading && error && (
             <div className="flex items-start gap-2 text-amber-800">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
               <span>{error}</span>
             </div>
           )}
-          {!loading && !error && answer && (
+          {requested && !loading && !error && answer && (
             <MarkdownLite text={answer} />
           )}
         </div>

@@ -8,7 +8,8 @@
   "main": "dist/functions/*.js",
   "scripts": {
     "build": "tsc",
-    "start": "func start"
+    "start": "func start",
+    "test": "npm run build && node --test dist/shared/rate-limit.test.js dist/functions/api-handlers.test.js"
   },
   "dependencies": {
     "@azure/functions": "^4.0.0"
