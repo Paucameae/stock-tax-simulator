@@ -216,13 +216,18 @@ assets statiques). Première exécution locale : `npx playwright install chromiu
 
 ## Sécurité
 
-- Les secrets (`FINNHUB_API_KEY`) ne vivent que côté serveur.
+- Les secrets (`FINNHUB_API_KEY`, `AZURE_OPENAI_API_KEY`) ne vivent que côté serveur.
 - `api/local.settings.json` est dans `.gitignore` ; ne jamais le commiter.
 - `npm audit --audit-level=high` tourne en CI (front + api).
 - Dependabot propose les mises à jour mineures/patch chaque semaine.
-- Le rate-limit actuel de `/api/msft-quote` est en mémoire (par instance) :
-  efficace en single-instance ; pour un scale-out, prévoir un cache partagé
-  (Azure API Management / Redis).
+- Les données importées (exports courtiers, sauvegardes et avis fiscal) restent dans
+  le navigateur. La fonction optionnelle « Expliquer ce calcul » transmet à Azure
+  OpenAI uniquement les montants et libellés déjà calculés affichés dans la section
+  concernée. Elle n'envoie ni fichier source, ni texte d'avis fiscal, ni identité,
+  adresse ou numéro fiscal. L'interface demande une confirmation avant chaque envoi.
+- Le rate-limit actuel des deux endpoints est en mémoire et s'applique par instance.
+  Il protège une instance isolée ; un déploiement multi-instance nécessite une limite
+  distribuée via Azure API Management ou Redis pour garantir un plafond global.
 
 ## Contribution
 
